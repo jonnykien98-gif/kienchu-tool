@@ -1,0 +1,7 @@
+{
+  "name": "production-pipeline",
+  "version": "1.0.0",
+  "description": "Script → Scenes → Image Prompts production pipeline",
+  "type": "module",
+  "private": true
+}
