@@ -3,2024 +3,1326 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PRODUCTION PIPELINE — Script → Scenes → Video</title>
+<title>PIPELINE BUILDER — Kịch bản → Phân cảnh → Video</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
-  :root {
-    --bg: #0a0c12;
-    --surface: #11141d;
-    --surface-2: #161a25;
-    --surface-3: #1c2130;
-    --border: #232a3b;
-    --border-bright: #2f3850;
-    --text: #e8e6e1;
-    --text-muted: #6e7589;
-    --text-dim: #4a5063;
-    --amber: #ff9a3c;
-    --amber-dim: #b86a26;
-    --orange: #f97316;
-    --rose: #fb7185;
-    --teal: #2dd4bf;
-    --violet: #a78bfa;
-    --green: #4ade80;
-    --red: #ef4444;
-    --blue: #60a5fa;
-  }
+:root{--bg:#f4f3ef;--surface:#ffffff;--surface-2:#f9f8f5;--surface-3:#f0efeb;--border:#e2dfda;--border-bright:#d0cdc5;--text:#1a1a17;--text-muted:#6b6960;--text-dim:#9a9890;--amber:#d97706;--amber-dim:#b45309;--orange:#ea580c;--rose:#e11d48;--teal:#0d9488;--violet:#7c3aed;--green:#16a34a;--red:#dc2626;--blue:#2563eb}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono','Courier New',monospace;font-size:12.5px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh}
+body{background-image:none}
+.app{max-width:1680px;margin:0 auto;padding:0 32px 60px}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+.top-nav{display:flex;align-items:center;padding:18px 0;border-bottom:1px solid var(--border);margin-bottom:24px;position:sticky;top:0;background:var(--bg);z-index:50;backdrop-filter:blur(10px)}
+.brand{font-size:15px;font-weight:700;letter-spacing:.08em;color:var(--amber);margin-right:36px}
+.brand .arrow{color:var(--rose);margin:0 6px}
+.nav-tabs{display:flex;gap:4px;flex:1}
+.nav-tab{padding:10px 18px;cursor:pointer;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);border-radius:4px;transition:all .15s;border:1px solid transparent;display:flex;align-items:center;gap:8px}
+.nav-tab:hover{color:var(--text);background:var(--surface)}
+.nav-tab.active{color:var(--amber);background:var(--surface);border-color:var(--amber-dim)}
+.nav-tab .num{background:var(--surface-3);color:var(--text-muted);padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600}
+.nav-tab.active .num{background:var(--amber);color:#1a0e00}
 
-  html, body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
-    font-size: 12.5px;
-    line-height: 1.55;
-    -webkit-font-smoothing: antialiased;
-    min-height: 100vh;
-  }
+.tool{display:none}.tool.active{display:block}
+.tool-head{margin-bottom:20px}
+.tool-title{font-size:18px;font-weight:600;color:var(--text);letter-spacing:.02em}
+.tool-subtitle{font-size:12px;color:var(--text-muted);margin-top:4px}
 
-  body {
-    background-image:
-      radial-gradient(circle at 15% 10%, rgba(255, 154, 60, 0.04) 0%, transparent 40%),
-      radial-gradient(circle at 85% 90%, rgba(167, 139, 250, 0.04) 0%, transparent 40%);
-  }
+.info-box{background:rgba(217,119,6,.06);border:1px solid rgba(217,119,6,.25);border-radius:6px;padding:12px 16px;margin-bottom:24px;font-size:11.5px;color:var(--text);line-height:1.7}
+.info-box .lbl{color:var(--amber);font-weight:600}
+.info-box.violet{background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.25)}.info-box.violet .lbl{color:var(--violet)}
+.info-box.teal{background:rgba(13,148,136,.06);border-color:rgba(13,148,136,.25)}.info-box.teal .lbl{color:var(--teal)}
 
-  .app { max-width: 1680px; margin: 0 auto; padding: 0 32px 60px; }
+.label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;display:block;font-weight:500}
+.label.green{color:var(--teal)}.label.rose{color:var(--rose)}.label.violet{color:var(--violet)}
 
-  /* ========== TOP NAV ========== */
-  .top-nav {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    padding: 18px 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 50;
-    backdrop-filter: blur(10px);
-  }
-  .brand {
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--amber);
-    margin-right: 36px;
-  }
-  .brand .arrow { color: var(--rose); margin: 0 6px; }
-  .nav-tabs { display: flex; gap: 4px; flex: 1; }
-  .nav-tab {
-    padding: 10px 18px;
-    cursor: pointer;
-    font-size: 11.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    border-radius: 4px;
-    transition: all 0.15s;
-    border: 1px solid transparent;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .nav-tab:hover { color: var(--text); background: var(--surface); }
-  .nav-tab.active {
-    color: var(--amber);
-    background: var(--surface);
-    border-color: var(--amber-dim);
-  }
-  .nav-tab .num {
-    background: var(--surface-3);
-    color: var(--text-muted);
-    padding: 1px 7px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-  }
-  .nav-tab.active .num { background: var(--amber); color: #1a0e00; }
-  .nav-meta {
-    font-size: 10px;
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-  }
+input[type="text"],input[type="number"],input[type="password"],select,textarea{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:10px 12px;font-family:inherit;font-size:12.5px;outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--amber)}
+textarea{resize:vertical;line-height:1.7}
 
-  /* ========== PANEL ========== */
-  .tool { display: none; }
-  .tool.active { display: block; }
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.panel-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)}
+.panel-head .led{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:6px;box-shadow:0 0 8px var(--amber);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.4}}
+.panel-head .count{color:var(--orange);font-weight:500}
+.panel-body{padding:14px}
 
-  .tool-head {
-    margin-bottom: 20px;
-  }
-  .tool-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text);
-    letter-spacing: 0.02em;
-  }
-  .tool-subtitle {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
+.btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:4px;font-family:inherit;font-size:12px;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.btn:hover{border-color:var(--amber);background:var(--surface-3)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,#ff9a3c,#f97316);border-color:#ff9a3c;color:#1a0e00;font-weight:600}
+.btn.primary:hover{box-shadow:0 0 16px rgba(255,154,60,.4)}
+.btn.violet{background:linear-gradient(180deg,#a78bfa,#8b5cf6);border-color:#a78bfa;color:#1a0033;font-weight:600}
+.btn.teal{background:linear-gradient(180deg,#2dd4bf,#14b8a6);border-color:#2dd4bf;color:#00231f;font-weight:600}
+.btn.ghost{background:transparent}
+.btn.sm{padding:6px 12px;font-size:11px}
+.btn.danger:hover{border-color:var(--red);color:var(--red)}
 
-  .info-box {
-    background: rgba(255, 154, 60, 0.05);
-    border: 1px solid var(--amber-dim);
-    border-radius: 6px;
-    padding: 12px 16px;
-    margin-bottom: 24px;
-    font-size: 11.5px;
-    color: var(--text);
-    line-height: 1.7;
-  }
-  .info-box .lbl { color: var(--amber); font-weight: 600; }
-  .info-box.violet {
-    background: rgba(167, 139, 250, 0.05);
-    border-color: var(--violet);
-  }
-  .info-box.violet .lbl { color: var(--violet); }
-  .info-box.teal {
-    background: rgba(45, 212, 191, 0.05);
-    border-color: var(--teal);
-  }
-  .info-box.teal .lbl { color: var(--teal); }
+.status-bar{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:10px 14px;font-size:11.5px;color:var(--text-muted);margin-bottom:20px;min-height:38px;display:flex;align-items:center;gap:10px}
+.status-bar.ok{border-color:var(--green);color:var(--green)}
+.status-bar.error{border-color:var(--red);color:var(--rose)}
+.status-bar.working{border-color:var(--violet);color:var(--violet)}
+.spinner{display:inline-block;width:10px;height:10px;border:1.5px solid var(--violet);border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ========== INPUTS ========== */
-  .label {
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-    display: block;
-    font-weight: 500;
-  }
-  .label.green { color: var(--teal); }
-  .label.rose { color: var(--rose); }
-  .label.violet { color: var(--violet); }
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.grid-4-vid{display:grid;grid-template-columns:2fr 1fr .7fr .7fr;gap:16px}
+.mb-24{margin-bottom:24px}.mb-16{margin-bottom:16px}.mb-12{margin-bottom:12px}
 
-  input[type="text"], input[type="number"], input[type="password"], select, textarea {
-    width: 100%;
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 10px 12px;
-    font-family: inherit;
-    font-size: 12.5px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  input:focus, select:focus, textarea:focus { border-color: var(--amber); }
-  textarea { resize: vertical; line-height: 1.7; }
-  select { cursor: pointer; }
+/* Profile indicator */
+.profile-badge{padding:4px 12px;border-radius:4px;font-size:11px;color:var(--amber);border:1px solid var(--amber-dim);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;margin-left:auto}
+.profile-badge:hover{background:var(--surface);border-color:var(--amber)}
+.profile-badge.empty{color:var(--text-dim);border-color:var(--border)}
 
-  /* ========== PANEL ========== */
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .panel-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 14px;
-    background: var(--surface-2);
-    border-bottom: 1px solid var(--border);
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .panel-head .led {
-    display: inline-block;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--amber);
-    margin-right: 6px;
-    box-shadow: 0 0 8px var(--amber);
-    animation: pulse 2s ease-in-out infinite;
-  }
-  @keyframes pulse { 50% { opacity: 0.4; } }
-  .panel-head .count { color: var(--orange); font-weight: 500; }
-  .panel-body { padding: 14px; }
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
+.modal-bg.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border-bright);border-radius:8px;padding:28px;width:720px;max-width:95vw}
+.modal h2{font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:18px}
+.modal h3{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--orange);margin:24px 0 14px;padding-top:16px;border-top:1px solid var(--border)}
+.modal p{color:var(--text-muted);margin-bottom:14px;line-height:1.6;font-size:12px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px;padding-top:16px;border-top:1px solid var(--border)}
+.modal .label{margin-top:12px}
+.modal textarea{min-height:80px;font-size:11.5px;background:var(--surface-2);margin-bottom:4px}
+.modal .upload-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.modal .upload-row .btn{padding:5px 10px;font-size:10px}
 
-  /* ========== BUTTONS ========== */
-  .btn {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 9px 16px;
-    border-radius: 4px;
-    font-family: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 500;
-  }
-  .btn:hover { border-color: var(--amber); background: var(--surface-3); }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn.primary {
-    background: linear-gradient(180deg, #ff9a3c 0%, #f97316 100%);
-    border-color: #ff9a3c;
-    color: #1a0e00;
-    font-weight: 600;
-  }
-  .btn.primary:hover { box-shadow: 0 0 16px rgba(255, 154, 60, 0.4); }
-  .btn.violet {
-    background: linear-gradient(180deg, #a78bfa 0%, #8b5cf6 100%);
-    border-color: #a78bfa; color: #1a0033; font-weight: 600;
-  }
-  .btn.teal {
-    background: linear-gradient(180deg, #2dd4bf 0%, #14b8a6 100%);
-    border-color: #2dd4bf; color: #00231f; font-weight: 600;
-  }
-  .btn.ghost { background: transparent; }
-  .btn.sm { padding: 6px 12px; font-size: 11px; }
-  .btn.danger:hover { border-color: var(--red); color: var(--red); }
+/* Script input */
+#scriptInput{border:none;border-radius:0;min-height:380px;font-family:'Crimson Pro',Georgia,serif;font-size:14.5px;line-height:1.75;background:var(--surface)}
+#previewBox{min-height:380px;padding:14px;overflow-y:auto;max-height:500px;background:var(--surface)}
+.preview-scene{margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed var(--border)}
+.preview-scene:last-child{border:none}
+.preview-scene .pid{color:var(--amber);font-weight:500}
+.preview-scene .ptag{color:var(--rose);font-size:10px;margin-left:6px}
+.preview-scene .ptext{color:var(--text);font-family:'Crimson Pro',Georgia,serif;font-size:13.5px;line-height:1.6;margin-top:3px;margin-left:14px}
 
-  /* ========== STATUS ========== */
-  .status-bar {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 10px 14px;
-    font-size: 11.5px;
-    color: var(--text-muted);
-    margin-bottom: 20px;
-    min-height: 38px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .status-bar.ok { border-color: var(--green); color: var(--green); }
-  .status-bar.error { border-color: var(--red); color: var(--rose); }
-  .status-bar.working { border-color: var(--violet); color: var(--violet); }
-  .spinner {
-    display: inline-block;
-    width: 10px; height: 10px;
-    border: 1.5px solid var(--violet);
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+.batch-control{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--text-muted);font-size:11px}
+.batch-control input{width:60px;padding:6px 8px;text-align:center}
 
-  /* ========== GRIDS ========== */
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .grid-4-vid { display: grid; grid-template-columns: 2fr 1fr 0.7fr 0.7fr; gap: 16px; }
-  .mb-24 { margin-bottom: 24px; }
-  .mb-16 { margin-bottom: 16px; }
+.prescan{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--violet);border-radius:6px;padding:16px;margin-bottom:24px}
+.prescan-title{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--violet);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.prescan-title .hint{color:var(--text-muted);font-weight:400}
 
-  /* ========== TOOL 1 specific ========== */
-  .style-editor textarea {
-    min-height: 100px;
-    font-size: 11.5px;
-    background: var(--surface-2);
-  }
-  .ref-sheet-card {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--teal);
-    border-radius: 5px;
-    padding: 14px;
-    margin-bottom: 12px;
-  }
-  .ref-sheet-card.bg-card { border-left-color: var(--rose); }
-  .ref-sheet-card-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-  .ref-sheet-card-name {
-    color: var(--teal);
-    font-weight: 600;
-    font-size: 13px;
-  }
-  .ref-sheet-card.bg-card .ref-sheet-card-name { color: var(--rose); }
-  .ref-sheet-card-text {
-    color: var(--text);
-    line-height: 1.7;
-    font-size: 12px;
-    white-space: pre-wrap;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-  }
-  .ref-sheet-card.empty .ref-sheet-card-text { color: var(--text-dim); font-style: italic; }
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 18px}
+.stat .k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px}
+.stat .v{font-size:22px;font-weight:700;color:var(--amber);font-family:'JetBrains Mono',monospace}
+.stat .v.dim{color:var(--text-dim)}.stat .v.green{color:var(--green)}
 
-  /* ========== TOOL 2 specific ========== */
-  #scriptInput {
-    border: none;
-    border-radius: 0;
-    min-height: 380px;
-    font-family: 'Crimson Pro', Georgia, serif;
-    font-size: 14.5px;
-    line-height: 1.75;
-    background: var(--surface);
-  }
-  #scriptInput:focus { border: none; }
-  #previewBox {
-    min-height: 380px;
-    padding: 14px;
-    overflow-y: auto;
-    max-height: 500px;
-    background: var(--surface);
-  }
-  .preview-scene {
-    margin-bottom: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px dashed var(--border);
-  }
-  .preview-scene:last-child { border: none; }
-  .preview-scene .pid { color: var(--amber); font-weight: 500; }
-  .preview-scene .ptag { color: var(--rose); font-size: 10px; margin-left: 6px; }
-  .preview-scene .ptext {
-    color: var(--text);
-    font-family: 'Crimson Pro', Georgia, serif;
-    font-size: 13.5px;
-    line-height: 1.6;
-    margin-top: 3px;
-    margin-left: 14px;
-  }
+.subtabs{display:flex;border-bottom:1px solid var(--border)}
+.subtab{padding:11px 18px;cursor:pointer;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);border-bottom:2px solid transparent;transition:all .15s;display:flex;align-items:center;gap:6px}
+.subtab:hover{color:var(--text)}
+.subtab.active{color:var(--amber);border-bottom-color:var(--amber)}
+.subtab .badge{background:var(--surface-3);color:var(--text-muted);padding:1px 6px;border-radius:2px;font-size:10px}
+.subtab.active .badge{background:var(--amber-dim);color:#fff}
+.subtab-content{background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
 
-  .actions {
-    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 20px;
-  }
-  .batch-control {
-    margin-left: auto;
-    display: flex; align-items: center; gap: 8px;
-    color: var(--text-muted); font-size: 11px;
-  }
-  .batch-control input { width: 60px; padding: 6px 8px; text-align: center; }
+.scene-table{width:100%;border-collapse:collapse;font-size:12px}
+.scene-table thead th{background:var(--surface-2);color:var(--text-muted);font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:500;text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);position:sticky;top:0}
+.scene-table tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+.scene-table tbody tr:hover{background:var(--surface-2)}
+.scene-table tbody td{padding:11px 14px;vertical-align:top}
+.scene-table td.id{color:var(--amber);font-weight:500;width:50px}
+.scene-table td.level{width:80px}
+.level-tag{background:var(--surface-3);color:var(--rose);padding:2px 8px;border-radius:3px;font-size:10px}
+.scene-table td.vo{font-family:'Crimson Pro',Georgia,serif;font-size:13px;max-width:480px}
+.scene-table td.pending{color:var(--text-dim);font-style:italic}
+.scene-table td.dur{color:var(--orange);width:50px;text-align:right}
+.scene-table td.cam{color:var(--text-muted);width:90px}
+.scene-table td.actions{width:70px;text-align:right}
+.scene-table td.actions button{background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:2px 6px;font-size:13px;transition:color .1s}
+.scene-table td.actions button:hover{color:var(--amber)}
+.scene-table td.actions button.del:hover{color:var(--red)}
 
-  .prescan {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--violet);
-    border-radius: 6px;
-    padding: 16px;
-    margin-bottom: 24px;
-  }
-  .prescan-title {
-    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--violet); margin-bottom: 4px;
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  .prescan-title .hint { color: var(--text-muted); font-weight: 400; }
-  .prescan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
-  .prescan-grid textarea { min-height: 110px; font-size: 12px; background: var(--surface-2); }
+.prompts-list{padding:14px;max-height:600px;overflow-y:auto}
+.prompt-card{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:14px;margin-bottom:12px}
+.prompt-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.prompt-card-id{color:var(--amber);font-weight:600;font-size:12px}
+.prompt-card-meta{color:var(--text-muted);font-size:11px}
+.prompt-card-vo{font-family:'Crimson Pro',Georgia,serif;font-size:13px;font-style:italic;color:var(--text-muted);margin-bottom:10px;padding-left:10px;border-left:2px solid var(--border)}
+.prompt-card-text{color:var(--text);line-height:1.7;font-size:12.5px;white-space:pre-wrap}
+.prompt-card-actions{margin-top:10px;display:flex;gap:8px}
+.prompt-card.empty .prompt-card-text{color:var(--text-dim);font-style:italic}
 
-  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
-  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 14px 18px; }
-  .stat .k { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
-  .stat .v { font-size: 22px; font-weight: 700; color: var(--amber); font-family: 'JetBrains Mono', monospace; }
-  .stat .v.dim { color: var(--text-dim); }
-  .stat .v.green { color: var(--green); }
+.ref-sheet-card{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--teal);border-radius:5px;padding:14px;margin-bottom:12px}
+.ref-sheet-card.bg-card{border-left-color:var(--rose)}
+.ref-sheet-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ref-sheet-card-name{color:var(--teal);font-weight:600;font-size:13px}
+.ref-sheet-card.bg-card .ref-sheet-card-name{color:var(--rose)}
+.ref-sheet-card-text{color:var(--text);line-height:1.7;font-size:12px;white-space:pre-wrap;padding-top:8px;border-top:1px solid var(--border)}
+.ref-sheet-card.empty .ref-sheet-card-text{color:var(--text-dim);font-style:italic}
 
-  /* ========== SUB-TABS (for Tool 2 outputs) ========== */
-  .subtabs { display: flex; border-bottom: 1px solid var(--border); }
-  .subtab {
-    padding: 11px 18px; cursor: pointer; font-size: 11px;
-    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
-    border-bottom: 2px solid transparent; transition: all 0.15s;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .subtab:hover { color: var(--text); }
-  .subtab.active { color: var(--amber); border-bottom-color: var(--amber); }
-  .subtab .badge {
-    background: var(--surface-3); color: var(--text-muted);
-    padding: 1px 6px; border-radius: 2px; font-size: 10px;
-  }
-  .subtab.active .badge { background: var(--amber-dim); color: #fff; }
-  .subtab-content {
-    background: var(--surface); border: 1px solid var(--border);
-    border-top: none; border-radius: 0 0 6px 6px; overflow: hidden;
-  }
+.dropzone{border:2px dashed var(--border-bright);border-radius:8px;padding:48px 24px;text-align:center;color:var(--text-muted);background:var(--surface);cursor:pointer;transition:all .15s;min-height:280px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.dropzone:hover,.dropzone.dragover{border-color:var(--amber);background:rgba(255,154,60,.05);color:var(--text)}
+.dropzone .ico{font-size:32px;margin-bottom:12px;opacity:.6}
+.dropzone .hint{font-size:11px;opacity:.7;margin-top:6px}
 
-  /* ========== TABLE ========== */
-  .scene-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .scene-table thead th {
-    background: var(--surface-2); color: var(--text-muted);
-    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
-    font-weight: 500; text-align: left; padding: 10px 14px;
-    border-bottom: 1px solid var(--border); position: sticky; top: 0;
-  }
-  .scene-table tbody tr {
-    border-bottom: 1px solid var(--border); transition: background 0.1s;
-  }
-  .scene-table tbody tr:hover { background: var(--surface-2); }
-  .scene-table tbody td { padding: 11px 14px; vertical-align: top; }
-  .scene-table td.id { color: var(--amber); font-weight: 500; width: 50px; }
-  .scene-table td.level { width: 80px; }
-  .level-tag {
-    background: var(--surface-3); color: var(--rose);
-    padding: 2px 8px; border-radius: 3px; font-size: 10px;
-  }
-  .scene-table td.vo { font-family: 'Crimson Pro', Georgia, serif; font-size: 13px; max-width: 480px; }
-  .scene-table td.pending { color: var(--text-dim); font-style: italic; }
-  .scene-table td.dur { color: var(--orange); width: 50px; text-align: right; }
-  .scene-table td.cam { color: var(--text-muted); width: 90px; }
-  .scene-table td.actions { width: 70px; text-align: right; }
-  .scene-table td.actions button {
-    background: transparent; border: none; color: var(--text-muted);
-    cursor: pointer; padding: 2px 6px; font-size: 13px; transition: color 0.1s;
-  }
-  .scene-table td.actions button:hover { color: var(--amber); }
-  .scene-table td.actions button.del:hover { color: var(--red); }
+.file-list{background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:400px;overflow-y:auto}
+.file-row{display:grid;grid-template-columns:50px 1fr 30px 1fr 60px;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:11.5px}
+.file-row:last-child{border:none}
+.file-row .from{color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-row .arrow{text-align:center;color:var(--text-dim)}
+.file-row .to{color:var(--amber);font-weight:600}
+.file-row .idx{background:var(--surface-2);color:var(--text-muted);padding:2px 8px;border-radius:3px;text-align:center;font-size:10px}
+.file-row .rm{background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px}
+.file-row .rm:hover{color:var(--red)}
 
-  /* ========== PROMPT CARDS ========== */
-  .prompts-list { padding: 14px; max-height: 600px; overflow-y: auto; }
-  .prompt-card {
-    background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: 5px; padding: 14px; margin-bottom: 12px;
-  }
-  .prompt-card-head {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
-  }
-  .prompt-card-id { color: var(--amber); font-weight: 600; font-size: 12px; }
-  .prompt-card-meta { color: var(--text-muted); font-size: 11px; }
-  .prompt-card-vo {
-    font-family: 'Crimson Pro', Georgia, serif; font-size: 13px;
-    font-style: italic; color: var(--text-muted); margin-bottom: 10px;
-    padding-left: 10px; border-left: 2px solid var(--border);
-  }
-  .prompt-card-text { color: var(--text); line-height: 1.7; font-size: 12.5px; white-space: pre-wrap; }
-  .prompt-card-actions { margin-top: 10px; display: flex; gap: 8px; }
-  .prompt-card.empty .prompt-card-text { color: var(--text-dim); font-style: italic; }
+.empty-state{padding:36px;text-align:center;color:var(--text-dim);font-style:italic}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:var(--surface-2)}::-webkit-scrollbar-thumb{background:var(--border-bright);border-radius:4px}::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
 
-  /* ========== TOOL 3: RENAMER ========== */
-  .dropzone {
-    border: 2px dashed var(--border-bright);
-    border-radius: 8px;
-    padding: 48px 24px;
-    text-align: center;
-    color: var(--text-muted);
-    background: var(--surface);
-    cursor: pointer;
-    transition: all 0.15s;
-    min-height: 280px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-  }
-  .dropzone:hover, .dropzone.dragover {
-    border-color: var(--amber);
-    background: rgba(255, 154, 60, 0.05);
-    color: var(--text);
-  }
-  .dropzone .ico { font-size: 32px; margin-bottom: 12px; opacity: 0.6; }
-  .dropzone .hint { font-size: 11px; opacity: 0.7; margin-top: 6px; }
-
-  .file-list {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    max-height: 400px;
-    overflow-y: auto;
-  }
-  .file-row {
-    display: grid;
-    grid-template-columns: 50px 1fr 30px 1fr 60px;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 11.5px;
-  }
-  .file-row:last-child { border: none; }
-  .file-row .from { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .file-row .arrow { text-align: center; color: var(--text-dim); }
-  .file-row .to { color: var(--amber); font-weight: 600; }
-  .file-row .idx {
-    background: var(--surface-2); color: var(--text-muted);
-    padding: 2px 8px; border-radius: 3px; text-align: center; font-size: 10px;
-  }
-  .file-row .rm {
-    background: transparent; border: none; color: var(--text-dim);
-    cursor: pointer; font-size: 14px;
-  }
-  .file-row .rm:hover { color: var(--red); }
-
-  /* ========== SETTINGS MODAL ========== */
-  .modal-bg {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.75); backdrop-filter: blur(4px);
-    z-index: 1000; display: none;
-    align-items: center; justify-content: center;
-  }
-  .modal-bg.show { display: flex; }
-  .modal {
-    background: var(--surface); border: 1px solid var(--border-bright);
-    border-radius: 8px; padding: 24px; width: 520px; max-width: 92vw;
-  }
-  .modal h2 {
-    font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--amber); margin-bottom: 14px;
-  }
-  .modal p { color: var(--text-muted); margin-bottom: 14px; line-height: 1.6; font-size: 12px; }
-  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
-
-  /* ========== SCROLLBAR ========== */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
-
-  .empty-state {
-    padding: 36px; text-align: center; color: var(--text-dim); font-style: italic;
-  }
-
-  @media (max-width: 1100px) {
-    .grid-3, .grid-2, .grid-4-vid { grid-template-columns: 1fr; }
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .nav-tabs { overflow-x: auto; }
-  }
+@media(max-width:1100px){.grid-3,.grid-2,.grid-4-vid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.nav-tabs{overflow-x:auto}}
 </style>
 </head>
 <body>
 <div class="app">
 
-  <!-- ===================== TOP NAV ===================== -->
-  <div class="top-nav">
-    <div class="brand">PIPELINE<span class="arrow">›</span>BUILDER</div>
-    <div class="nav-tabs">
-      <div class="nav-tab active" data-tab="tool1" onclick="switchTool('tool1')">
-        <span class="num">01</span> Asset Generator
-      </div>
-      <div class="nav-tab" data-tab="tool2" onclick="switchTool('tool2')">
-        <span class="num">02</span> Scene Breakdown
-      </div>
-      <div class="nav-tab" data-tab="tool3" onclick="switchTool('tool3')">
-        <span class="num">03</span> Image Renamer
-      </div>
-    </div>
-    <div class="nav-meta" id="navMeta">no project loaded</div>
-    <button class="btn ghost sm" style="margin-left: 12px" onclick="openSettings()">⚙ Project</button>
+<!-- ===== TOP NAV ===== -->
+<div class="top-nav">
+  <div class="brand">PIPELINE<span class="arrow">›</span>BUILDER</div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" data-tab="tool1" onclick="switchTool('tool1')"><span class="num">01</span> Xem Profile</div>
+    <div class="nav-tab" data-tab="tool2" onclick="switchTool('tool2')"><span class="num">02</span> Phân Cảnh</div>
+    <div class="nav-tab" data-tab="tool3" onclick="switchTool('tool3')"><span class="num">03</span> Asset Prompts</div>
+    <div class="nav-tab" data-tab="tool4" onclick="switchTool('tool4')"><span class="num">04</span> Đổi Tên Ảnh</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+    <select id="profileSelect" onchange="switchProfile(this.value)" style="padding:6px 10px;font-size:11px;width:180px"><option value="">— Chưa có Profile —</option></select>
+    <button class="btn sm" onclick="openProfile()" style="white-space:nowrap">👤 Sửa Profile</button>
+    <button class="btn sm" onclick="newProfile()" style="white-space:nowrap">+ Tạo mới</button>
+  </div>
+</div>
+
+<!-- ===== PROFILE MODAL ===== -->
+<div class="modal-bg" id="profileModal" onclick="if(event.target===this) closeProfile()">
+<div class="modal">
+  <h2>Tạo Profile mới</h2>
+
+  <div class="info-box" style="margin-bottom:20px">
+    <span class="lbl">Flow:</span> Upload hoặc paste 3 phần → bấm <strong>Auto Extract</strong> → AI tự điền profile → bấm <strong>Lưu Profile</strong>.
   </div>
 
-  <!-- ===================== TOOL 1: ASSET GENERATOR ===================== -->
-  <div class="tool active" id="tool-tool1">
-    <div class="tool-head">
-      <div class="tool-title">Asset Prompt Generator</div>
-      <div class="tool-subtitle">Tạo G-Labs prompts cho character reference sheets và background reference sheets.</div>
+  <div class="grid-2 mb-16">
+    <div><label class="label">TÊN KÊNH *</label><input type="text" id="pTenKenh" placeholder="VD: RX Crime VN"></div>
+    <div><label class="label">NGÁCH</label><input type="text" id="pNgach" placeholder="VD: Y học, sinh tồn, dark educational"></div>
+  </div>
+
+  <div class="grid-3 mb-12" style="gap:12px">
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:12px">
+      <label class="label">STYLE GUIDE</label>
+      <input type="file" accept=".md,.txt" onchange="loadFile(this,'pStyleGuide')" style="font-size:10px;padding:4px;margin-bottom:6px">
+      <textarea id="pStyleGuide" style="min-height:120px;font-size:11px" placeholder="Paste nội dung Style Guide .md..."></textarea>
     </div>
-
-    <div class="info-box">
-      <span class="lbl">💡 Khi nào dùng Tool 01?</span>
-      Chỉ 1 lần khi setup kênh mới — tạo reference sheets cho nhân vật và bối cảnh.
-      Sau đó dùng Tool 02 cho production hàng ngày.
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:12px">
+      <label class="label">DNA KÊNH</label>
+      <input type="file" accept=".md,.txt" onchange="loadFile(this,'pDnaKenh')" style="font-size:10px;padding:4px;margin-bottom:6px">
+      <textarea id="pDnaKenh" style="min-height:120px;font-size:11px" placeholder="Paste nội dung DNA .md..."></textarea>
     </div>
-
-    <div class="grid-3 mb-24">
-      <div>
-        <label class="label">Visual Style</label>
-        <input type="text" id="visualStyle" value="Crayon Capital — Dark">
-      </div>
-      <div>
-        <label class="label">Channel Description</label>
-        <input type="text" id="channelDesc" placeholder="Dark educational POV stories...">
-      </div>
-      <div>
-        <label class="label">Video Topic / Series</label>
-        <input type="text" id="videoTopic" placeholder="POV: Corrupt FBI Agent...">
-      </div>
-    </div>
-
-    <div class="panel mb-24">
-      <div class="panel-head">
-        <span><span class="led"></span>STYLE PROMPTS (EDITABLE)</span>
-        <span>
-          <button class="btn ghost sm" onclick="resetStylePresets()">Reset</button>
-          <button class="btn ghost sm" onclick="saveCustomStyle()">Save Custom</button>
-        </span>
-      </div>
-      <div class="panel-body style-editor">
-        <div class="grid-2 mb-16">
-          <div>
-            <label class="label green">Character Style</label>
-            <textarea id="characterStyle"></textarea>
-          </div>
-          <div>
-            <label class="label" style="color: var(--blue)">Background Style</label>
-            <textarea id="backgroundStyle"></textarea>
-          </div>
-        </div>
-        <div>
-          <label class="label rose">Scene Style (prompt ngắn cho từng scene)</label>
-          <textarea id="sceneStyle" style="min-height: 60px"></textarea>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid-2 mb-24">
-      <div class="panel">
-        <div class="panel-head"><span><span class="led" style="background:var(--teal); box-shadow:0 0 8px var(--teal)"></span>CHARACTERS</span></div>
-        <div class="panel-body">
-          <textarea id="charactersInput" style="min-height: 130px; background: var(--surface-2)" placeholder="agent-young&#10;agent-corrupted&#10;harmon-boss"></textarea>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><span><span class="led" style="background:var(--rose); box-shadow:0 0 8px var(--rose)"></span>BACKGROUNDS</span></div>
-        <div class="panel-body">
-          <textarea id="backgroundsInput" style="min-height: 130px; background: var(--surface-2)" placeholder="fbi-office-clean&#10;dark-office-night&#10;home-kitchen"></textarea>
-        </div>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn primary" onclick="generateAllAssetPrompts()">⚡ Generate All Prompts (AI)</button>
-      <button class="btn ghost" onclick="exportAssets()">↓ Export Asset Prompts</button>
-      <button class="btn ghost" onclick="clearAssets()">↺ Clear Generated</button>
-    </div>
-
-    <div class="status-bar" id="status1">Sẵn sàng. Khai báo characters/backgrounds rồi bấm Generate.</div>
-
-    <div class="grid-2">
-      <div>
-        <div class="panel-head" style="border-radius: 6px 6px 0 0; border: 1px solid var(--border); border-bottom: none">
-          <span><span class="led" style="background:var(--teal); box-shadow:0 0 8px var(--teal)"></span>CHARACTER REFERENCE PROMPTS</span>
-          <span class="count" id="charPromptCount">0</span>
-        </div>
-        <div id="characterPromptsList" style="background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 6px 6px; padding: 14px; min-height: 200px; max-height: 600px; overflow-y: auto">
-          <div class="empty-state">Chưa có prompt nhân vật.</div>
-        </div>
-      </div>
-      <div>
-        <div class="panel-head" style="border-radius: 6px 6px 0 0; border: 1px solid var(--border); border-bottom: none">
-          <span><span class="led" style="background:var(--rose); box-shadow:0 0 8px var(--rose)"></span>BACKGROUND REFERENCE PROMPTS</span>
-          <span class="count" id="bgPromptCount">0</span>
-        </div>
-        <div id="backgroundPromptsList" style="background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 6px 6px; padding: 14px; min-height: 200px; max-height: 600px; overflow-y: auto">
-          <div class="empty-state">Chưa có prompt bối cảnh.</div>
-        </div>
-      </div>
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:12px">
+      <label class="label">CHỦ ĐỀ</label>
+      <input type="file" accept=".md,.txt" onchange="loadFile(this,'pChuDe')" style="font-size:10px;padding:4px;margin-bottom:6px">
+      <textarea id="pChuDe" style="min-height:120px;font-size:11px" placeholder="Paste nội dung Chủ Đề .md..."></textarea>
     </div>
   </div>
 
-  <!-- ===================== TOOL 2: SCENE BREAKDOWN ===================== -->
-  <div class="tool" id="tool-tool2">
-    <div class="tool-head">
-      <div class="tool-title">Scene Breakdown</div>
-      <div class="tool-subtitle">AI chia script thành scenes có nghĩa → gán character + background → sinh G-Labs prompt cho từng scene.</div>
-    </div>
-
-    <div class="info-box">
-      <span class="lbl">💡 Workflow:</span>
-      Tool 02 dùng mỗi video. Cần khai báo characters/backgrounds ở Tool 01 trước để có asset reference.
-      Tab "G-Labs Prompts" chứa prompts sẵn sàng paste vào G-Labs.
-    </div>
-
-    <div class="grid-4-vid mb-24">
-      <div>
-        <label class="label">Visual Style (auto từ Tool 01)</label>
-        <input type="text" id="visualStyle2" readonly style="opacity: 0.7">
-      </div>
-      <div>
-        <label class="label">Ngôn ngữ VO</label>
-        <input type="text" id="voLang" value="Tiếng Việt">
-      </div>
-      <div>
-        <label class="label">Min ký tự / scene</label>
-        <input type="number" id="minChars" value="30" min="5" max="500">
-      </div>
-      <div>
-        <label class="label">Max ký tự / scene</label>
-        <input type="number" id="maxChars" value="100" min="20" max="1000">
-      </div>
-    </div>
-
-    <div class="grid-2 mb-24">
-      <div class="panel">
-        <div class="panel-head">
-          <span><span class="led"></span>KỊCH BẢN</span>
-          <span class="count" id="scriptCount">0 ký tự</span>
-        </div>
-        <textarea id="scriptInput" placeholder="Paste kịch bản vào đây..."></textarea>
-      </div>
-      <div class="panel">
-        <div class="panel-head">
-          <span><span class="led" style="background:var(--orange); box-shadow:0 0 8px var(--orange)"></span>PREVIEW SCENES</span>
-          <span class="count" id="previewCount">0 scenes</span>
-        </div>
-        <div id="previewBox">
-          <div class="empty-state">Bấm Split Scenes để tách kịch bản.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn ghost" onclick="cleanScript()">✂ Lọc Script</button>
-      <select id="splitMode" style="width: auto; padding: 8px 12px">
-        <option value="fast">Fast Split (regex, instant)</option>
-        <option value="smart" selected>Smart Split (AI semantic) ★</option>
-      </select>
-      <button class="btn primary" onclick="doSplit()">⊟ Split Scenes</button>
-      <button class="btn violet" onclick="doPrescan()">⚡ Pre-scan (AI)</button>
-      <button class="btn teal" onclick="doAssign()">◈ Assign Assets</button>
-      <button class="btn" style="background: linear-gradient(180deg, #fb7185 0%, #e11d48 100%); border-color: #fb7185; color: #2a0010; font-weight: 600" onclick="doGenerateScenePrompts()">✨ Generate G-Labs Prompts</button>
-      <button class="btn ghost" onclick="exportVideo()">↓ Export Video Data</button>
-      <div class="batch-control">
-        <span>Batch:</span>
-        <input type="number" id="batchSize" value="5" min="1" max="20">
-      </div>
-    </div>
-
-    <div class="status-bar" id="status2">Sẵn sàng. Paste kịch bản và bấm Split Scenes.</div>
-
-    <div class="prescan">
-      <div class="prescan-title">
-        <span>PRE-SCAN: NHÂN VẬT & BỐI CẢNH CHO VIDEO NÀY</span>
-        <span class="hint">Chỉ dùng những asset đã có ở Tool 01</span>
-      </div>
-      <div class="prescan-grid">
-        <div>
-          <label class="label green">Nhân vật (sẽ dùng trong video)</label>
-          <textarea id="charsInputV" placeholder="protagonist&#10;narrator"></textarea>
-        </div>
-        <div>
-          <label class="label rose">Bối cảnh (sẽ dùng trong video)</label>
-          <textarea id="bgInputV" placeholder="kitchen-interior&#10;hospital-room"></textarea>
-        </div>
-      </div>
-    </div>
-
-    <div class="stats">
-      <div class="stat"><div class="k">Scenes</div><div class="v" id="statScenes">0</div></div>
-      <div class="stat"><div class="k">Assigned</div><div class="v dim" id="statAssigned">0</div></div>
-      <div class="stat"><div class="k">Characters</div><div class="v dim" id="statChars">—</div></div>
-      <div class="stat"><div class="k">Backgrounds</div><div class="v dim" id="statBgs">—</div></div>
-      <div class="stat"><div class="k">Duration</div><div class="v" id="statDur">0s</div></div>
-    </div>
-
-    <div class="subtabs">
-      <div class="subtab active" data-sub="list" onclick="switchSub('list')">SCENE LIST <span class="badge" id="badge-list">0</span></div>
-      <div class="subtab" data-sub="prompts" onclick="switchSub('prompts')">🎨 G-LABS PROMPTS <span class="badge" id="badge-prompts">0</span></div>
-      <div class="subtab" data-sub="srt" onclick="switchSub('srt')">📝 SRT EXPORT</div>
-    </div>
-    <div class="subtab-content">
-      <div id="sub-list">
-        <div class="empty-state" id="emptyList">Chưa có scenes.</div>
-        <table class="scene-table" id="sceneTable" style="display:none">
-          <thead>
-            <tr><th>#</th><th>LEVEL</th><th>VO</th><th>CHARACTER</th><th>BACKGROUND</th><th>CAMERA</th><th>DUR</th><th></th></tr>
-          </thead>
-          <tbody id="sceneBody"></tbody>
-        </table>
-      </div>
-      <div id="sub-prompts" style="display:none">
-        <div class="prompts-list" id="promptsListV">
-          <div class="empty-state">Chưa có prompts. Bấm Generate G-Labs Prompts.</div>
-        </div>
-      </div>
-      <div id="sub-srt" style="display:none">
-        <div style="padding: 16px">
-          <div style="display: flex; gap: 10px; margin-bottom: 12px">
-            <button class="btn primary sm" onclick="generateSRT()">Generate SRT</button>
-            <button class="btn ghost sm" onclick="downloadSRT()">↓ Download .srt</button>
-            <button class="btn ghost sm" onclick="copySRT()">Copy</button>
-          </div>
-          <textarea id="srtOutput" style="min-height: 400px; background: var(--surface-2); font-size: 11.5px; line-height: 1.6"></textarea>
-        </div>
-      </div>
-    </div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px">
+    <button class="btn primary" onclick="autoExtract()" id="btnAutoExtract">⚡ Auto Extract từ 3 file</button>
+    <button class="btn ghost" onclick="quickFill()">🌿 Điền mẫu nhanh</button>
+    <span id="extractStatus" style="margin-left:8px;font-size:11px;color:var(--text-muted)"></span>
   </div>
 
-  <!-- ===================== TOOL 3: IMAGE RENAMER ===================== -->
-  <div class="tool" id="tool-tool3">
-    <div class="tool-head">
-      <div class="tool-title">Scene Renamer</div>
-      <div class="tool-subtitle">Đổi tên ảnh thành 001, 002... cho video build.</div>
-    </div>
+  <div class="grid-3 mb-16">
+    <div><label class="label">VISUAL STYLE</label><input type="text" id="pVisualStyle" value="Crayon Capital — Dark"></div>
+    <div><label class="label">NGÔN NGỮ</label><input type="text" id="pNgonNgu" value="Tiếng Việt"></div>
+    <div><label class="label">POV STYLE</label><input type="text" id="pPovStyle" value="Ngôi thứ 2 (Bạn)"></div>
+  </div>
+  <div class="grid-3 mb-16">
+    <div><label class="label">CẤU TRÚC</label><input type="text" id="pCauTruc" value="Levels / Escalation / POV"></div>
+    <div><label class="label">SỐ PHẦN</label><input type="number" id="pSoPhan" value="8"></div>
+    <div><label class="label">TARGET PHÚT</label><input type="number" id="pTargetPhut" value="12"></div>
+  </div>
 
-    <div class="info-box teal">
-      <span class="lbl">📋 Flow:</span>
-      Download ảnh từ G-Labs → Kéo vào đây → Tự đổi tên thành 001.jpg, 002.jpg... (natural sort) → Download ZIP → Bỏ vào folder <code>images/</code> để chạy <code>build_video_srt.py</code>
-    </div>
+  <h3>🎨 STYLE PROMPTS G-LABS</h3>
+  <div class="grid-2 mb-12">
+    <div><label class="label green">CHARACTER STYLE</label><textarea id="pCharStyle" style="min-height:100px" placeholder="AI sẽ điền character style..."></textarea></div>
+    <div><label class="label" style="color:var(--blue)">BACKGROUND STYLE</label><textarea id="pBgStyle" style="min-height:100px" placeholder="AI sẽ điền background style..."></textarea></div>
+  </div>
+  <div class="grid-2 mb-12">
+    <div><label class="label rose">SCENE STYLE / AESTHETIC (~40 từ, cố định cả video)</label><textarea id="pSceneStyle" style="min-height:70px" placeholder="AI sẽ điền scene style..."></textarea></div>
+    <div><label class="label" style="color:var(--red)">PROMPT RULES / NEGATIVE</label><textarea id="pPromptRules" style="min-height:70px" placeholder="No text, no watermark, consistent character, avoid gore..."></textarea></div>
+  </div>
 
-    <div class="grid-3 mb-24" style="grid-template-columns: 2fr 1fr">
-      <div>
-        <div class="panel-head" style="border: 1px solid var(--border); border-radius: 6px 6px 0 0">
-          <span><span class="led" style="background:var(--teal); box-shadow:0 0 8px var(--teal)"></span>ẢNH SCENES TỪ G-LABS</span>
-          <span class="count" id="fileCount">0 ảnh</span>
-        </div>
-        <div id="dropzone" class="dropzone" style="border-top: none; border-radius: 0 0 6px 6px">
-          <div class="ico">📁</div>
-          <div>Kéo thả ảnh vào đây hoặc click để chọn</div>
-          <div class="hint">Tự sort theo tên file (natural sort)</div>
-        </div>
-        <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
-      </div>
-      <div>
-        <div class="panel">
-          <div class="panel-head"><span>TUỲ CHỌN</span></div>
-          <div class="panel-body">
-            <label class="label">Bắt đầu từ số</label>
-            <input type="number" id="startNum" value="1" min="0" style="margin-bottom: 14px">
-            <label class="label">Số chữ số (padding)</label>
-            <input type="text" id="padding" value="3" style="margin-bottom: 14px">
-            <label class="label">Giữ extension gốc</label>
-            <select id="keepExt">
-              <option value="keep">Giữ nguyên (.jpg/.png)</option>
-              <option value="jpg">Chuyển hết → .jpg</option>
-              <option value="png">Chuyển hết → .png</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
+  <h3>👥 NHÂN VẬT & BỐI CẢNH</h3>
+  <p style="color:var(--text-dim);font-size:11px;margin-bottom:16px">Nhân vật và bối cảnh sẽ được AI tự trích xuất từ kịch bản ở Tool 02. Không cần khai báo ở đây.</p>
 
-    <div class="actions">
-      <button class="btn primary" onclick="downloadZip()">↓ Download ZIP</button>
-      <button class="btn ghost" onclick="clearFiles()">↺ Clear</button>
-      <button class="btn ghost" onclick="sortFiles()">Re-sort</button>
-    </div>
+  <div class="modal-actions">
+    <button class="btn ghost danger" onclick="deleteProfile()" style="margin-right:auto">🗑 Xoá Profile</button>
+    <button class="btn ghost" onclick="renameProfile()">✏️ Đổi tên</button>
+    <button class="btn ghost" onclick="closeProfile()">Huỷ</button>
+    <button class="btn ghost" onclick="exportProfile()">↓ Xuất</button>
+    <button class="btn ghost" onclick="document.getElementById('importProfileInput').click()">↑ Nhập</button>
+    <input type="file" id="importProfileInput" accept=".json" style="display:none" onchange="importProfile(event)">
+    <button class="btn primary" onclick="saveProfile()">💾 Lưu Profile</button>
+  </div>
+</div>
+</div>
 
-    <div class="status-bar" id="status3">Sẵn sàng. Kéo ảnh vào dropzone.</div>
+<!-- ===== TOOL 01: TẠO TÀI NGUYÊN ===== -->
+<div class="tool active" id="tool-tool1">
+  <div class="tool-head">
+    <div class="tool-title">Tạo Tài Nguyên</div>
+    <div class="tool-subtitle">Xem và copy Style Prompts từ Profile để tạo reference sheets trên G-Labs.</div>
+  </div>
+  <div class="info-box"><span class="lbl">💡 Quy trình:</span> <strong>Bước 1:</strong> Tạo Profile (bấm + Tạo mới) → upload 3 file context → Auto Extract → Lưu Profile. <strong>Bước 2:</strong> Copy các Style Prompts bên dưới → paste vào G-Labs để gen reference sheets. <strong>Bước 3:</strong> Chuyển sang Tool 02 để phân cảnh kịch bản.</div>
 
+  <div class="status-bar" id="status1">Sẵn sàng. Tạo Profile trước để xem Style Prompts.</div>
+
+  <div id="profileStylesDisplay">
+    <div class="empty-state">Chưa có Profile. Bấm <strong>+ Tạo mới</strong> ở góc phải trên.</div>
+  </div>
+</div>
+
+<!-- ===== TOOL 02: PHÂN CẢNH ===== -->
+<div class="tool" id="tool-tool2">
+  <div class="tool-head">
+    <div class="tool-title">Phân Cảnh</div>
+    <div class="tool-subtitle">AI chia kịch bản thành cảnh có nghĩa → gán nhân vật + bối cảnh → sinh prompt G-Labs cho từng cảnh.</div>
+  </div>
+  <div class="info-box"><span class="lbl">💡 Quy trình:</span> Tool 02 dùng mỗi video. Cần có Profile (bấm nút 👤 góc phải trên) để AI dựa vào đó sinh prompt đồng nhất. Tab "Prompt G-Labs" chứa prompt sẵn sàng paste vào G-Labs.</div>
+
+  <div class="grid-4-vid mb-24">
+    <div><label class="label">VISUAL STYLE (từ Profile)</label><input type="text" id="visualStyle2" readonly style="opacity:.7"></div>
+    <div><label class="label">NGÔN NGỮ VO</label><input type="text" id="voLang" value="Tiếng Việt"></div>
+    <div><label class="label">MIN KÝ TỰ / CẢNH</label><input type="number" id="minChars" value="30" min="5" max="500"></div>
+    <div><label class="label">MAX KÝ TỰ / CẢNH</label><input type="number" id="maxChars" value="100" min="20" max="1000"></div>
+  </div>
+
+  <div class="grid-2 mb-24">
     <div class="panel">
-      <div class="panel-head"><span>PREVIEW RENAME</span></div>
-      <div class="file-list" id="fileList">
-        <div class="empty-state">Chưa có file.</div>
+      <div class="panel-head"><span><span class="led"></span>KỊCH BẢN</span><span class="count" id="scriptCount">0 ký tự</span></div>
+      <textarea id="scriptInput" placeholder="Paste kịch bản vào đây..."></textarea>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span><span class="led" style="background:var(--orange);box-shadow:0 0 8px var(--orange)"></span>XEM TRƯỚC CẢNH</span><span class="count" id="previewCount">0 cảnh</span></div>
+      <div id="previewBox"><div class="empty-state">Bấm Chia Cảnh để tách kịch bản.</div></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn ghost" onclick="cleanScript()">✂ Lọc Kịch Bản</button>
+    <select id="splitMode" style="width:auto;padding:8px 12px">
+      <option value="fast">Chia nhanh (regex, tức thì)</option>
+      <option value="smart" selected>Chia thông minh (AI) ★</option>
+    </select>
+    <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
+    <button class="btn violet" onclick="doPrescan()">⚡ Quét Trước (AI)</button>
+    <button class="btn teal" onclick="doAssign()">◈ Gán Tài Nguyên</button>
+    <button class="btn" style="background:linear-gradient(180deg,#fb7185,#e11d48);border-color:#fb7185;color:#2a0010;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
+    <button class="btn ghost" onclick="exportVideo()">↓ Xuất Dữ Liệu</button>
+    <div class="batch-control"><span>Batch:</span><input type="number" id="batchSize" value="5" min="1" max="20"></div>
+  </div>
+
+  <div class="status-bar" id="status2">Sẵn sàng. Paste kịch bản và bấm Chia Cảnh.</div>
+
+  <div class="prescan">
+    <div class="prescan-title"><span>QUÉT TRƯỚC: NHÂN VẬT & BỐI CẢNH CHO VIDEO NÀY</span><span class="hint">Chỉ dùng những tài nguyên đã có ở Profile</span></div>
+    <div class="grid-2" style="margin-top:12px">
+      <div><label class="label green">NHÂN VẬT (sẽ dùng trong video)</label><textarea id="charsInputV" placeholder="protagonist&#10;narrator" style="min-height:110px;font-size:12px;background:var(--surface-2)"></textarea></div>
+      <div><label class="label rose">BỐI CẢNH (sẽ dùng trong video)</label><textarea id="bgInputV" placeholder="kitchen-interior&#10;hospital-room" style="min-height:110px;font-size:12px;background:var(--surface-2)"></textarea></div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">CẢNH</div><div class="v" id="statScenes">0</div></div>
+    <div class="stat"><div class="k">ĐÃ GÁN</div><div class="v dim" id="statAssigned">0</div></div>
+    <div class="stat"><div class="k">NHÂN VẬT</div><div class="v dim" id="statChars">—</div></div>
+    <div class="stat"><div class="k">BỐI CẢNH</div><div class="v dim" id="statBgs">—</div></div>
+    <div class="stat"><div class="k">THỜI LƯỢNG</div><div class="v" id="statDur">0s</div></div>
+  </div>
+
+  <div class="subtabs">
+    <div class="subtab active" data-sub="list" onclick="switchSub('list')">DANH SÁCH CẢNH <span class="badge" id="badge-list">0</span></div>
+    <div class="subtab" data-sub="prompts" onclick="switchSub('prompts')">🎨 PROMPT G-LABS <span class="badge" id="badge-prompts">0</span></div>
+    <div class="subtab" data-sub="srt" onclick="switchSub('srt')">📝 XUẤT SRT</div>
+  </div>
+  <div class="subtab-content">
+    <div id="sub-list">
+      <div class="empty-state" id="emptyList">Chưa có cảnh nào.</div>
+      <table class="scene-table" id="sceneTable" style="display:none">
+        <thead><tr><th>#</th><th>CẤP</th><th>LỜI THOẠI</th><th>NHÂN VẬT</th><th>BỐI CẢNH</th><th>CAMERA</th><th>DÀI</th><th></th></tr></thead>
+        <tbody id="sceneBody"></tbody>
+      </table>
+    </div>
+    <div id="sub-prompts" style="display:none"><div class="prompts-list" id="promptsListV"><div class="empty-state">Chưa có prompt. Bấm Tạo Prompt G-Labs.</div></div></div>
+    <div id="sub-srt" style="display:none">
+      <div style="padding:16px">
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <button class="btn primary sm" onclick="generateSRT()">Tạo SRT</button>
+          <button class="btn ghost sm" onclick="downloadSRT()">↓ Tải .srt</button>
+          <button class="btn ghost sm" onclick="copySRT()">Sao chép</button>
+        </div>
+        <textarea id="srtOutput" style="min-height:400px;background:var(--surface-2);font-size:11.5px;line-height:1.6"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOOL 03: ASSET PROMPTS ===== -->
+<div class="tool" id="tool-tool3">
+  <div class="tool-head">
+    <div class="tool-title">Asset Prompts</div>
+    <div class="tool-subtitle">Tạo prompt G-Labs cho reference sheets nhân vật + bối cảnh. Dữ liệu lấy từ Tool 02, style từ Profile.</div>
+  </div>
+
+  <div id="loadBanner" style="background:rgba(45,212,191,.1);border:1px solid var(--teal);border-radius:6px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+    <span style="color:var(--teal)">📦 Nhân vật & bối cảnh từ Tool 02</span>
+    <button class="btn teal sm" onclick="loadAssetsFromTool2()">Load Assets từ Tool 02</button>
+  </div>
+
+  <div class="grid-3 mb-24">
+    <div><label class="label">VISUAL STYLE</label><input type="text" id="t3VisualStyle" readonly style="opacity:.7"></div>
+    <div><label class="label">NGÁCH</label><input type="text" id="t3Ngach" readonly style="opacity:.7"></div>
+    <div><label class="label">POV STYLE</label><input type="text" id="t3PovStyle" readonly style="opacity:.7"></div>
+  </div>
+
+  <div class="panel mb-24">
+    <div class="panel-head"><span><span class="led"></span>STYLE PROMPTS (TỪ PROFILE)</span></div>
+    <div class="panel-body">
+      <div class="grid-2 mb-12">
+        <div><label class="label green">CHARACTER STYLE</label><textarea id="t3CharStyle" style="min-height:80px;font-size:11px;background:var(--surface-2)" readonly></textarea></div>
+        <div><label class="label" style="color:var(--blue)">BACKGROUND STYLE</label><textarea id="t3BgStyle" style="min-height:80px;font-size:11px;background:var(--surface-2)" readonly></textarea></div>
+      </div>
+      <div class="grid-2">
+        <div><label class="label rose">SCENE STYLE</label><textarea id="t3SceneStyle" style="min-height:50px;font-size:11px;background:var(--surface-2)" readonly></textarea></div>
+        <div><label class="label" style="color:var(--red)">PROMPT RULES / NEGATIVE</label><textarea id="t3PromptRules" style="min-height:50px;font-size:11px;background:var(--surface-2)" readonly></textarea></div>
       </div>
     </div>
   </div>
 
-</div>
-
-<!-- ===================== SETTINGS MODAL ===================== -->
-<div class="modal-bg" id="settingsModal" onclick="if(event.target===this) closeSettings()">
-  <div class="modal">
-    <h2>⚙ PROJECT MANAGEMENT</h2>
-    <p>Project lưu tự động trong browser. Có thể export ra file JSON để backup/share giữa thiết bị.</p>
-
-    <label class="label">Project Name</label>
-    <input type="text" id="projectName" placeholder="My Channel" style="margin-bottom: 16px">
-
-    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px">
-      <button class="btn sm" onclick="exportProject()">↓ Export Project</button>
-      <button class="btn sm" onclick="document.getElementById('importInput').click()">↑ Import Project</button>
-      <input type="file" id="importInput" accept=".json" style="display:none" onchange="importProject(event)">
-      <button class="btn sm danger" onclick="resetAll()">↺ Reset All</button>
+  <div class="grid-2 mb-24">
+    <div class="panel">
+      <div class="panel-head"><span><span class="led" style="background:var(--teal);box-shadow:0 0 8px var(--teal)"></span>NHÂN VẬT</span><span class="count" id="t3CharCount">0</span></div>
+      <div class="panel-body"><textarea id="t3Characters" style="min-height:100px;background:var(--surface-2);font-size:12px" placeholder="Chưa có — bấm Load Assets từ Tool 02"></textarea></div>
     </div>
-
-    <p style="font-size: 11px; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 12px; margin-top: 16px">
-      <strong style="color: var(--text-muted)">Deploy lên web?</strong><br>
-      Tool đang dùng Claude API qua artifact runtime. Để chạy ngoài (Vercel/Netlify), cần backend proxy với API key. Xem code comment <code>callClaude()</code> để biết cách switch.
-    </p>
-
-    <div class="modal-actions">
-      <button class="btn" onclick="closeSettings()">Close</button>
+    <div class="panel">
+      <div class="panel-head"><span><span class="led" style="background:var(--rose);box-shadow:0 0 8px var(--rose)"></span>BỐI CẢNH</span><span class="count" id="t3BgCount">0</span></div>
+      <div class="panel-body"><textarea id="t3Backgrounds" style="min-height:100px;background:var(--surface-2);font-size:12px" placeholder="Chưa có — bấm Load Assets từ Tool 02"></textarea></div>
     </div>
+  </div>
+
+  <div class="panel mb-24">
+    <div class="panel-head"><span>📷 ẢNH THAM CHIẾU NHÂN VẬT (VISION API)</span><span class="count" id="t3ImgCount">0 ảnh</span><button class="btn ghost sm" onclick="clearAllCharImages()">Xoá hết</button></div>
+    <div class="panel-body">
+      <div class="info-box" style="margin-bottom:12px">Upload ảnh nhân vật → Claude Vision sẽ <strong>phân tích visual</strong> để gen prompt chính xác hơn. Chọn tên nhân vật từ list → upload ảnh tương ứng. <strong>Hỗ trợ: PNG, JPG, WEBP (max 5MB)</strong></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+        <select id="t3CharSelect" style="flex:1"><option value="">— Chọn từ danh sách nhân vật —</option></select>
+        <input type="file" id="t3ImgInput" accept="image/png,image/jpeg,image/webp" style="display:none">
+        <button class="btn" onclick="uploadCharImage()">📷 Upload ảnh</button>
+      </div>
+      <div id="t3ImgGallery" style="display:flex;flex-wrap:wrap;gap:12px"></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" onclick="genAllAssetPrompts()">⚡ Generate All Prompts</button>
+    <button class="btn" onclick="genStyleReference()">🎨 Style Reference</button>
+    <button class="btn ghost" onclick="exportAssetPrompts()">↓ Xuất Prompts</button>
+  </div>
+
+  <div class="status-bar" id="status3">Sẵn sàng. Load Assets từ Tool 02 rồi bấm Generate.</div>
+
+  <div class="grid-2 mb-24">
+    <div>
+      <div class="panel-head" style="border-radius:6px 6px 0 0;border:1px solid var(--border);border-bottom:none"><span>PROMPT NHÂN VẬT</span><span class="count" id="t3CharPromptCount">0</span></div>
+      <div id="t3CharPromptsList" style="background:var(--surface);border:1px solid var(--border);border-radius:0 0 6px 6px;padding:14px;min-height:150px;max-height:500px;overflow-y:auto"><div class="empty-state">Chưa có prompt.</div></div>
+    </div>
+    <div>
+      <div class="panel-head" style="border-radius:6px 6px 0 0;border:1px solid var(--border);border-bottom:none"><span>PROMPT BỐI CẢNH</span><span class="count" id="t3BgPromptCount">0</span></div>
+      <div id="t3BgPromptsList" style="background:var(--surface);border:1px solid var(--border);border-radius:0 0 6px 6px;padding:14px;min-height:150px;max-height:500px;overflow-y:auto"><div class="empty-state">Chưa có prompt.</div></div>
+    </div>
+  </div>
+
+  <div class="panel mb-24" id="styleRefPanel" style="display:none">
+    <div class="panel-head"><span>🎨 STYLE REFERENCE PROMPT</span><button class="btn ghost sm" onclick="copyText(state.styleRefPrompt||'')">Sao chép</button></div>
+    <div class="panel-body"><div id="t3StyleRefText" style="white-space:pre-wrap;line-height:1.7"></div></div>
+  </div>
+
+  <h3 style="margin:24px 0 12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--orange)">📁 ĐỔI TÊN ẢNH THEO TÊN ASSET</h3>
+  <div class="info-box teal" style="margin-bottom:16px">Kéo ảnh G-Labs vào → chọn ảnh nào là của nhân vật/bối cảnh nào → đổi tên → tải ZIP.</div>
+  <div id="assetDropzone" class="dropzone" style="min-height:150px;margin-bottom:16px"><div class="ico">📁</div><div>Kéo thả ảnh reference sheets vào đây</div></div>
+  <input type="file" id="assetFileInput" multiple accept="image/*" style="display:none">
+  <div id="assetFileList" style="margin-bottom:16px"></div>
+  <div class="actions">
+    <button class="btn primary sm" onclick="downloadAssetZip()">↓ Tải ZIP (theo tên asset)</button>
+    <button class="btn ghost sm" onclick="clearAssetFiles()">Xoá ảnh</button>
   </div>
 </div>
 
+<!-- ===== TOOL 04: ĐỔI TÊN ẢNH ===== -->
+<div class="tool" id="tool-tool4">
+  <div class="tool-head">
+    <div class="tool-title">Đổi Tên Ảnh</div>
+    <div class="tool-subtitle">Đổi tên ảnh thành 001, 002... cho video build.</div>
+  </div>
+  <div class="info-box teal"><span class="lbl">📋 Quy trình:</span> Tải ảnh từ G-Labs → Kéo vào đây → Tự đổi tên thành 001.jpg, 002.jpg... (sắp xếp tự nhiên) → Tải ZIP → Bỏ vào thư mục <code>images/</code> để chạy <code>build_video_srt.py</code></div>
+  <div class="grid-3 mb-24" style="grid-template-columns:2fr 1fr">
+    <div>
+      <div class="panel-head" style="border:1px solid var(--border);border-radius:6px 6px 0 0"><span><span class="led" style="background:var(--teal);box-shadow:0 0 8px var(--teal)"></span>ẢNH TỪ G-LABS</span><span class="count" id="fileCount">0 ảnh</span></div>
+      <div id="dropzone" class="dropzone" style="border-top:none;border-radius:0 0 6px 6px"><div class="ico">📁</div><div>Kéo thả ảnh vào đây hoặc click để chọn</div><div class="hint">Tự sắp xếp theo tên file (natural sort)</div></div>
+      <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+    </div>
+    <div>
+      <div class="panel"><div class="panel-head"><span>TÙY CHỌN</span></div><div class="panel-body">
+        <label class="label">BẮT ĐẦU TỪ SỐ</label><input type="number" id="startNum" value="1" min="0" style="margin-bottom:14px">
+        <label class="label">SỐ CHỮ SỐ (PADDING)</label><input type="text" id="padding" value="3" style="margin-bottom:14px">
+        <label class="label">GIỮ EXTENSION GỐC</label>
+        <select id="keepExt"><option value="keep">Giữ nguyên (.jpg/.png)</option><option value="jpg">Chuyển hết → .jpg</option><option value="png">Chuyển hết → .png</option></select>
+      </div></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn primary" onclick="downloadZip()">↓ Tải ZIP</button>
+    <button class="btn ghost" onclick="clearFiles()">↺ Xoá</button>
+    <button class="btn ghost" onclick="sortFiles()">Sắp xếp lại</button>
+  </div>
+  <div class="status-bar" id="status4">Sẵn sàng. Kéo ảnh vào khu vực trên.</div>
+  <div class="panel"><div class="panel-head"><span>XEM TRƯỚC ĐỔI TÊN</span></div><div class="file-list" id="fileList"><div class="empty-state">Chưa có file.</div></div></div>
+</div>
+
+</div>
 <script>
-/* ============================================================
-   STATE
-   ============================================================ */
+/* ============ STATE ============ */
 const state = {
-  // Project / channel-level
-  projectName: 'New Project',
-  visualStyle: 'Crayon Capital — Dark',
-  channelDesc: '',
-  videoTopic: '',
-  characterStyle: '',
-  backgroundStyle: '',
-  sceneStyle: '',
-  characters: [],
-  backgrounds: [],
-  characterPrompts: {},   // { 'char-name': 'prompt text' }
-  backgroundPrompts: {},  // { 'bg-name': 'prompt text' }
-
-  // Video-level (current)
-  script: '',
-  voLang: 'Tiếng Việt',
-  minChars: 30,
-  maxChars: 100,
-  splitMode: 'smart',
-  scenes: [],
-  scenePrompts: {},
-  charactersV: [],
-  backgroundsV: [],
-
-  // UI
-  tool: 'tool1',
-  sub: 'list',
+  profiles: [], // Array of profile objects
+  currentProfileIdx: -1, // -1 = no profile selected
+  characterPrompts:{},backgroundPrompts:{},
+  assetCharPrompts:{},assetBgPrompts:{},characterImages:{},styleRefPrompt:'',
+  script:'',voLang:'Tiếng Việt',minChars:30,maxChars:100,splitMode:'smart',
+  scenes:[],scenePrompts:{},charactersV:[],backgroundsV:[],
+  tool:'tool1',sub:'list'
 };
 
-/* === DEFAULT STYLE PRESETS === */
-const PRESET_CRAYON_DARK = {
-  characterStyle: "2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups (neutral, happy, angry, sad, surprised, determined), NO text NO words",
-  backgroundStyle: "2D cartoon background illustration, bold black outlines, detailed interior or exterior environment with depth and atmosphere, muted dark color palette browns grays dark greens warm shadows, visible furniture props architectural details environmental storytelling elements, cinematic moody lighting with warm practical light sources, flat color fills with subtle tone variation, hand-drawn illustration style, NO characters NO people NO figures NO text NO words, 16:9 ratio",
-  sceneStyle: "2D cartoon style, bold thick black ink outlines, flat color fills, hand-drawn illustration"
+function getProfile(){return state.currentProfileIdx>=0?state.profiles[state.currentProfileIdx]:null}
+function makeEmptyProfile(){return {
+  tenKenh:'',ngach:'',visualStyle:'Crayon Capital — Dark',ngonNgu:'Tiếng Việt',
+  povStyle:'Ngôi thứ 2 (Bạn)',cauTruc:'Levels / Escalation / POV',soPhan:8,targetPhut:12,
+  characterStyle:'',backgroundStyle:'',sceneStyle:'',promptRules:'No text, no watermark, consistent character design, avoid gore',
+  styleGuide:'',dnaKenh:'',chuDe:'',characters:[],backgrounds:[]
+}}
+
+const PRESET={
+  characterStyle:"2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words",
+  backgroundStyle:"2D cartoon background illustration, bold black outlines, detailed interior or exterior environment with depth and atmosphere, muted dark color palette browns grays dark greens warm shadows, visible furniture props architectural details environmental storytelling elements, cinematic moody lighting with warm practical light sources, flat color fills with subtle tone variation, hand-drawn illustration style, NO characters NO people NO figures NO text NO words, 16:9 ratio",
+  sceneStyle:"2D cartoon style, bold thick black ink outlines, flat color fills, hand-drawn illustration"
 };
 
-/* ============================================================
-   CLAUDE API CALLER
-   ============================================================ */
-// Calls backend proxy at /api/claude — see api/claude.js
-async function callClaude(prompt, maxTokens = 1500) {
-  const response = await fetch('/api/claude', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`API ${response.status}: ${errText.slice(0, 200)}`);
-  }
-  const data = await response.json();
-  return data.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-}
-
-function parseJSON(text) {
-  // Robust JSON extraction
-  const cleaned = text.replace(/```json|```/g, '').trim();
-  // Find first { or [ and matching close
-  const start = cleaned.search(/[\[{]/);
-  if (start === -1) throw new Error('No JSON found in response');
-  const opener = cleaned[start];
-  const closer = opener === '[' ? ']' : '}';
-  let depth = 0;
-  let end = -1;
-  let inStr = false;
-  let esc = false;
-  for (let i = start; i < cleaned.length; i++) {
-    const c = cleaned[i];
-    if (esc) { esc = false; continue; }
-    if (c === '\\') { esc = true; continue; }
-    if (c === '"') { inStr = !inStr; continue; }
-    if (inStr) continue;
-    if (c === opener) depth++;
-    if (c === closer) { depth--; if (depth === 0) { end = i; break; } }
-  }
-  if (end === -1) throw new Error('Unbalanced JSON');
-  return JSON.parse(cleaned.slice(start, end + 1));
-}
-
-/* ============================================================
-   TOOL 1: ASSET PROMPT GENERATOR
-   ============================================================ */
-function syncTool1FromInputs() {
-  state.visualStyle = document.getElementById('visualStyle').value;
-  state.channelDesc = document.getElementById('channelDesc').value;
-  state.videoTopic = document.getElementById('videoTopic').value;
-  state.characterStyle = document.getElementById('characterStyle').value;
-  state.backgroundStyle = document.getElementById('backgroundStyle').value;
-  state.sceneStyle = document.getElementById('sceneStyle').value;
-  state.characters = document.getElementById('charactersInput').value
-    .split('\n').map(s => s.trim().toLowerCase().replace(/\s+/g, '-')).filter(Boolean);
-  state.backgrounds = document.getElementById('backgroundsInput').value
-    .split('\n').map(s => s.trim().toLowerCase().replace(/\s+/g, '-')).filter(Boolean);
-}
-
-function resetStylePresets() {
-  if (!confirm('Reset style prompts về preset Crayon Capital Dark?')) return;
-  document.getElementById('characterStyle').value = PRESET_CRAYON_DARK.characterStyle;
-  document.getElementById('backgroundStyle').value = PRESET_CRAYON_DARK.backgroundStyle;
-  document.getElementById('sceneStyle').value = PRESET_CRAYON_DARK.sceneStyle;
-  syncTool1FromInputs();
-  saveState();
-  setStatus1('Đã reset style preset.', 'ok');
-}
-
-function saveCustomStyle() {
-  syncTool1FromInputs();
-  saveState();
-  setStatus1('Đã lưu style custom.', 'ok');
-}
-
-async function generateAllAssetPrompts() {
-  syncTool1FromInputs();
-  if (state.characters.length === 0 && state.backgrounds.length === 0) {
-    return setStatus1('Cần khai báo characters hoặc backgrounds.', 'error');
-  }
-
-  setStatus1('AI đang sinh asset prompts...', 'working');
-
-  try {
-    // Characters
-    if (state.characters.length > 0) {
-      const charPrompt = `You are a G-Labs (Imagen/Nano Banana) prompt engineer. Generate ONE character reference sheet prompt for each character below.
-
-Channel: ${state.channelDesc || 'general'}
-Video topic: ${state.videoTopic || 'general'}
-
-Use this EXACT style template, customizing only the character-specific details (age, gender, clothing, identifying features):
-"""
-${state.characterStyle}
-"""
-
-For each character, infer reasonable age/gender/clothing/features from the name + channel context.
-
-Return ONLY a valid JSON object (no markdown):
-{"character-name-1": "full prompt text here", "character-name-2": "..."}
-
-Characters to generate prompts for:
-${state.characters.map(c => `- ${c}`).join('\n')}`;
-
-      const reply = await callClaude(charPrompt, 3000);
-      const prompts = parseJSON(reply);
-      state.characterPrompts = { ...state.characterPrompts, ...prompts };
-      renderCharacterPrompts();
+/* ============ API ============ */
+async function callClaude(prompt,maxTokens=1500){
+  const body=JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]});
+  const headers={'Content-Type':'application/json'};
+  // Thử proxy (Vercel) trước
+  try{
+    const r=await fetch('/api/claude',{method:'POST',headers,body});
+    const ct=r.headers.get('content-type')||'';
+    if(ct.includes('application/json')){
+      const d=await r.json();
+      if(!r.ok)throw new Error(`API ${r.status}: ${JSON.stringify(d).slice(0,200)}`);
+      return d.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
     }
+    // Không phải JSON = proxy không tồn tại, thử direct
+  }catch(e){
+    if(e.message.startsWith('API '))throw e; // Lỗi API thật → không retry
+  }
+  // Fallback: direct API (Claude artifact runtime)
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body});
+  if(!r.ok){const e=await r.text();throw new Error(`API ${r.status}: ${e.slice(0,200)}`);}
+  const d=await r.json();return d.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
+}
+function parseJSON(text){
+  const c=text.replace(/```json|```/g,'').trim();
+  const s=c.search(/[\[{]/);if(s===-1)throw new Error('Không tìm thấy JSON');
+  const o=c[s],cl=o==='['?']':'}';let d=0,e=-1,inS=false,esc=false;
+  for(let i=s;i<c.length;i++){const ch=c[i];if(esc){esc=false;continue}if(ch==='\\'){esc=true;continue}if(ch==='"'){inS=!inS;continue}if(inS)continue;if(ch===o)d++;if(ch===cl){d--;if(d===0){e=i;break}}}
+  if(e===-1)throw new Error('JSON không hợp lệ');return JSON.parse(c.slice(s,e+1));
+}
 
-    // Backgrounds
-    if (state.backgrounds.length > 0) {
-      const bgPrompt = `You are a G-Labs (Imagen/Nano Banana) prompt engineer. Generate ONE background reference sheet prompt for each location below.
+/* ============ PROFILE ============ */
+function renderProfileSelect(){
+  const sel=document.getElementById('profileSelect');
+  sel.innerHTML='<option value="">— Chọn Profile —</option>'+state.profiles.map((p,i)=>
+    `<option value="${i}" ${i===state.currentProfileIdx?'selected':''}>${p.tenKenh||'Profile '+(i+1)}</option>`).join('');
+}
+function switchProfile(val){
+  const idx=val===''?-1:parseInt(val);
+  state.currentProfileIdx=idx;
+  const p=getProfile();
+  if(p){syncTool2FromProfile();renderProfileStyles()}
+  saveState();
+}
+function newProfile(){
+  state.profiles.push(makeEmptyProfile());
+  state.currentProfileIdx=state.profiles.length-1;
+  renderProfileSelect();
+  openProfile();
+  saveState();
+}
+function deleteProfile(){
+  if(state.currentProfileIdx<0)return;
+  if(!confirm('Xoá profile "'+getProfile().tenKenh+'"? Không hoàn tác được.'))return;
+  state.profiles.splice(state.currentProfileIdx,1);
+  state.currentProfileIdx=state.profiles.length>0?0:-1;
+  renderProfileSelect();
+  closeProfile();
+  renderProfileStyles();
+  saveState();
+}
+function openProfile(){
+  if(state.currentProfileIdx<0){if(state.profiles.length===0){newProfile();return}state.currentProfileIdx=0}
+  const p=getProfile();if(!p)return;
+  document.getElementById('pTenKenh').value=p.tenKenh||'';
+  document.getElementById('pNgach').value=p.ngach||'';
+  document.getElementById('pVisualStyle').value=p.visualStyle||'Crayon Capital — Dark';
+  document.getElementById('pNgonNgu').value=p.ngonNgu||'Tiếng Việt';
+  document.getElementById('pPovStyle').value=p.povStyle||'Ngôi thứ 2 (Bạn)';
+  document.getElementById('pCauTruc').value=p.cauTruc||'Levels / Escalation / POV';
+  document.getElementById('pSoPhan').value=p.soPhan||8;
+  document.getElementById('pTargetPhut').value=p.targetPhut||12;
+  document.getElementById('pCharStyle').value=p.characterStyle||'';
+  document.getElementById('pBgStyle').value=p.backgroundStyle||'';
+  document.getElementById('pSceneStyle').value=p.sceneStyle||'';
+  document.getElementById('pPromptRules').value=p.promptRules||'No text, no watermark, consistent character design, avoid gore';
+  document.getElementById('pStyleGuide').value=p.styleGuide||'';
+  document.getElementById('pDnaKenh').value=p.dnaKenh||'';
+  document.getElementById('pChuDe').value=p.chuDe||'';
+  document.getElementById('profileModal').classList.add('show');
+}
+function closeProfile(){document.getElementById('profileModal').classList.remove('show')}
+function saveProfile(){
+  if(state.currentProfileIdx<0)return;
+  const p=getProfile();
+  p.tenKenh=document.getElementById('pTenKenh').value;
+  p.ngach=document.getElementById('pNgach').value;
+  p.visualStyle=document.getElementById('pVisualStyle').value;
+  p.ngonNgu=document.getElementById('pNgonNgu').value;
+  p.povStyle=document.getElementById('pPovStyle').value;
+  p.cauTruc=document.getElementById('pCauTruc').value;
+  p.soPhan=parseInt(document.getElementById('pSoPhan').value)||8;
+  p.targetPhut=parseInt(document.getElementById('pTargetPhut').value)||12;
+  p.characterStyle=document.getElementById('pCharStyle').value;
+  p.backgroundStyle=document.getElementById('pBgStyle').value;
+  p.sceneStyle=document.getElementById('pSceneStyle').value;
+  p.promptRules=document.getElementById('pPromptRules').value;
+  p.styleGuide=document.getElementById('pStyleGuide').value;
+  p.dnaKenh=document.getElementById('pDnaKenh').value;
+  p.chuDe=document.getElementById('pChuDe').value;
+  renderProfileSelect();
+  syncTool2FromProfile();
+  renderProfileStyles();
+  closeProfile();
+  saveState();
+  setStatus1('✓ Đã lưu Profile: '+p.tenKenh,'ok');
+}
+function renameProfile(){
+  const p=getProfile();if(!p)return;
+  const name=prompt('Đổi tên Profile:',p.tenKenh);
+  if(name===null)return;
+  p.tenKenh=name;
+  document.getElementById('pTenKenh').value=name;
+  renderProfileSelect();
+  saveState();
+}
+function syncTool2FromProfile(){
+  const p=getProfile();if(!p)return;
+  document.getElementById('visualStyle2').value=p.visualStyle;
+  document.getElementById('voLang').value=p.ngonNgu;
+}
+function renderProfileStyles(){
+  const box=document.getElementById('profileStylesDisplay');
+  const p=getProfile();
+  if(!p||!p.tenKenh){box.innerHTML='<div class="empty-state">Chưa có Profile. Bấm <strong>+ Tạo mới</strong> ở góc phải trên.</div>';return}
+  const makeCard=(label,color,text)=>`<div class="ref-sheet-card" style="border-left-color:${color}"><div class="ref-sheet-card-head"><span class="ref-sheet-card-name" style="color:${color}">${label}</span>${text?`<button class="btn ghost sm" onclick="copyText(\`${text.replace(/`/g,"'").replace(/\\/g,"\\\\")}\`)">Sao chép</button>`:''}</div><div class="ref-sheet-card-text">${text?escapeHtml(text):'<em>Chưa có — chạy Auto Extract trong Profile.</em>'}</div></div>`;
+  box.innerHTML=`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:18px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:16px;font-weight:600;color:var(--amber)">${escapeHtml(p.tenKenh)}</span>
+        <span style="color:var(--text-muted);font-size:11px">${p.ngach||''} · ${p.visualStyle} · ${p.povStyle} · ${p.cauTruc}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text-muted)">
+        <span>Ngôn ngữ: <strong style="color:var(--text)">${p.ngonNgu}</strong></span>
+        <span>· Số phần: <strong style="color:var(--text)">${p.soPhan}</strong></span>
+        <span>· Target: <strong style="color:var(--text)">${p.targetPhut} phút</strong></span>
+      </div>
+    </div>
+    ${makeCard('CHARACTER STYLE','var(--teal)',p.characterStyle)}
+    ${makeCard('BACKGROUND STYLE','var(--blue)',p.backgroundStyle)}
+    ${makeCard('SCENE STYLE / AESTHETIC','var(--rose)',p.sceneStyle)}
+    ${makeCard('PROMPT RULES / NEGATIVE','var(--red)',p.promptRules)}
+  `;
+}
 
-Channel: ${state.channelDesc || 'general'}
-Video topic: ${state.videoTopic || 'general'}
+function loadFile(input,targetId){
+  if(!input.files[0])return;
+  input.files[0].text().then(text=>{document.getElementById(targetId).value=text});
+}
 
-Use this EXACT style template, customizing only the location-specific details:
-"""
-${state.backgroundStyle}
-"""
+function quickFill(){
+  document.getElementById('pTenKenh').value='Ancient Curiosities';
+  document.getElementById('pNgach').value='Dark educational, mysteries, lịch sử bí ẩn';
+  document.getElementById('pVisualStyle').value='Crayon Capital — Dark';
+  document.getElementById('pNgonNgu').value='Tiếng Việt';
+  document.getElementById('pPovStyle').value='Ngôi thứ 2 (Bạn)';
+  document.getElementById('pCauTruc').value='Levels / Escalation / POV';
+  document.getElementById('pSoPhan').value=8;
+  document.getElementById('pTargetPhut').value=12;
+  document.getElementById('pCharStyle').value=PRESET.characterStyle;
+  document.getElementById('pBgStyle').value=PRESET.backgroundStyle;
+  document.getElementById('pSceneStyle').value=PRESET.sceneStyle;
+  document.getElementById('pPromptRules').value='No text, no watermark, consistent character design across all scenes, avoid gore, no realistic human faces, maintain flat 2D cartoon aesthetic';
+  document.getElementById('extractStatus').innerHTML='<span style="color:var(--green)">✓ Đã điền mẫu. Sửa lại cho phù hợp kênh của bạn rồi Lưu Profile.</span>';
+}
 
-For each location, infer time of day, mood, key props from the name + channel context.
+/* Auto Extract from context files */
+async function autoExtract(){
+  const sg=document.getElementById('pStyleGuide').value;
+  const dk=document.getElementById('pDnaKenh').value;
+  const cd=document.getElementById('pChuDe').value;
+  if(!sg&&!dk&&!cd)return alert('Cần paste hoặc upload ít nhất 1 file.');
+  document.getElementById('extractStatus').innerHTML='<span class="spinner"></span> AI đang phân tích...';
+  document.getElementById('btnAutoExtract').disabled=true;
+  try{
+    const prompt=`Đọc 3 tài liệu sau và trích xuất thông tin để điền profile kênh video.
 
-Return ONLY a valid JSON object (no markdown):
-{"location-name-1": "full prompt text here", "location-name-2": "..."}
+=== STYLE GUIDE ===
+${sg||'(không có)'}
 
-Backgrounds to generate prompts for:
-${state.backgrounds.map(b => `- ${b}`).join('\n')}`;
+=== DNA KÊNH ===
+${dk||'(không có)'}
 
-      const reply = await callClaude(bgPrompt, 3000);
-      const prompts = parseJSON(reply);
-      state.backgroundPrompts = { ...state.backgroundPrompts, ...prompts };
-      renderBackgroundPrompts();
-    }
+=== CHỦ ĐỀ ===
+${cd||'(không có)'}
 
-    setStatus1(`✓ Đã sinh ${Object.keys(state.characterPrompts).length} character prompts + ${Object.keys(state.backgroundPrompts).length} background prompts.`, 'ok');
-    saveState();
-    syncTool2FromTool1();
-  } catch (e) {
+Trả về CHÍNH XÁC 1 JSON object (không markdown, không giải thích):
+{
+  "tenKenh": "tên kênh nếu tìm thấy",
+  "ngach": "ngách/niche của kênh",
+  "visualStyle": "visual style preset (vd: Crayon Capital — Dark)",
+  "ngonNgu": "ngôn ngữ VO (vd: Tiếng Việt)",
+  "povStyle": "kiểu POV (vd: Ngôi thứ 2 (Bạn), Ngôi thứ 3, Ngôi thứ 1)",
+  "cauTruc": "cấu trúc video (vd: Levels (POV), Linear, Flashback)",
+  "soPhan": 8,
+  "targetPhut": 12,
+  "characterStyle": "prompt ĐẦY ĐỦ cho G-Labs character reference sheet, 80-120 từ tiếng Anh, mô tả chi tiết visual style của nhân vật (đầu, mắt, miệng, tay, chân, quần áo, tỷ lệ, bố cục reference sheet)",
+  "backgroundStyle": "prompt ĐẦY ĐỦ cho G-Labs background reference, 80-120 từ tiếng Anh, mô tả chi tiết style bối cảnh (nét vẽ, màu sắc, ánh sáng, chi tiết môi trường, KHÔNG nhân vật, 16:9)",
+  "sceneStyle": "prompt ngắn 30-50 từ tiếng Anh cho scene aesthetic cố định mọi cảnh",
+  "promptRules": "negative prompt rules: No text, no watermark, ... (liệt kê những gì KHÔNG nên có trong ảnh)"
+}
+
+Nếu thông tin không có trong tài liệu, suy luận giá trị mặc định hợp lý từ context.
+Character/Background/Scene style prompts PHẢI bằng tiếng Anh (cho image generation).
+Tên nhân vật và bối cảnh dùng kebab-case tiếng Anh.`;
+    const reply=await callClaude(prompt,3000);
+    const data=parseJSON(reply);
+    // Fill all fields
+    if(data.tenKenh)document.getElementById('pTenKenh').value=data.tenKenh;
+    if(data.ngach)document.getElementById('pNgach').value=data.ngach;
+    if(data.visualStyle)document.getElementById('pVisualStyle').value=data.visualStyle;
+    if(data.ngonNgu)document.getElementById('pNgonNgu').value=data.ngonNgu;
+    if(data.povStyle)document.getElementById('pPovStyle').value=data.povStyle;
+    if(data.cauTruc)document.getElementById('pCauTruc').value=data.cauTruc;
+    if(data.soPhan)document.getElementById('pSoPhan').value=data.soPhan;
+    if(data.targetPhut)document.getElementById('pTargetPhut').value=data.targetPhut;
+    if(data.characterStyle)document.getElementById('pCharStyle').value=data.characterStyle;
+    if(data.backgroundStyle)document.getElementById('pBgStyle').value=data.backgroundStyle;
+    if(data.sceneStyle)document.getElementById('pSceneStyle').value=data.sceneStyle;
+    if(data.promptRules)document.getElementById('pPromptRules').value=data.promptRules;
+    document.getElementById('extractStatus').innerHTML='<span style="color:var(--green)">✓ Đã điền tự động! Kiểm tra lại rồi bấm Lưu Profile.</span>';
+  }catch(e){
     console.error(e);
-    setStatus1('Lỗi: ' + e.message, 'error');
+    document.getElementById('extractStatus').innerHTML='<span style="color:var(--rose)">Lỗi: '+escapeHtml(e.message)+'</span>';
   }
+  document.getElementById('btnAutoExtract').disabled=false;
 }
 
-function renderCharacterPrompts() {
-  const box = document.getElementById('characterPromptsList');
-  const cnt = document.getElementById('charPromptCount');
-  cnt.textContent = Object.keys(state.characterPrompts).length;
-  if (state.characters.length === 0) {
-    box.innerHTML = '<div class="empty-state">Chưa có nhân vật nào.</div>';
-    return;
+function exportProfile(){
+  const p=getProfile();if(!p)return;
+  downloadJSON(p,'profile-'+(p.tenKenh||'unnamed')+'-'+Date.now()+'.json');
+}
+function importProfile(event){
+  const f=event.target.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const loaded=JSON.parse(e.target.result);
+      state.profiles.push(loaded);
+      state.currentProfileIdx=state.profiles.length-1;
+      renderProfileSelect();renderProfileStyles();
+      openProfile();
+      saveState();
+    }catch(err){alert('Lỗi import: '+err.message)}
+  };reader.readAsText(f);
+}
+
+/* ============ TOOL 03: ASSET PROMPTS ============ */
+function loadAssetsFromTool2(){
+  if(state.charactersV.length===0&&state.backgroundsV.length===0)return setStatus3('Tool 02 chưa có nhân vật/bối cảnh. Chạy Quét Trước ở Tool 02.','error');
+  document.getElementById('t3Characters').value=state.charactersV.join('\n');
+  document.getElementById('t3Backgrounds').value=state.backgroundsV.join('\n');
+  document.getElementById('t3CharCount').textContent=state.charactersV.length;
+  document.getElementById('t3BgCount').textContent=state.backgroundsV.length;
+  // Fill style info from profile
+  const p=getProfile();
+  if(p){
+    document.getElementById('t3VisualStyle').value=p.visualStyle||'';
+    document.getElementById('t3Ngach').value=p.ngach||'';
+    document.getElementById('t3PovStyle').value=p.povStyle||'';
+    document.getElementById('t3CharStyle').value=p.characterStyle||'';
+    document.getElementById('t3BgStyle').value=p.backgroundStyle||'';
+    document.getElementById('t3SceneStyle').value=p.sceneStyle||'';
+    document.getElementById('t3PromptRules').value=p.promptRules||'';
   }
-  box.innerHTML = state.characters.map(name => {
-    const p = state.characterPrompts[name];
-    return `<div class="ref-sheet-card ${p ? '' : 'empty'}">
-      <div class="ref-sheet-card-head">
-        <span class="ref-sheet-card-name">${escapeHtml(name)}</span>
-        ${p ? `<button class="btn ghost sm" onclick="copyText(${JSON.stringify(p).replace(/"/g,'&quot;')})">Copy</button>` : ''}
-      </div>
-      <div class="ref-sheet-card-text">${p ? escapeHtml(p) : 'Chưa có prompt — bấm Generate.'}</div>
-    </div>`;
-  }).join('');
+  // Fill character dropdown
+  const sel=document.getElementById('t3CharSelect');
+  sel.innerHTML='<option value="">— Chọn từ danh sách nhân vật —</option>'+state.charactersV.map(c=>`<option value="${c}">${c}</option>`).join('');
+  setStatus3(`✓ Đã load ${state.charactersV.length} nhân vật + ${state.backgroundsV.length} bối cảnh từ Tool 02.`,'ok');
 }
 
-function renderBackgroundPrompts() {
-  const box = document.getElementById('backgroundPromptsList');
-  const cnt = document.getElementById('bgPromptCount');
-  cnt.textContent = Object.keys(state.backgroundPrompts).length;
-  if (state.backgrounds.length === 0) {
-    box.innerHTML = '<div class="empty-state">Chưa có bối cảnh nào.</div>';
-    return;
-  }
-  box.innerHTML = state.backgrounds.map(name => {
-    const p = state.backgroundPrompts[name];
-    return `<div class="ref-sheet-card bg-card ${p ? '' : 'empty'}">
-      <div class="ref-sheet-card-head">
-        <span class="ref-sheet-card-name">${escapeHtml(name)}</span>
-        ${p ? `<button class="btn ghost sm" onclick="copyText(${JSON.stringify(p).replace(/"/g,'&quot;')})">Copy</button>` : ''}
-      </div>
-      <div class="ref-sheet-card-text">${p ? escapeHtml(p) : 'Chưa có prompt — bấm Generate.'}</div>
-    </div>`;
-  }).join('');
-}
-
-function clearAssets() {
-  if (!confirm('Xoá tất cả prompts đã sinh? (Không xoá danh sách characters/backgrounds)')) return;
-  state.characterPrompts = {};
-  state.backgroundPrompts = {};
-  renderCharacterPrompts();
-  renderBackgroundPrompts();
-  saveState();
-}
-
-function exportAssets() {
-  syncTool1FromInputs();
-  const payload = {
-    project: state.projectName,
-    visualStyle: state.visualStyle,
-    channelDesc: state.channelDesc,
-    videoTopic: state.videoTopic,
-    characterStyle: state.characterStyle,
-    backgroundStyle: state.backgroundStyle,
-    sceneStyle: state.sceneStyle,
-    characters: state.characters.map(name => ({ name, prompt: state.characterPrompts[name] || null })),
-    backgrounds: state.backgrounds.map(name => ({ name, prompt: state.backgroundPrompts[name] || null })),
-    exportedAt: new Date().toISOString()
+// Character Reference Images (Vision API)
+if(!state.characterImages) state.characterImages={};
+function uploadCharImage(){
+  const charName=document.getElementById('t3CharSelect').value;
+  if(!charName)return alert('Chọn nhân vật trước khi upload ảnh.');
+  const input=document.getElementById('t3ImgInput');
+  input.onchange=async function(){
+    const file=this.files[0];if(!file)return;
+    if(file.size>5*1024*1024)return alert('File quá lớn (max 5MB).');
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const base64=e.target.result.split(',')[1];
+      const mediaType=file.type;
+      state.characterImages[charName]={base64,mediaType,fileName:file.name};
+      renderCharImageGallery();
+      setStatus3(`✓ Đã upload ảnh cho [${charName}].`,'ok');
+      saveState();
+    };
+    reader.readAsDataURL(file);
+    this.value='';
   };
-  downloadJSON(payload, `assets-${state.projectName}-${Date.now()}.json`);
-  setStatus1('✓ Đã export.', 'ok');
+  input.click();
 }
-
-/* ============================================================
-   TOOL 2: SCENE SPLITTER (FAST + SMART)
-   ============================================================ */
-function splitIntoSentences(text) {
-  text = text.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/\r/g, '');
-  const paragraphs = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
-  const sentences = [];
-  for (const para of paragraphs) {
-    const re = /[^.!?…]+[.!?…]+(?:["')]*)/g;
-    let lastIdx = 0;
-    let m;
-    const local = [];
-    while ((m = re.exec(para)) !== null) {
-      local.push(m[0].trim());
-      lastIdx = re.lastIndex;
-    }
-    const remainder = para.slice(lastIdx).trim();
-    if (remainder) local.push(remainder);
-    if (local.length === 0) local.push(para);
-    sentences.push(...local);
-    sentences.push('__PARA_BREAK__');
-  }
-  return sentences.filter(Boolean);
+function renderCharImageGallery(){
+  const gallery=document.getElementById('t3ImgGallery');
+  const entries=Object.entries(state.characterImages||{});
+  document.getElementById('t3ImgCount').textContent=entries.length+' ảnh';
+  if(entries.length===0){gallery.innerHTML='';return}
+  gallery.innerHTML=entries.map(([name,img])=>`
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px;text-align:center;width:120px">
+      <img src="data:${img.mediaType};base64,${img.base64}" style="width:100px;height:100px;object-fit:cover;border-radius:4px;margin-bottom:6px">
+      <div style="color:var(--teal);font-size:10px;font-weight:600">${escapeHtml(name)}</div>
+      <button class="btn ghost sm" style="margin-top:4px;font-size:9px" onclick="delete state.characterImages['${name}'];renderCharImageGallery();saveState()">Xoá</button>
+    </div>`).join('');
 }
+function clearAllCharImages(){if(!confirm('Xoá tất cả ảnh tham chiếu?'))return;state.characterImages={};renderCharImageGallery();saveState()}
 
-function splitLongSentence(sentence, max) {
-  let parts = [];
-  let buf = '';
-  for (let i = 0; i < sentence.length; i++) {
-    buf += sentence[i];
-    if (/[,;:—–]/.test(sentence[i]) && sentence[i + 1] === ' ') {
-      parts.push(buf.trim());
-      buf = '';
-      i++;
-    }
-  }
-  if (buf.trim()) parts.push(buf.trim());
-  const final = [];
-  for (const p of parts) {
-    if (p.length <= max) final.push(p);
-    else {
-      const words = p.split(' ');
-      let chunk = '';
-      for (const w of words) {
-        const test = chunk ? chunk + ' ' + w : w;
-        if (test.length > max && chunk) { final.push(chunk); chunk = w; }
-        else chunk = test;
+// Generate Asset Prompts (with Vision API for images)
+async function genAllAssetPrompts(){
+  const chars=document.getElementById('t3Characters').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const bgs=document.getElementById('t3Backgrounds').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(chars.length===0&&bgs.length===0)return setStatus3('Cần load nhân vật/bối cảnh trước.','error');
+  const p=getProfile();
+  const charStyle=document.getElementById('t3CharStyle').value||p?.characterStyle||'';
+  const bgStyle=document.getElementById('t3BgStyle').value||p?.backgroundStyle||'';
+  const rules=document.getElementById('t3PromptRules').value||p?.promptRules||'';
+  if(!charStyle&&!bgStyle)return setStatus3('Cần có Style Prompts trong Profile.','error');
+
+  setStatus3('AI đang tạo prompt reference sheets...','working');
+  state.assetCharPrompts={};state.assetBgPrompts={};
+
+  try{
+    // Generate character prompts (with Vision if images available)
+    for(const name of chars){
+      const img=state.characterImages?.[name];
+      let prompt;
+      if(img){
+        // Use Vision API - send image + ask AI to generate prompt
+        prompt=`Phân tích ảnh reference này của nhân vật [${name}] và tạo 1 prompt G-Labs chi tiết cho character reference sheet.
+
+Style template PHẢI tuân theo:
+"""
+${charStyle}
+"""
+
+NEGATIVE/RULES: ${rules}
+
+Yêu cầu:
+- Mô tả CHÍNH XÁC visual của nhân vật trong ảnh (hình dạng đầu, mắt, miệng, tỷ lệ cơ thể, quần áo, màu sắc)
+- Ghi tên nhân vật [${name}] trong prompt
+- TOP ROW 4 full-body views, BOTTOM ROW 6 expression close-ups
+- 80-140 từ tiếng Anh
+- Trả về CHỈ prompt text, không giải thích.`;
+        const reply=await callClaudeWithImage(prompt,img.base64,img.mediaType);
+        state.assetCharPrompts[name]=reply;
+      }else{
+        // No image - generate from style template only
+        prompt=`Tạo 1 prompt G-Labs chi tiết cho character reference sheet nhân vật [${name}].
+
+Style template:
+"""
+${charStyle}
+"""
+
+NEGATIVE/RULES: ${rules}
+Kênh: ${p?.tenKenh||''} — ${p?.ngach||''}
+
+Yêu cầu:
+- Suy luận đặc điểm nhân vật từ tên và context kênh
+- Ghi tên nhân vật [${name}] trong prompt
+- 80-140 từ tiếng Anh
+- Trả về CHỈ prompt text.`;
+        state.assetCharPrompts[name]=await callClaude(prompt,500);
       }
-      if (chunk) final.push(chunk);
+      renderAssetCharPrompts(chars);
+      setStatus3(`Nhân vật ${Object.keys(state.assetCharPrompts).length}/${chars.length}...`,'working');
     }
-  }
-  return final;
+
+    // Generate background prompts
+    for(const name of bgs){
+      const prompt=`Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
+
+Style template:
+"""
+${bgStyle}
+"""
+
+NEGATIVE/RULES: ${rules}
+Kênh: ${p?.tenKenh||''} — ${p?.ngach||''}
+
+Yêu cầu:
+- Mô tả chi tiết môi trường, đồ vật, ánh sáng
+- Ghi tên bối cảnh [${name}] trong prompt
+- NO characters NO people
+- 80-120 từ tiếng Anh
+- Trả về CHỈ prompt text.`;
+      state.assetBgPrompts[name]=await callClaude(prompt,500);
+      renderAssetBgPrompts(bgs);
+      setStatus3(`Bối cảnh ${Object.keys(state.assetBgPrompts).length}/${bgs.length}...`,'working');
+    }
+
+    setStatus3(`✓ Đã tạo ${chars.length} prompt nhân vật + ${bgs.length} prompt bối cảnh.`,'ok');
+    saveState();
+  }catch(e){console.error(e);setStatus3('Lỗi: '+e.message,'error')}
 }
 
-function splitScenesFast(text, min, max) {
-  const sentences = splitIntoSentences(text);
-  const scenes = [];
-  let buffer = '';
-  function flush() { if (buffer.trim()) { scenes.push(buffer.trim()); buffer = ''; } }
-  for (const sentence of sentences) {
-    if (sentence === '__PARA_BREAK__') { flush(); continue; }
-    const units = sentence.length > max ? splitLongSentence(sentence, max) : [sentence];
-    for (const unit of units) {
-      const combined = buffer ? buffer + ' ' + unit : unit;
-      if (combined.length <= max) buffer = combined;
-      else { flush(); buffer = unit; }
-    }
-  }
-  flush();
-  return scenes;
+async function callClaudeWithImage(prompt,base64,mediaType,maxTokens=800){
+  const body=JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages:[{role:'user',content:[
+    {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
+    {type:'text',text:prompt}
+  ]}]});
+  const headers={'Content-Type':'application/json'};
+  try{
+    const r=await fetch('/api/claude',{method:'POST',headers,body});
+    const ct=r.headers.get('content-type')||'';
+    if(ct.includes('application/json')){const d=await r.json();if(!r.ok)throw new Error(`API ${r.status}: ${JSON.stringify(d).slice(0,200)}`);return d.content.filter(b=>b.type==='text').map(b=>b.text).join('\n')}
+  }catch(e){if(e.message.startsWith('API '))throw e}
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body});
+  if(!r.ok){const e=await r.text();throw new Error(`API ${r.status}: ${e.slice(0,200)}`);}
+  const d=await r.json();return d.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
 }
 
-async function splitScenesSmart(text, min, max, voLang) {
-  // For long scripts, batch per paragraph
-  const paragraphs = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
-  const allScenes = [];
+async function genStyleReference(){
+  const p=getProfile();if(!p)return setStatus3('Cần Profile.','error');
+  setStatus3('AI đang tạo Style Reference prompt...','working');
+  try{
+    const prompt=`Tạo 1 prompt G-Labs cho "Channel Visual Style Reference Sheet" — 1 ảnh tóm tắt toàn bộ style visual của kênh.
 
-  // Batch paragraphs together if they're short
-  const batches = [];
-  let cur = '';
-  for (const p of paragraphs) {
-    if ((cur + '\n\n' + p).length > 2000 && cur) {
-      batches.push(cur);
-      cur = p;
-    } else {
-      cur = cur ? cur + '\n\n' + p : p;
-    }
+Kênh: ${p.tenKenh} — ${p.ngach}
+Visual Style: ${p.visualStyle}
+Character Style: ${p.characterStyle?.slice(0,200)}
+Background Style: ${p.backgroundStyle?.slice(0,200)}
+
+Prompt phải:
+- Mô tả 1 bức tranh tóm tắt style: mẫu nhân vật, bảng màu, nét vẽ, ví dụ bối cảnh
+- 100-150 từ tiếng Anh
+- Kết thúc bằng: "Channel style reference sheet for [${p.tenKenh}]"
+- Trả về CHỈ prompt text.`;
+    state.styleRefPrompt=await callClaude(prompt,500);
+    document.getElementById('t3StyleRefText').textContent=state.styleRefPrompt;
+    document.getElementById('styleRefPanel').style.display='block';
+    setStatus3('✓ Đã tạo Style Reference prompt.','ok');
+    saveState();
+  }catch(e){console.error(e);setStatus3('Lỗi: '+e.message,'error')}
+}
+
+function renderAssetCharPrompts(chars){
+  const box=document.getElementById('t3CharPromptsList');
+  document.getElementById('t3CharPromptCount').textContent=Object.keys(state.assetCharPrompts||{}).length;
+  box.innerHTML=(chars||[]).map(name=>{
+    const pr=state.assetCharPrompts?.[name];
+    return `<div class="ref-sheet-card ${pr?'':'empty'}"><div class="ref-sheet-card-head"><span class="ref-sheet-card-name">${escapeHtml(name)}</span>${pr?`<button class="btn ghost sm" onclick="copyText(\`${pr.replace(/`/g,"'").replace(/\\/g,"\\\\")}\`)">Sao chép</button>`:''}</div><div class="ref-sheet-card-text">${pr?escapeHtml(pr):'Đang tạo...'}</div></div>`;
+  }).join('')||'<div class="empty-state">Chưa có.</div>';
+}
+function renderAssetBgPrompts(bgs){
+  const box=document.getElementById('t3BgPromptsList');
+  document.getElementById('t3BgPromptCount').textContent=Object.keys(state.assetBgPrompts||{}).length;
+  box.innerHTML=(bgs||[]).map(name=>{
+    const pr=state.assetBgPrompts?.[name];
+    return `<div class="ref-sheet-card bg-card ${pr?'':'empty'}"><div class="ref-sheet-card-head"><span class="ref-sheet-card-name">${escapeHtml(name)}</span>${pr?`<button class="btn ghost sm" onclick="copyText(\`${pr.replace(/`/g,"'").replace(/\\/g,"\\\\")}\`)">Sao chép</button>`:''}</div><div class="ref-sheet-card-text">${pr?escapeHtml(pr):'Đang tạo...'}</div></div>`;
+  }).join('')||'<div class="empty-state">Chưa có.</div>';
+}
+function exportAssetPrompts(){
+  downloadJSON({charPrompts:state.assetCharPrompts,bgPrompts:state.assetBgPrompts,styleRef:state.styleRefPrompt,exportedAt:new Date().toISOString()},'asset-prompts-'+Date.now()+'.json');
+  setStatus3('✓ Đã xuất.','ok');
+}
+
+// Asset Rename (rename by asset name)
+const assetRenamer={files:[],assignments:{}};
+function setupAssetDropzone(){
+  const dz=document.getElementById('assetDropzone');if(!dz)return;
+  const inp=document.getElementById('assetFileInput');
+  dz.addEventListener('click',()=>inp.click());
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');addAssetFiles(Array.from(e.dataTransfer.files))});
+  inp.addEventListener('change',e=>addAssetFiles(Array.from(e.target.files)));
+}
+function addAssetFiles(files){
+  const imgs=files.filter(f=>f.type.startsWith('image/'));
+  assetRenamer.files=assetRenamer.files.concat(imgs);
+  renderAssetFileList();
+}
+function clearAssetFiles(){assetRenamer.files=[];assetRenamer.assignments={};renderAssetFileList()}
+function renderAssetFileList(){
+  const list=document.getElementById('assetFileList');
+  if(!assetRenamer.files.length){list.innerHTML='';return}
+  const allAssets=[...document.getElementById('t3Characters').value.split('\n').map(s=>s.trim()).filter(Boolean),...document.getElementById('t3Backgrounds').value.split('\n').map(s=>s.trim()).filter(Boolean)];
+  list.innerHTML=assetRenamer.files.map((f,i)=>{
+    const assigned=assetRenamer.assignments[i]||'';
+    const ext=f.name.match(/\.[a-z0-9]+$/i)?.[0]||'.jpg';
+    return `<div class="file-row" style="grid-template-columns:50px 1fr 30px 1fr 1fr 40px">
+      <div class="idx">${i+1}</div>
+      <div class="from">${escapeHtml(f.name)}</div>
+      <div class="arrow">→</div>
+      <select onchange="assetRenamer.assignments[${i}]=this.value;renderAssetFileList()" style="padding:6px;font-size:11px">
+        <option value="">— Chọn asset —</option>
+        ${allAssets.map(a=>`<option value="${a}" ${assigned===a?'selected':''}>${a}</option>`).join('')}
+      </select>
+      <div class="to" style="color:${assigned?'var(--amber)':'var(--text-dim)'}">${assigned?assigned+ext:'?'}</div>
+      <button class="rm" onclick="assetRenamer.files.splice(${i},1);delete assetRenamer.assignments[${i}];renderAssetFileList()">×</button>
+    </div>`;
+  }).join('');
+}
+async function downloadAssetZip(){
+  const assigned=Object.entries(assetRenamer.assignments).filter(([_,v])=>v);
+  if(!assigned.length)return setStatus3('Cần gán tên asset cho ít nhất 1 ảnh.','error');
+  if(typeof JSZip==='undefined')return setStatus3('JSZip chưa tải.','error');
+  const zip=new JSZip();
+  for(const [idx,name] of assigned){
+    const f=assetRenamer.files[parseInt(idx)];if(!f)continue;
+    const ext=f.name.match(/\.[a-z0-9]+$/i)?.[0]||'.jpg';
+    zip.file(name+ext,await f.arrayBuffer());
   }
-  if (cur) batches.push(cur);
+  const blob=await zip.generateAsync({type:'blob'});
+  const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='assets-'+Date.now()+'.zip';a.click();URL.revokeObjectURL(u);
+  setStatus3(`✓ Đã tạo ZIP với ${assigned.length} ảnh.`,'ok');
+}
 
-  for (let bi = 0; bi < batches.length; bi++) {
-    setStatus2(`AI đang chia scene... (batch ${bi + 1}/${batches.length})`, 'working');
-    const prompt = `You are a video editor. Split this voiceover script into scenes for image-by-image video production.
+/* ============ TOOL 02: PHÂN CẢNH ============ */
+function splitIntoSentences(text){
+  text=text.replace(/[\u201C\u201D]/g,'"').replace(/[\u2018\u2019]/g,"'").replace(/\r/g,'');
+  const paras=text.split(/\n+/).map(p=>p.trim()).filter(Boolean);const sents=[];
+  for(const para of paras){const re=/[^.!?…]+[.!?…]+(?:["')]*)/g;let last=0,m;const local=[];
+    while((m=re.exec(para))!==null){local.push(m[0].trim());last=re.lastIndex}
+    const rem=para.slice(last).trim();if(rem)local.push(rem);if(local.length===0)local.push(para);
+    sents.push(...local);sents.push('__PARA__')}
+  return sents.filter(Boolean);
+}
+function splitLong(s,max){let parts=[],buf='';for(let i=0;i<s.length;i++){buf+=s[i];if(/[,;:—–]/.test(s[i])&&s[i+1]===' '){parts.push(buf.trim());buf='';i++}}
+  if(buf.trim())parts.push(buf.trim());const f=[];for(const p of parts){if(p.length<=max)f.push(p);else{const w=p.split(' ');let ch='';for(const x of w){const t=ch?ch+' '+x:x;if(t.length>max&&ch){f.push(ch);ch=x}else ch=t}if(ch)f.push(ch)}}return f}
+function splitScenesFast(text,min,max){
+  const sents=splitIntoSentences(text);const scenes=[];let buf='';
+  function flush(){if(buf.trim()){scenes.push(buf.trim());buf=''}}
+  for(const s of sents){if(s==='__PARA__'){flush();continue}
+    const units=s.length>max?splitLong(s,max):[s];
+    for(const u of units){const c=buf?buf+' '+u:u;if(c.length<=max)buf=c;else{flush();buf=u}}}
+  flush();return scenes;
+}
+async function splitScenesSmart(text,min,max,lang){
+  const paras=text.split(/\n+/).map(p=>p.trim()).filter(Boolean);const all=[];
+  const batches=[];let cur='';
+  for(const p of paras){if((cur+'\n\n'+p).length>2000&&cur){batches.push(cur);cur=p}else cur=cur?cur+'\n\n'+p:p}
+  if(cur)batches.push(cur);
+  for(let bi=0;bi<batches.length;bi++){
+    setStatus2(`AI đang chia cảnh... (phần ${bi+1}/${batches.length})`,'working');
+    const prompt=`Bạn là biên tập video. Chia đoạn kịch bản sau thành các cảnh riêng biệt cho sản xuất video ảnh.
 
-Rules:
-- Each scene = ONE coherent visual idea (one shot)
-- Target ${min}-${max} characters per scene, but PRIORITIZE meaningful boundaries over strict char count
-- Preserve the original wording EXACTLY — only decide where to cut
-- Keep punctuation intact
-- Output language: ${voLang}
-- Short impactful lines (like "Oh.", "Wait.") can be their own scene
-- Don't break mid-clause unnecessarily
+Quy tắc:
+- Mỗi cảnh = MỘT ý hình ảnh mạch lạc (một shot)
+- Mục tiêu ${min}-${max} ký tự/cảnh, nhưng ƯU TIÊN ranh giới có nghĩa hơn đếm ký tự
+- GIỮ NGUYÊN lời gốc — chỉ quyết định chỗ cắt
+- Câu ngắn ấn tượng (như "Ồ.", "Chờ đã.") có thể là 1 cảnh riêng
+- Không cắt giữa chừng mệnh đề
 
-Return ONLY a valid JSON array of strings (the scenes in order):
-["scene 1 text", "scene 2 text", ...]
+Trả về CHỈ JSON array các chuỗi (các cảnh theo thứ tự):
+["cảnh 1 text", "cảnh 2 text", ...]
 
-Script chunk:
+Đoạn kịch bản:
 """
 ${batches[bi]}
-"""`;
-
-    const reply = await callClaude(prompt, 4000);
-    const scenes = parseJSON(reply);
-    allScenes.push(...scenes);
-  }
-  return allScenes;
+"""`; 
+    const reply=await callClaude(prompt,4000);all.push(...parseJSON(reply));
+  }return all;
 }
+function calcDur(t){const w=t.trim().split(/\s+/).length;return Math.max(2,Math.round(w/3))}
+function pickCam(t,i){if(t.length<25)return'Static';if(/\b(still|silent|frozen|im lặng|dừng|chờ)\b/i.test(t))return'Static';if(i%7===6)return'Static';return'Ken Burns'}
+function makeScenes(texts){return texts.map((t,i)=>({id:String(i+1).padStart(3,'0'),level:'Main',text:t,duration:calcDur(t),camera:pickCam(t,i),character:'',background:''}))}
 
-function calculateDuration(text) {
-  const words = text.trim().split(/\s+/).length;
-  return Math.max(2, Math.round(words / 3));
+function cleanScript(){
+  let s=state.script;if(!s.trim())return setStatus2('Kịch bản trống.','error');
+  const before=s.length;s=s.replace(/\r/g,'').replace(/\n{3,}/g,'\n\n').replace(/[ \t]+/g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n[ \t]+/g,'\n').trim();
+  state.script=s;document.getElementById('scriptInput').value=s;updateScriptCount();
+  setStatus2(`Lọc xong — bớt ${before-s.length} ký tự.`,'ok');saveState();
 }
-
-function pickCamera(text, idx) {
-  const lower = text.toLowerCase();
-  if (text.length < 25) return 'Static';
-  if (/\b(still|silent|frozen|wait|stop|im lặng|dừng|chờ)\b/.test(lower)) return 'Static';
-  if (idx % 7 === 6) return 'Static';
-  return 'Ken Burns';
+async function doSplit(){
+  syncTool2();if(!state.script.trim())return setStatus2('Kịch bản trống.','error');
+  if(state.minChars>=state.maxChars)return setStatus2('Min phải < Max.','error');
+  try{let scenes;
+    if(state.splitMode==='smart'){setStatus2('AI đang chia cảnh theo nghĩa...','working');
+      scenes=makeScenes(await splitScenesSmart(state.script,state.minChars,state.maxChars,state.voLang));
+    }else scenes=makeScenes(splitScenesFast(state.script,state.minChars,state.maxChars));
+    state.scenes=scenes;state.scenePrompts={};renderAllT2();
+    setStatus2(`✓ Đã chia ${scenes.length} cảnh. Tổng ${fmtDur(totalDur())}.`,'ok');saveState();
+  }catch(e){console.error(e);setStatus2('Lỗi chia cảnh: '+e.message,'error')}
 }
+async function doPrescan(){
+  syncTool2();if(!state.script.trim())return setStatus2('Cần kịch bản.','error');
+  setStatus2('AI đang quét nhân vật & bối cảnh từ kịch bản...','working');
+  try{
+    const reply=await callClaude(`Phân tích kịch bản VO sau. Trích xuất TẤT CẢ nhân vật và bối cảnh xuất hiện hoặc ngụ ý trong kịch bản.
 
-function makeSceneObjects(texts) {
-  return texts.map((text, i) => ({
-    id: String(i + 1).padStart(3, '0'),
-    level: 'Main',
-    text,
-    duration: calculateDuration(text),
-    camera: pickCamera(text, i),
-    character: '',
-    background: ''
-  }));
-}
+Trả về CHỈ JSON (không markdown):
+{"characters": ["kebab-case-name-1", ...], "backgrounds": ["kebab-case-location-1", ...]}
 
-/* ============================================================
-   TOOL 2: ACTIONS
-   ============================================================ */
-function syncTool2FromInputs() {
-  state.script = document.getElementById('scriptInput').value;
-  state.voLang = document.getElementById('voLang').value;
-  state.minChars = parseInt(document.getElementById('minChars').value) || 30;
-  state.maxChars = parseInt(document.getElementById('maxChars').value) || 100;
-  state.splitMode = document.getElementById('splitMode').value;
-  state.charactersV = document.getElementById('charsInputV').value
-    .split('\n').map(s => s.trim()).filter(Boolean);
-  state.backgroundsV = document.getElementById('bgInputV').value
-    .split('\n').map(s => s.trim()).filter(Boolean);
-}
+Tên nhân vật và bối cảnh dùng kebab-case tiếng Anh (vd: young-agent, dark-office).
+Tối đa 8 nhân vật, 10 bối cảnh.
 
-function syncTool2FromTool1() {
-  // Pre-fill Tool 2 with Tool 1 assets when switching
-  document.getElementById('visualStyle2').value = state.visualStyle;
-  if (state.characters.length > 0 && !document.getElementById('charsInputV').value.trim()) {
-    document.getElementById('charsInputV').value = state.characters.join('\n');
-    state.charactersV = [...state.characters];
-  }
-  if (state.backgrounds.length > 0 && !document.getElementById('bgInputV').value.trim()) {
-    document.getElementById('bgInputV').value = state.backgrounds.join('\n');
-    state.backgroundsV = [...state.backgrounds];
-  }
-}
-
-function cleanScript() {
-  let s = state.script;
-  if (!s.trim()) return setStatus2('Script trống.', 'error');
-  const before = s.length;
-  s = s.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n')
-       .replace(/[ \t]+/g, ' ').replace(/[ \t]+\n/g, '\n')
-       .replace(/\n[ \t]+/g, '\n').trim();
-  state.script = s;
-  document.getElementById('scriptInput').value = s;
-  updateScriptCount();
-  setStatus2(`Lọc xong — bớt ${before - s.length} ký tự.`, 'ok');
-  saveState();
-}
-
-async function doSplit() {
-  syncTool2FromInputs();
-  if (!state.script.trim()) return setStatus2('Script trống.', 'error');
-  if (state.minChars >= state.maxChars) return setStatus2('Min phải < Max.', 'error');
-
-  try {
-    let scenes;
-    if (state.splitMode === 'smart') {
-      setStatus2('AI đang chia scene theo nghĩa...', 'working');
-      const texts = await splitScenesSmart(state.script, state.minChars, state.maxChars, state.voLang);
-      scenes = makeSceneObjects(texts);
-    } else {
-      const texts = splitScenesFast(state.script, state.minChars, state.maxChars);
-      scenes = makeSceneObjects(texts);
-    }
-    state.scenes = scenes;
-    state.scenePrompts = {};
-    renderAllTool2();
-    setStatus2(`✓ Đã split ${scenes.length} scenes. Total ${formatDuration(totalDuration())}.`, 'ok');
-    saveState();
-  } catch (e) {
-    console.error(e);
-    setStatus2('Lỗi split: ' + e.message, 'error');
-  }
-}
-
-async function doPrescan() {
-  syncTool2FromInputs();
-  if (!state.script.trim()) return setStatus2('Cần script.', 'error');
-  setStatus2('AI đang quét nhân vật & bối cảnh...', 'working');
-
-  const allowedChars = state.characters.length > 0
-    ? `Choose ONLY from this character list: ${JSON.stringify(state.characters)}`
-    : '';
-  const allowedBgs = state.backgrounds.length > 0
-    ? `Choose ONLY from this background list: ${JSON.stringify(state.backgrounds)}`
-    : '';
-
-  const prompt = `Analyze this voiceover script. Extract characters and backgrounds that appear or are implied.
-
-${allowedChars}
-${allowedBgs}
-
-If the allowed lists are provided, you must ONLY return names from those lists. Pick the most relevant subset that this video uses.
-If no allowed list is provided, infer the names yourself in kebab-case (max 6 chars, max 8 bgs).
-
-Return ONLY a valid JSON object (no markdown):
-{"characters": ["..."], "backgrounds": ["..."]}
-
-Script:
+Kịch bản:
 """
 ${state.script}
-"""`;
-
-  try {
-    const reply = await callClaude(prompt, 800);
-    const data = parseJSON(reply);
-    state.charactersV = (data.characters || []).map(s => s.toLowerCase().replace(/\s+/g, '-'));
-    state.backgroundsV = (data.backgrounds || []).map(s => s.toLowerCase().replace(/\s+/g, '-'));
-    document.getElementById('charsInputV').value = state.charactersV.join('\n');
-    document.getElementById('bgInputV').value = state.backgroundsV.join('\n');
-    renderStats2();
-    setStatus2(`✓ Pre-scan xong: ${state.charactersV.length} nhân vật, ${state.backgroundsV.length} bối cảnh.`, 'ok');
-    saveState();
-  } catch (e) {
-    console.error(e);
-    setStatus2('Lỗi: ' + e.message, 'error');
-  }
+"""`,800);
+    const data=parseJSON(reply);
+    state.charactersV=(data.characters||[]).map(s=>s.toLowerCase().replace(/\s+/g,'-'));
+    state.backgroundsV=(data.backgrounds||[]).map(s=>s.toLowerCase().replace(/\s+/g,'-'));
+    document.getElementById('charsInputV').value=state.charactersV.join('\n');
+    document.getElementById('bgInputV').value=state.backgroundsV.join('\n');
+    renderStats2();setStatus2(`✓ Quét xong: ${state.charactersV.length} nhân vật, ${state.backgroundsV.length} bối cảnh.`,'ok');saveState();
+  }catch(e){console.error(e);setStatus2('Lỗi: '+e.message,'error')}
 }
-
-async function doAssign() {
-  syncTool2FromInputs();
-  if (state.scenes.length === 0) return setStatus2('Cần split scenes trước.', 'error');
-  if (state.charactersV.length === 0 && state.backgroundsV.length === 0)
-    return setStatus2('Cần nhân vật/bối cảnh — chạy Pre-scan trước.', 'error');
-
-  const batchSize = parseInt(document.getElementById('batchSize').value) || 5;
-  setStatus2(`AI đang assign assets (batch ${batchSize})...`, 'working');
-
-  try {
-    for (let i = 0; i < state.scenes.length; i += batchSize) {
-      const batch = state.scenes.slice(i, i + batchSize);
-      const prompt = `Assign one character and one background to each scene from these allowed lists ONLY.
-
-ALLOWED CHARACTERS: ${JSON.stringify(state.charactersV)}
-ALLOWED BACKGROUNDS: ${JSON.stringify(state.backgroundsV)}
-
-If none fits, use "" (empty string).
-
-Return ONLY a valid JSON array (no markdown):
-[{"id":"001","character":"...","background":"..."}, ...]
-
-SCENES:
-${batch.map(s => `[${s.id}] ${s.text}`).join('\n')}`;
-
-      const reply = await callClaude(prompt, 1500);
-      const assignments = parseJSON(reply);
-      for (const a of assignments) {
-        const sc = state.scenes.find(s => s.id === a.id);
-        if (sc) { sc.character = a.character || ''; sc.background = a.background || ''; }
-      }
-      renderTable();
-      renderStats2();
-      setStatus2(`Assign... ${Math.min(i + batchSize, state.scenes.length)}/${state.scenes.length}`, 'working');
-    }
-    setStatus2(`✓ Đã assign ${state.scenes.length} scenes.`, 'ok');
-    saveState();
-  } catch (e) {
-    console.error(e);
-    setStatus2('Lỗi: ' + e.message, 'error');
-  }
+async function doAssign(){
+  syncTool2();if(state.scenes.length===0)return setStatus2('Cần chia cảnh trước.','error');
+  if(state.charactersV.length===0&&state.backgroundsV.length===0)return setStatus2('Cần nhân vật/bối cảnh — chạy Quét Trước.','error');
+  const bs=parseInt(document.getElementById('batchSize').value)||5;
+  setStatus2('AI đang gán tài nguyên...','working');
+  try{for(let i=0;i<state.scenes.length;i+=bs){
+    const batch=state.scenes.slice(i,i+bs);
+    const reply=await callClaude(`Gán 1 nhân vật và 1 bối cảnh cho mỗi cảnh từ danh sách cho phép.\n\nNHÂN VẬT: ${JSON.stringify(state.charactersV)}\nBỐI CẢNH: ${JSON.stringify(state.backgroundsV)}\n\nNếu không phù hợp, dùng "" (chuỗi rỗng).\n\nTrả về CHỈ JSON array:\n[{"id":"001","character":"...","background":"..."}, ...]\n\nCÁC CẢNH:\n${batch.map(s=>`[${s.id}] ${s.text}`).join('\n')}`,1500);
+    for(const a of parseJSON(reply)){const sc=state.scenes.find(s=>s.id===a.id);if(sc){sc.character=a.character||'';sc.background=a.background||''}}
+    renderTable();renderStats2();setStatus2(`Gán... ${Math.min(i+bs,state.scenes.length)}/${state.scenes.length}`,'working');
+  }setStatus2(`✓ Đã gán ${state.scenes.length} cảnh.`,'ok');saveState();
+  }catch(e){console.error(e);setStatus2('Lỗi: '+e.message,'error')}
 }
+async function doGenerateScenePrompts(){
+  syncTool2();if(state.scenes.length===0)return setStatus2('Cần chia cảnh trước.','error');
+  const bs=parseInt(document.getElementById('batchSize').value)||5;
+  const p=getProfile();if(!p)return setStatus1("Cần tạo Profile trước.","error");
+  setStatus2('AI đang sinh prompt G-Labs...','working');
+  // Build context from profile for consistent prompts
+  const profileContext=`Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}\nDNA Kênh (tóm tắt): ${(p.dnaKenh||'').slice(0,300)}`;
+  try{for(let i=0;i<state.scenes.length;i+=bs){
+    const batch=state.scenes.slice(i,i+bs);
+    const charCtx=state.charactersV.map(c=>{const ref=state.characterPrompts[c];return ref?`- ${c}: DÙNG REFERENCE SHEET (khớp: ${ref.slice(0,80)}...)`:`- ${c}`}).join('\n');
+    const bgCtx=state.backgroundsV.map(b=>{const ref=state.backgroundPrompts[b];return ref?`- ${b}: DÙNG REFERENCE SHEET (khớp: ${ref.slice(0,80)}...)`:`- ${b}`}).join('\n');
+    const prompt=`Bạn là prompt engineer G-Labs (Imagen/Nano Banana). Tạo prompt cảnh cho mỗi cảnh bên dưới.
 
-async function doGenerateScenePrompts() {
-  syncTool2FromInputs();
-  if (state.scenes.length === 0) return setStatus2('Cần split scenes trước.', 'error');
+PROFILE KÊNH:
+${profileContext}
 
-  const batchSize = parseInt(document.getElementById('batchSize').value) || 5;
-  setStatus2(`AI đang sinh G-Labs prompts...`, 'working');
+SCENE AESTHETIC (dùng cho MỌI cảnh): "${p.sceneStyle||PRESET.sceneStyle}"
 
-  try {
-    for (let i = 0; i < state.scenes.length; i += batchSize) {
-      const batch = state.scenes.slice(i, i + batchSize);
+PROMPT RULES / NEGATIVE: "${p.promptRules||''}"
 
-      // Build character/background context (use ref sheet prompts if available)
-      const charContext = state.charactersV.map(c => {
-        const ref = state.characterPrompts[c];
-        return ref ? `- ${c}: USE REFERENCE SHEET (matches: ${ref.slice(0, 100)}...)` : `- ${c}`;
-      }).join('\n');
-      const bgContext = state.backgroundsV.map(b => {
-        const ref = state.backgroundPrompts[b];
-        return ref ? `- ${b}: USE REFERENCE SHEET (matches: ${ref.slice(0, 100)}...)` : `- ${b}`;
-      }).join('\n');
+NHÂN VẬT (reference từ sheet):
+${charCtx||'(không có)'}
 
-      const prompt = `You are a G-Labs (Imagen/Nano Banana) prompt engineer. Generate a scene prompt for each scene below.
+BỐI CẢNH (reference từ sheet):
+${bgCtx||'(không có)'}
 
-VISUAL STYLE: "${state.sceneStyle}"
+Với mỗi cảnh, tạo prompt mô tả:
+- Nhân vật đang làm gì (tư thế, biểu cảm, hành động)
+- NẾU nhân vật là CON NGƯỜI: ghi tên trong ngoặc vuông [tên-nhân-vật] trong prompt (VD: "[agent-young] stands at the desk...")
+- NẾU nhân vật là ĐỘNG VẬT hoặc VẬT THỂ: miêu tả bình thường KHÔNG dùng ngoặc vuông (VD: "a black cat sits on the windowsill...")
+- Bối cảnh (dùng reference, mô tả ngắn)
+- Ánh sáng và tâm trạng phù hợp VO
+- Góc camera phù hợp loại camera
+- Kết thúc bằng scene aesthetic tag
 
-CHARACTERS IN VIDEO (use these as reference, match appearance from reference sheets):
-${charContext || '(none)'}
+Ngôn ngữ prompt: tiếng Anh (cho image gen). 50-90 từ/prompt.
 
-BACKGROUNDS IN VIDEO (use these as reference):
-${bgContext || '(none)'}
-
-For each scene, generate a focused prompt describing:
-- What the character is doing (pose, expression, action)
-- The setting (use the named background, brief description)
-- Lighting and mood matching the VO
-- Camera framing matching the camera type
-- Style tag at the end
-
-Output language: English (image gen prompts are English).
-Length: 50-90 words per prompt.
-
-Return ONLY a valid JSON array (no markdown):
+Trả về CHỈ JSON array:
 [{"id":"001","prompt":"..."}, ...]
 
-SCENES:
-${batch.map(s => `[${s.id}] VO: "${s.text}" | character: ${s.character || '-'} | background: ${s.background || '-'} | camera: ${s.camera} | dur: ${s.duration}s`).join('\n')}`;
-
-      const reply = await callClaude(prompt, 4000);
-      const prompts = parseJSON(reply);
-      for (const p of prompts) {
-        state.scenePrompts[p.id] = p.prompt;
-      }
-      renderPromptsV();
-      setStatus2(`Generate... ${Math.min(i + batchSize, state.scenes.length)}/${state.scenes.length}`, 'working');
-    }
-    setStatus2(`✓ Đã sinh ${state.scenes.length} G-Labs prompts.`, 'ok');
-    saveState();
-  } catch (e) {
-    console.error(e);
-    setStatus2('Lỗi: ' + e.message, 'error');
-  }
+CÁC CẢNH:
+${batch.map(s=>`[${s.id}] VO: "${s.text}" | nhân vật: ${s.character||'-'} | bối cảnh: ${s.background||'-'} | camera: ${s.camera} | ${s.duration}s`).join('\n')}`;
+    const reply=await callClaude(prompt,4000);
+    for(const x of parseJSON(reply))state.scenePrompts[x.id]=x.prompt;
+    renderPromptsV();setStatus2(`Tạo prompt... ${Math.min(i+bs,state.scenes.length)}/${state.scenes.length}`,'working');
+  }setStatus2(`✓ Đã sinh ${state.scenes.length} prompt G-Labs.`,'ok');saveState();
+  }catch(e){console.error(e);setStatus2('Lỗi: '+e.message,'error')}
 }
 
-/* ============================================================
-   TOOL 2: RENDERING
-   ============================================================ */
-function renderAllTool2() {
-  renderPreview();
-  renderTable();
-  renderPromptsV();
-  renderStats2();
-  updateScriptCount();
+function syncTool2(){
+  state.script=document.getElementById('scriptInput').value;
+  state.voLang=document.getElementById('voLang').value;
+  state.minChars=parseInt(document.getElementById('minChars').value)||30;
+  state.maxChars=parseInt(document.getElementById('maxChars').value)||100;
+  state.splitMode=document.getElementById('splitMode').value;
+  state.charactersV=document.getElementById('charsInputV').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  state.backgroundsV=document.getElementById('bgInputV').value.split('\n').map(s=>s.trim()).filter(Boolean);
+}
+function renderAllT2(){renderPreview();renderTable();renderPromptsV();renderStats2();updateScriptCount()}
+function renderPreview(){
+  const box=document.getElementById('previewBox');document.getElementById('previewCount').textContent=state.scenes.length+' cảnh';
+  if(state.scenes.length===0){box.innerHTML='<div class="empty-state">Bấm Chia Cảnh để tách kịch bản.</div>';return}
+  box.innerHTML=state.scenes.slice(0,8).map(s=>`<div class="preview-scene"><span class="pid">[${s.id}]</span><span class="ptag">${s.level}</span><div class="ptext">${escapeHtml(s.text)}</div></div>`).join('')+(state.scenes.length>8?`<div class="empty-state" style="padding:10px">+${state.scenes.length-8} cảnh nữa</div>`:'');
+}
+function renderTable(){
+  const tbl=document.getElementById('sceneTable'),body=document.getElementById('sceneBody'),empty=document.getElementById('emptyList');
+  document.getElementById('badge-list').textContent=state.scenes.length;
+  if(state.scenes.length===0){tbl.style.display='none';empty.style.display='block';return}
+  tbl.style.display='table';empty.style.display='none';
+  body.innerHTML=state.scenes.map((s,i)=>`<tr><td class="id">${s.id}</td><td class="level"><span class="level-tag">${s.level}</span></td><td class="vo">${escapeHtml(s.text)}</td><td class="${s.character?'':'pending'}">${s.character||'chờ...'}</td><td class="${s.background?'':'pending'}">${s.background||'chờ...'}</td><td class="cam">${s.camera}</td><td class="dur">${s.duration}s</td><td class="actions"><button onclick="splitAt(${i})" title="Chia">✂</button><button class="del" onclick="delScene(${i})" title="Xoá">×</button></td></tr>`).join('');
+}
+function renderPromptsV(){
+  const box=document.getElementById('promptsListV');const cnt=Object.keys(state.scenePrompts).length;
+  document.getElementById('badge-prompts').textContent=cnt;
+  if(state.scenes.length===0){box.innerHTML='<div class="empty-state">Chưa có cảnh.</div>';return}
+  box.innerHTML=state.scenes.map(s=>{const p=state.scenePrompts[s.id];
+    return `<div class="prompt-card ${p?'':'empty'}"><div class="prompt-card-head"><span class="prompt-card-id">[${s.id}]</span><span class="prompt-card-meta">${s.character||'—'} · ${s.background||'—'} · ${s.camera} · ${s.duration}s</span></div><div class="prompt-card-vo">"${escapeHtml(s.text)}"</div><div class="prompt-card-text">${p?escapeHtml(p):'Chưa có prompt.'}</div>${p?`<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${p.replace(/`/g,"'").replace(/\\/g,"\\\\")}\`)">Sao chép</button></div>`:''}</div>`}).join('');
+}
+function renderStats2(){
+  document.getElementById('statScenes').textContent=state.scenes.length;
+  const assigned=state.scenes.filter(s=>s.character||s.background).length;
+  const sa=document.getElementById('statAssigned');sa.textContent=assigned;
+  sa.className='v '+(assigned===state.scenes.length&&assigned>0?'green':(assigned>0?'':'dim'));
+  document.getElementById('statChars').textContent=state.charactersV.length||'—';
+  document.getElementById('statBgs').textContent=state.backgroundsV.length||'—';
+  document.getElementById('statDur').textContent=fmtDur(totalDur());
+}
+function totalDur(){return state.scenes.reduce((a,s)=>a+s.duration,0)}
+function fmtDur(s){if(s<60)return s+'s';return Math.floor(s/60)+'p'+(s%60?(s%60)+'s':'')}
+function updateScriptCount(){document.getElementById('scriptCount').textContent=state.script.length.toLocaleString()+' ký tự'}
+function delScene(i){if(!confirm('Xoá cảnh này?'))return;const r=state.scenes.splice(i,1)[0];delete state.scenePrompts[r.id];reindex();renderAllT2();saveState()}
+function splitAt(i){const s=state.scenes[i],w=s.text.split(' ');if(w.length<2)return;const mid=Math.floor(w.length/2);
+  const ns={...s,text:w.slice(mid).join(' '),duration:calcDur(w.slice(mid).join(' '))};s.text=w.slice(0,mid).join(' ');s.duration=calcDur(s.text);
+  state.scenes.splice(i+1,0,ns);reindex();renderAllT2();saveState()}
+function reindex(){const np={};state.scenes.forEach((s,i)=>{const old=s.id;s.id=String(i+1).padStart(3,'0');if(state.scenePrompts[old])np[s.id]=state.scenePrompts[old]});state.scenePrompts=np}
+function exportVideo(){syncTool2();downloadJSON({profile:getProfile().tenKenh,scenes:state.scenes.map(s=>({...s,prompt:state.scenePrompts[s.id]||null})),exportedAt:new Date().toISOString()},'video-'+Date.now()+'.json');setStatus2('✓ Đã xuất.','ok')}
+
+/* SRT */
+function generateSRT(){if(state.scenes.length===0)return;let t=0;
+  document.getElementById('srtOutput').value=state.scenes.map((s,i)=>{const st=t;t+=s.duration;return `${i+1}\n${srtT(st)} --> ${srtT(t)}\n${s.text}\n`}).join('\n');
+  setStatus2('✓ Đã tạo SRT.','ok')}
+function srtT(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')},000`}
+function downloadSRT(){const s=document.getElementById('srtOutput').value;if(!s)return;const b=new Blob([s],{type:'text/plain'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='video.srt';a.click();URL.revokeObjectURL(u)}
+function copySRT(){const s=document.getElementById('srtOutput').value;if(s)navigator.clipboard.writeText(s);setStatus2('✓ Đã sao chép SRT.','ok')}
+
+/* ============ TOOL 03: ĐỔI TÊN ẢNH ============ */
+const renamer={files:[]};
+function naturalSort(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'})}
+function setupDropzone(){
+  const dz=document.getElementById('dropzone'),inp=document.getElementById('fileInput');
+  dz.addEventListener('click',()=>inp.click());
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');addFiles(Array.from(e.dataTransfer.files))});
+  inp.addEventListener('change',e=>addFiles(Array.from(e.target.files)));
+}
+function addFiles(files){const imgs=files.filter(f=>f.type.startsWith('image/'));if(!imgs.length)return setStatus4('Chỉ chấp nhận ảnh.','error');renamer.files=renamer.files.concat(imgs).sort(naturalSort);renderFileList();setStatus4(`Đã thêm ${imgs.length} ảnh. Tổng ${renamer.files.length}.`,'ok')}
+function sortFiles(){renamer.files.sort(naturalSort);renderFileList();setStatus4('Đã sắp xếp lại.','ok')}
+function clearFiles(){if(!confirm('Xoá tất cả?'))return;renamer.files=[];renderFileList();setStatus4('Đã xoá.','ok')}
+function renderFileList(){
+  const list=document.getElementById('fileList');document.getElementById('fileCount').textContent=renamer.files.length+' ảnh';
+  if(!renamer.files.length){list.innerHTML='<div class="empty-state">Chưa có file.</div>';return}
+  const start=parseInt(document.getElementById('startNum').value)||1,pad=parseInt(document.getElementById('padding').value)||3,ext=document.getElementById('keepExt').value;
+  list.innerHTML=renamer.files.map((f,i)=>{const num=String(start+i).padStart(pad,'0');const oe=f.name.match(/\.[a-z0-9]+$/i)?.[0]||'.jpg';const ne=ext==='keep'?oe:'.'+ext;
+    return `<div class="file-row"><div class="idx">${num}</div><div class="from" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div><div class="arrow">→</div><div class="to">${num}${ne}</div><button class="rm" onclick="renamer.files.splice(${i},1);renderFileList()">×</button></div>`}).join('');
+}
+async function downloadZip(){
+  if(!renamer.files.length)return setStatus4('Không có file.','error');
+  if(typeof JSZip==='undefined')return setStatus4('JSZip chưa tải.','error');
+  setStatus4('Đang tạo ZIP...','working');const zip=new JSZip();
+  const start=parseInt(document.getElementById('startNum').value)||1,pad=parseInt(document.getElementById('padding').value)||3,ext=document.getElementById('keepExt').value;
+  for(let i=0;i<renamer.files.length;i++){const f=renamer.files[i];const num=String(start+i).padStart(pad,'0');const oe=f.name.match(/\.[a-z0-9]+$/i)?.[0]||'.jpg';const ne=ext==='keep'?oe:'.'+ext;zip.file(num+ne,await f.arrayBuffer())}
+  const blob=await zip.generateAsync({type:'blob'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='images-'+Date.now()+'.zip';a.click();URL.revokeObjectURL(u);
+  setStatus4(`✓ Đã tạo ZIP với ${renamer.files.length} ảnh.`,'ok');
 }
 
-function renderPreview() {
-  const box = document.getElementById('previewBox');
-  document.getElementById('previewCount').textContent = state.scenes.length + ' scenes';
-  if (state.scenes.length === 0) {
-    box.innerHTML = '<div class="empty-state">Bấm Split Scenes.</div>';
-    return;
-  }
-  box.innerHTML = state.scenes.slice(0, 8).map(s => `
-    <div class="preview-scene">
-      <span class="pid">[${s.id}]</span><span class="ptag">${s.level}</span>
-      <div class="ptext">${escapeHtml(s.text)}</div>
-    </div>`).join('') +
-    (state.scenes.length > 8 ? `<div class="empty-state" style="padding:10px">+${state.scenes.length - 8} scenes nữa</div>` : '');
+/* ============ NAV ============ */
+function switchTool(name){state.tool=name;document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+  ['tool1','tool2','tool3','tool4'].forEach(t=>document.getElementById('tool-'+t).classList.toggle('active',t===name));
+  if(name==='tool2')syncTool2FromProfile()}
+function switchSub(name){state.sub=name;document.querySelectorAll('.subtab').forEach(t=>t.classList.toggle('active',t.dataset.sub===name));
+  ['list','prompts','srt'].forEach(t=>{document.getElementById('sub-'+t).style.display=t===name?'block':'none'})}
+
+/* ============ STATUS ============ */
+function setStatusBar(id,msg,type='info'){const bar=document.getElementById(id);bar.className='status-bar'+(type!=='info'?' '+type:'');bar.innerHTML=(type==='working'?'<span class="spinner"></span>':'')+escapeHtml(msg)}
+const setStatus1=(m,t)=>setStatusBar('status1',m,t);
+const setStatus2=(m,t)=>setStatusBar('status2',m,t);
+const setStatus3=(m,t)=>setStatusBar('status3',m,t);
+const setStatus4=(m,t)=>setStatusBar('status4',m,t);
+
+/* ============ UTILS ============ */
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function copyText(t){navigator.clipboard.writeText(t);setStatusBar('status'+(state.tool==='tool1'?'1':state.tool==='tool2'?'2':'3'),'✓ Đã sao chép.','ok')}
+function downloadJSON(obj,name){const b=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
+
+/* ============ STORAGE ============ */
+async function saveState(){
+  try{const j=JSON.stringify(state);if(window.storage)await window.storage.set('pipeline-v2',j);else localStorage.setItem('pipeline-v2',j)}catch(e){console.warn('Lưu thất bại:',e)}
+}
+async function loadState(){
+  try{let v=null;if(window.storage){const r=await window.storage.get('pipeline-v2');v=r?.value}else v=localStorage.getItem('pipeline-v2');
+    if(v){const loaded=JSON.parse(v);Object.assign(state,loaded);if(!state.profiles)state.profiles=[];return true}
+  }catch(e){}return false;
 }
 
-function renderTable() {
-  const tbl = document.getElementById('sceneTable');
-  const body = document.getElementById('sceneBody');
-  const empty = document.getElementById('emptyList');
-  document.getElementById('badge-list').textContent = state.scenes.length;
-  if (state.scenes.length === 0) {
-    tbl.style.display = 'none'; empty.style.display = 'block'; return;
-  }
-  tbl.style.display = 'table'; empty.style.display = 'none';
-  body.innerHTML = state.scenes.map((s, idx) => `
-    <tr>
-      <td class="id">${s.id}</td>
-      <td class="level"><span class="level-tag">${s.level}</span></td>
-      <td class="vo">${escapeHtml(s.text)}</td>
-      <td class="${s.character ? '' : 'pending'}">${s.character || 'pending...'}</td>
-      <td class="${s.background ? '' : 'pending'}">${s.background || 'pending...'}</td>
-      <td class="cam">${s.camera}</td>
-      <td class="dur">${s.duration}s</td>
-      <td class="actions">
-        <button onclick="splitSceneAt(${idx})" title="Split">✂</button>
-        <button class="del" onclick="deleteScene(${idx})" title="Delete">×</button>
-      </td>
-    </tr>`).join('');
+/* ============ INIT ============ */
+function restoreUI(){
+  document.getElementById('voLang').value=state.voLang||'Tiếng Việt';
+  document.getElementById('minChars').value=state.minChars||30;
+  document.getElementById('maxChars').value=state.maxChars||100;
+  document.getElementById('splitMode').value=state.splitMode||'smart';
+  document.getElementById('scriptInput').value=state.script||'';
+  document.getElementById('charsInputV').value=(state.charactersV||[]).join('\n');
+  document.getElementById('bgInputV').value=(state.backgroundsV||[]).join('\n');
+  renderProfileSelect();renderProfileStyles();syncTool2FromProfile();updateScriptCount();
+  renderAllT2();renderCharImageGallery();
+  if(state.styleRefPrompt){document.getElementById('t3StyleRefText').textContent=state.styleRefPrompt;document.getElementById('styleRefPanel').style.display='block'}
 }
+setupDropzone();
+setupAssetDropzone();
+['voLang','minChars','maxChars','splitMode','scriptInput','charsInputV','bgInputV'].forEach(id=>{
+  const el=document.getElementById(id);if(!el)return;
+  const h=()=>{if(id==='scriptInput'){state.script=el.value;updateScriptCount()}clearTimeout(window._st);window._st=setTimeout(saveState,800)};
+  el.addEventListener('input',h);el.addEventListener('change',h);
+});
+['startNum','padding','keepExt'].forEach(id=>{document.getElementById(id).addEventListener('change',renderFileList);document.getElementById(id).addEventListener('input',renderFileList)});
 
-function renderPromptsV() {
-  const box = document.getElementById('promptsListV');
-  const cnt = Object.keys(state.scenePrompts).length;
-  document.getElementById('badge-prompts').textContent = cnt;
-  if (state.scenes.length === 0) {
-    box.innerHTML = '<div class="empty-state">Chưa có scenes.</div>';
-    return;
-  }
-  box.innerHTML = state.scenes.map(s => {
-    const p = state.scenePrompts[s.id];
-    return `<div class="prompt-card ${p ? '' : 'empty'}">
-      <div class="prompt-card-head">
-        <span class="prompt-card-id">[${s.id}]</span>
-        <span class="prompt-card-meta">${s.character || '—'} · ${s.background || '—'} · ${s.camera} · ${s.duration}s</span>
-      </div>
-      <div class="prompt-card-vo">"${escapeHtml(s.text)}"</div>
-      <div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt.'}</div>
-      ${p ? `<div class="prompt-card-actions">
-        <button class="btn ghost sm" onclick="copyText(${JSON.stringify(p).replace(/"/g,'&quot;')})">Copy</button>
-      </div>` : ''}
-    </div>`;
-  }).join('');
-}
-
-function renderStats2() {
-  document.getElementById('statScenes').textContent = state.scenes.length;
-  const assigned = state.scenes.filter(s => s.character || s.background).length;
-  const statA = document.getElementById('statAssigned');
-  statA.textContent = assigned;
-  statA.className = 'v ' + (assigned === state.scenes.length && assigned > 0 ? 'green' : (assigned > 0 ? '' : 'dim'));
-  document.getElementById('statChars').textContent = state.charactersV.length || '—';
-  document.getElementById('statBgs').textContent = state.backgroundsV.length || '—';
-  document.getElementById('statDur').textContent = formatDuration(totalDuration());
-}
-
-function totalDuration() { return state.scenes.reduce((a, s) => a + s.duration, 0); }
-function formatDuration(s) {
-  if (s < 60) return s + 's';
-  return Math.floor(s / 60) + 'm' + (s % 60 ? (s % 60) + 's' : '');
-}
-
-function updateScriptCount() {
-  document.getElementById('scriptCount').textContent = state.script.length.toLocaleString() + ' ký tự';
-}
-
-function deleteScene(idx) {
-  if (!confirm('Xoá scene này?')) return;
-  const removed = state.scenes.splice(idx, 1)[0];
-  delete state.scenePrompts[removed.id];
-  reindexScenes();
-  renderAllTool2();
-  saveState();
-}
-
-function splitSceneAt(idx) {
-  const s = state.scenes[idx];
-  const words = s.text.split(' ');
-  if (words.length < 2) return setStatus2('Scene quá ngắn.', 'error');
-  const mid = Math.floor(words.length / 2);
-  const a = words.slice(0, mid).join(' ');
-  const b = words.slice(mid).join(' ');
-  const newScene = { ...s, text: b, duration: calculateDuration(b) };
-  s.text = a; s.duration = calculateDuration(a);
-  state.scenes.splice(idx + 1, 0, newScene);
-  reindexScenes();
-  renderAllTool2();
-  saveState();
-}
-
-function reindexScenes() {
-  const newPrompts = {};
-  state.scenes.forEach((s, i) => {
-    const oldId = s.id;
-    s.id = String(i + 1).padStart(3, '0');
-    if (state.scenePrompts[oldId]) newPrompts[s.id] = state.scenePrompts[oldId];
-  });
-  state.scenePrompts = newPrompts;
-}
-
-function exportVideo() {
-  syncTool2FromInputs();
-  const payload = {
-    project: state.projectName,
-    meta: {
-      visualStyle: state.visualStyle, voLang: state.voLang,
-      minChars: state.minChars, maxChars: state.maxChars,
-      exportedAt: new Date().toISOString()
-    },
-    characters: state.charactersV,
-    backgrounds: state.backgroundsV,
-    scenes: state.scenes.map(s => ({
-      ...s, prompt: state.scenePrompts[s.id] || null
-    }))
-  };
-  downloadJSON(payload, `video-${state.projectName}-${Date.now()}.json`);
-  setStatus2('✓ Đã export.', 'ok');
-}
-
-/* ============================================================
-   TOOL 2: SRT EXPORT
-   ============================================================ */
-function generateSRT() {
-  if (state.scenes.length === 0) return setStatus2('Cần scenes trước.', 'error');
-  let t = 0;
-  const lines = state.scenes.map((s, i) => {
-    const start = t;
-    const end = t + s.duration;
-    t = end;
-    return `${i + 1}\n${formatSRTTime(start)} --> ${formatSRTTime(end)}\n${s.text}\n`;
-  });
-  document.getElementById('srtOutput').value = lines.join('\n');
-  setStatus2('✓ Đã sinh SRT.', 'ok');
-}
-
-function formatSRTTime(secs) {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},000`;
-}
-
-function downloadSRT() {
-  const srt = document.getElementById('srtOutput').value;
-  if (!srt) return setStatus2('Cần generate SRT trước.', 'error');
-  const blob = new Blob([srt], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `${state.projectName || 'video'}.srt`; a.click();
-  URL.revokeObjectURL(url);
-}
-
-function copySRT() {
-  const srt = document.getElementById('srtOutput').value;
-  if (!srt) return setStatus2('Cần generate SRT trước.', 'error');
-  navigator.clipboard.writeText(srt);
-  setStatus2('✓ Đã copy SRT.', 'ok');
-}
-
-/* ============================================================
-   TOOL 3: IMAGE RENAMER
-   ============================================================ */
-const renamerState = { files: [] };
-
-function naturalSort(a, b) {
-  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-}
-
-function setupDropzone() {
-  const dz = document.getElementById('dropzone');
-  const input = document.getElementById('fileInput');
-  dz.addEventListener('click', () => input.click());
-  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
-  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
-  dz.addEventListener('drop', e => {
-    e.preventDefault();
-    dz.classList.remove('dragover');
-    addFiles(Array.from(e.dataTransfer.files));
-  });
-  input.addEventListener('change', e => addFiles(Array.from(e.target.files)));
-}
-
-function addFiles(files) {
-  const imgs = files.filter(f => f.type.startsWith('image/'));
-  if (imgs.length === 0) return setStatus3('Chỉ chấp nhận ảnh.', 'error');
-  renamerState.files = renamerState.files.concat(imgs).sort(naturalSort);
-  renderFileList();
-  setStatus3(`Đã thêm ${imgs.length} ảnh. Tổng ${renamerState.files.length}.`, 'ok');
-}
-
-function sortFiles() {
-  renamerState.files.sort(naturalSort);
-  renderFileList();
-  setStatus3('Đã re-sort.', 'ok');
-}
-
-function clearFiles() {
-  if (!confirm('Xoá tất cả file?')) return;
-  renamerState.files = [];
-  renderFileList();
-  setStatus3('Cleared.', 'ok');
-}
-
-function renderFileList() {
-  const list = document.getElementById('fileList');
-  document.getElementById('fileCount').textContent = renamerState.files.length + ' ảnh';
-  if (renamerState.files.length === 0) {
-    list.innerHTML = '<div class="empty-state">Chưa có file.</div>';
-    return;
-  }
-  const start = parseInt(document.getElementById('startNum').value) || 1;
-  const padding = parseInt(document.getElementById('padding').value) || 3;
-  const ext = document.getElementById('keepExt').value;
-  list.innerHTML = renamerState.files.map((f, i) => {
-    const num = String(start + i).padStart(padding, '0');
-    const origExt = f.name.match(/\.[a-z0-9]+$/i)?.[0] || '.jpg';
-    const newExt = ext === 'keep' ? origExt : '.' + ext;
-    return `<div class="file-row">
-      <div class="idx">${num}</div>
-      <div class="from" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
-      <div class="arrow">→</div>
-      <div class="to">${num}${newExt}</div>
-      <button class="rm" onclick="removeFile(${i})">×</button>
-    </div>`;
-  }).join('');
-}
-
-function removeFile(idx) {
-  renamerState.files.splice(idx, 1);
-  renderFileList();
-}
-
-async function downloadZip() {
-  if (renamerState.files.length === 0) return setStatus3('Không có file.', 'error');
-  if (typeof JSZip === 'undefined') return setStatus3('JSZip chưa load.', 'error');
-
-  setStatus3('Đang tạo ZIP...', 'working');
-  const zip = new JSZip();
-  const start = parseInt(document.getElementById('startNum').value) || 1;
-  const padding = parseInt(document.getElementById('padding').value) || 3;
-  const ext = document.getElementById('keepExt').value;
-
-  for (let i = 0; i < renamerState.files.length; i++) {
-    const f = renamerState.files[i];
-    const num = String(start + i).padStart(padding, '0');
-    const origExt = f.name.match(/\.[a-z0-9]+$/i)?.[0] || '.jpg';
-    const newExt = ext === 'keep' ? origExt : '.' + ext;
-    const buf = await f.arrayBuffer();
-    zip.file(`${num}${newExt}`, buf);
-  }
-
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `images-${Date.now()}.zip`; a.click();
-  URL.revokeObjectURL(url);
-  setStatus3(`✓ Đã tạo ZIP với ${renamerState.files.length} ảnh.`, 'ok');
-}
-
-/* ============================================================
-   NAV / TABS
-   ============================================================ */
-function switchTool(name) {
-  state.tool = name;
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  ['tool1', 'tool2', 'tool3'].forEach(t => {
-    document.getElementById('tool-' + t).classList.toggle('active', t === name);
-  });
-  if (name === 'tool2') syncTool2FromTool1();
-}
-
-function switchSub(name) {
-  state.sub = name;
-  document.querySelectorAll('.subtab').forEach(t => t.classList.toggle('active', t.dataset.sub === name));
-  ['list', 'prompts', 'srt'].forEach(t => {
-    document.getElementById('sub-' + t).style.display = (t === name) ? 'block' : 'none';
-  });
-}
-
-/* ============================================================
-   STATUS
-   ============================================================ */
-function setStatusBar(id, msg, type = 'info') {
-  const bar = document.getElementById(id);
-  bar.className = 'status-bar' + (type !== 'info' ? ' ' + type : '');
-  bar.innerHTML = (type === 'working' ? '<span class="spinner"></span>' : '') + escapeHtml(msg);
-}
-const setStatus1 = (m, t) => setStatusBar('status1', m, t);
-const setStatus2 = (m, t) => setStatusBar('status2', m, t);
-const setStatus3 = (m, t) => setStatusBar('status3', m, t);
-
-/* ============================================================
-   UTILITIES
-   ============================================================ */
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-function copyText(text) {
-  navigator.clipboard.writeText(text);
-  setStatusBar('status' + state.tool.slice(-1), '✓ Đã copy.', 'ok');
-}
-
-function downloadJSON(obj, name) {
-  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; a.click();
-  URL.revokeObjectURL(url);
-}
-
-/* ============================================================
-   PROJECT MANAGEMENT
-   ============================================================ */
-function openSettings() {
-  document.getElementById('projectName').value = state.projectName;
-  document.getElementById('settingsModal').classList.add('show');
-}
-function closeSettings() {
-  state.projectName = document.getElementById('projectName').value || 'New Project';
-  document.getElementById('navMeta').textContent = state.projectName;
-  document.getElementById('settingsModal').classList.remove('show');
-  saveState();
-}
-
-function exportProject() {
-  syncTool1FromInputs();
-  syncTool2FromInputs();
-  downloadJSON({ ...state, exportedAt: new Date().toISOString() }, `project-${state.projectName}-${Date.now()}.json`);
-  setStatus1('✓ Đã export project.', 'ok');
-}
-
-function importProject(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const loaded = JSON.parse(e.target.result);
-      Object.assign(state, loaded);
-      restoreInputsFromState();
-      renderCharacterPrompts();
-      renderBackgroundPrompts();
-      renderAllTool2();
-      document.getElementById('navMeta').textContent = state.projectName;
-      setStatus1('✓ Đã import project.', 'ok');
-      saveState();
-    } catch (err) {
-      setStatus1('Lỗi import: ' + err.message, 'error');
-    }
-  };
-  reader.readAsText(file);
-}
-
-function resetAll() {
-  if (!confirm('Reset TẤT CẢ? Không hoàn tác được.')) return;
-  if (!confirm('Bạn chắc chắn? Tất cả prompts, scenes, characters sẽ mất.')) return;
-  Object.assign(state, {
-    projectName: 'New Project',
-    visualStyle: 'Crayon Capital — Dark',
-    channelDesc: '', videoTopic: '',
-    characterStyle: PRESET_CRAYON_DARK.characterStyle,
-    backgroundStyle: PRESET_CRAYON_DARK.backgroundStyle,
-    sceneStyle: PRESET_CRAYON_DARK.sceneStyle,
-    characters: [], backgrounds: [],
-    characterPrompts: {}, backgroundPrompts: {},
-    script: '', scenes: [], scenePrompts: {},
-    charactersV: [], backgroundsV: []
-  });
-  restoreInputsFromState();
-  renderCharacterPrompts();
-  renderBackgroundPrompts();
-  renderAllTool2();
-  document.getElementById('navMeta').textContent = state.projectName;
-  closeSettings();
-  setStatus1('Đã reset.', 'ok');
-  saveState();
-}
-
-function restoreInputsFromState() {
-  document.getElementById('visualStyle').value = state.visualStyle || '';
-  document.getElementById('channelDesc').value = state.channelDesc || '';
-  document.getElementById('videoTopic').value = state.videoTopic || '';
-  document.getElementById('characterStyle').value = state.characterStyle || PRESET_CRAYON_DARK.characterStyle;
-  document.getElementById('backgroundStyle').value = state.backgroundStyle || PRESET_CRAYON_DARK.backgroundStyle;
-  document.getElementById('sceneStyle').value = state.sceneStyle || PRESET_CRAYON_DARK.sceneStyle;
-  document.getElementById('charactersInput').value = (state.characters || []).join('\n');
-  document.getElementById('backgroundsInput').value = (state.backgrounds || []).join('\n');
-  document.getElementById('visualStyle2').value = state.visualStyle || '';
-  document.getElementById('voLang').value = state.voLang || 'Tiếng Việt';
-  document.getElementById('minChars').value = state.minChars || 30;
-  document.getElementById('maxChars').value = state.maxChars || 100;
-  document.getElementById('splitMode').value = state.splitMode || 'smart';
-  document.getElementById('scriptInput').value = state.script || '';
-  document.getElementById('charsInputV').value = (state.charactersV || []).join('\n');
-  document.getElementById('bgInputV').value = (state.backgroundsV || []).join('\n');
-  updateScriptCount();
-}
-
-/* ============================================================
-   STORAGE
-   ============================================================ */
-async function saveState() {
-  syncTool1FromInputs();
-  syncTool2FromInputs();
-  try {
-    const json = JSON.stringify(state);
-    if (window.storage) {
-      await window.storage.set('pipeline-state', json);
-    } else {
-      localStorage.setItem('pipeline-state', json);
-    }
-  } catch (e) { console.warn('Save failed:', e); }
-}
-
-async function loadState() {
-  try {
-    let value = null;
-    if (window.storage) {
-      const result = await window.storage.get('pipeline-state');
-      value = result?.value;
-    } else {
-      value = localStorage.getItem('pipeline-state');
-    }
-    if (value) {
-      Object.assign(state, JSON.parse(value));
-      restoreInputsFromState();
-      document.getElementById('navMeta').textContent = state.projectName;
-      renderCharacterPrompts();
-      renderBackgroundPrompts();
-      renderAllTool2();
-      setStatus1('Đã khôi phục project trước.', 'ok');
-      return true;
-    }
-  } catch (e) { /* no prior state */ }
-  return false;
-}
-
-/* ============================================================
-   INIT
-   ============================================================ */
-function setupAutosave() {
-  const ids = ['visualStyle', 'channelDesc', 'videoTopic', 'characterStyle', 'backgroundStyle',
-    'sceneStyle', 'charactersInput', 'backgroundsInput', 'voLang', 'minChars', 'maxChars',
-    'splitMode', 'scriptInput', 'charsInputV', 'bgInputV'];
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const handler = () => {
-      if (id === 'scriptInput') {
-        state.script = el.value;
-        updateScriptCount();
-      }
-      clearTimeout(window._saveTimer);
-      window._saveTimer = setTimeout(saveState, 800);
-    };
-    el.addEventListener('input', handler);
-    el.addEventListener('change', handler);
-  });
-
-  // Renamer option changes re-render list
-  ['startNum', 'padding', 'keepExt'].forEach(id => {
-    document.getElementById(id).addEventListener('change', renderFileList);
-    document.getElementById(id).addEventListener('input', renderFileList);
-  });
-}
-
-const SAMPLE_SCRIPT = `Picture this.
-You're a line cook at a mid-tier steakhouse on a Wednesday night. Eleven months in. You know every station, every ticket rhythm, every dull ache in your lower back by 9 PM.
-The blade catches the inside of your wrist at exactly the wrong angle.
-And you think, for one stupid second: that's a lot of red.`;
-
-(async () => {
-  setupDropzone();
-  setupAutosave();
-  const loaded = await loadState();
-  if (!loaded) {
-    // First-time setup with defaults
-    state.characterStyle = PRESET_CRAYON_DARK.characterStyle;
-    state.backgroundStyle = PRESET_CRAYON_DARK.backgroundStyle;
-    state.sceneStyle = PRESET_CRAYON_DARK.sceneStyle;
-    state.script = SAMPLE_SCRIPT;
-    restoreInputsFromState();
-    renderAllTool2();
-    document.getElementById('navMeta').textContent = state.projectName;
-  }
+(async()=>{
+  const loaded=await loadState();
+  if(!loaded){getProfile().characterStyle=PRESET.characterStyle;getProfile().backgroundStyle=PRESET.backgroundStyle;getProfile().sceneStyle=PRESET.sceneStyle}
+  restoreUI();
 })();
 </script>
 </body>
