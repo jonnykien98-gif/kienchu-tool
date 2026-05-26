@@ -356,7 +356,13 @@ textarea{resize:vertical;line-height:1.7}
         <tbody id="sceneBody"></tbody>
       </table>
     </div>
-    <div id="sub-prompts" style="display:none"><div class="prompts-list" id="promptsListV"><div class="empty-state">Chưa có prompt. Bấm Tạo Prompt G-Labs.</div></div></div>
+    <div id="sub-prompts" style="display:none">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px">
+        <button class="btn primary sm" onclick="copyAllScenePrompts()">📋 Sao chép tất cả prompt</button>
+        <span style="color:var(--text-muted);font-size:11px;align-self:center" id="copyAllInfo"></span>
+      </div>
+      <div class="prompts-list" id="promptsListV"><div class="empty-state">Chưa có prompt. Bấm Tạo Prompt G-Labs.</div></div>
+    </div>
     <div id="sub-srt" style="display:none">
       <div style="padding:16px">
         <div style="display:flex;gap:10px;margin-bottom:12px">
@@ -429,6 +435,7 @@ textarea{resize:vertical;line-height:1.7}
   <div class="actions">
     <button class="btn primary" onclick="genAllAssetPrompts()">⚡ Generate All Prompts</button>
     <button class="btn" onclick="genStyleReference()">🎨 Style Reference</button>
+    <button class="btn" onclick="copyAllAssetPrompts()">📋 Sao chép tất cả</button>
     <button class="btn ghost" onclick="exportAssetPrompts()">↓ Xuất Prompts</button>
   </div>
 
@@ -451,13 +458,36 @@ textarea{resize:vertical;line-height:1.7}
   </div>
 
   <h3 style="margin:24px 0 12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--orange)">📁 ĐỔI TÊN ẢNH THEO TÊN ASSET</h3>
-  <div class="info-box teal" style="margin-bottom:16px">Kéo ảnh G-Labs vào → chọn ảnh nào là của nhân vật/bối cảnh nào → đổi tên → tải ZIP.</div>
-  <div id="assetDropzone" class="dropzone" style="min-height:150px;margin-bottom:16px"><div class="ico">📁</div><div>Kéo thả ảnh reference sheets vào đây</div></div>
-  <input type="file" id="assetFileInput" multiple accept="image/*" style="display:none">
-  <div id="assetFileList" style="margin-bottom:16px"></div>
+  <div class="info-box teal" style="margin-bottom:16px"><span class="lbl">Flow:</span> Gen reference sheets trong G-Labs theo thứ tự prompts → Download ảnh → Kéo vào đây → Tự đổi tên theo danh sách assets → Download ZIP → Bỏ vào folder tham chiếu G-Labs</div>
+
+  <div class="grid-2 mb-16" style="grid-template-columns:1fr auto">
+    <div class="panel">
+      <div class="panel-head"><span>DANH SÁCH TÊN ASSETS</span><button class="btn ghost sm" onclick="autoFillAssetNames()">Auto-fill từ prompts</button></div>
+      <div class="panel-body">
+        <textarea id="t3AssetNames" style="min-height:120px;background:var(--surface-2);font-size:12px" placeholder="Protagonist&#10;Location01&#10;BanLamViec"></textarea>
+        <div style="color:var(--teal);font-size:11px;margin-top:6px" id="t3AssetCount">0 assets</div>
+      </div>
+    </div>
+    <div class="panel" style="min-width:200px">
+      <div class="panel-head"><span>ẢNH G-LABS</span></div>
+      <div id="assetDropzone" class="dropzone" style="min-height:150px;border:none;padding:24px">
+        <div class="ico">📁</div>
+        <div>Kéo thả ảnh vào đây</div>
+      </div>
+      <input type="file" id="assetFileInput" multiple accept="image/*" style="display:none">
+      <div style="padding:8px 14px;color:var(--teal);font-size:11px" id="t3AssetImgCount">0 ảnh đã chọn</div>
+    </div>
+  </div>
+
+  <div class="panel mb-16" id="assetPreviewPanel" style="display:none">
+    <div class="panel-head"><span>PREVIEW</span></div>
+    <div id="assetPreviewList"></div>
+  </div>
+
   <div class="actions">
-    <button class="btn primary sm" onclick="downloadAssetZip()">↓ Tải ZIP (theo tên asset)</button>
+    <button class="btn primary sm" onclick="downloadAssetZip()">↓ Download ZIP</button>
     <button class="btn ghost sm" onclick="clearAssetFiles()">Xoá ảnh</button>
+    <span id="assetZipStatus" style="font-size:11px;color:var(--text-muted)"></span>
   </div>
 </div>
 
@@ -976,8 +1006,8 @@ function exportAssetPrompts(){
   setStatus3('✓ Đã xuất.','ok');
 }
 
-// Asset Rename (rename by asset name)
-const assetRenamer={files:[],assignments:{}};
+// Asset Rename - Auto match by order
+const assetRenamer={files:[]};
 function setupAssetDropzone(){
   const dz=document.getElementById('assetDropzone');if(!dz)return;
   const inp=document.getElementById('assetFileInput');
@@ -986,46 +1016,82 @@ function setupAssetDropzone(){
   dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
   dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');addAssetFiles(Array.from(e.dataTransfer.files))});
   inp.addEventListener('change',e=>addAssetFiles(Array.from(e.target.files)));
+  document.getElementById('t3AssetNames').addEventListener('input',renderAssetPreview);
 }
 function addAssetFiles(files){
-  const imgs=files.filter(f=>f.type.startsWith('image/'));
-  assetRenamer.files=assetRenamer.files.concat(imgs);
-  renderAssetFileList();
+  const imgs=files.filter(f=>f.type.startsWith('image/')).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  assetRenamer.files=assetRenamer.files.concat(imgs).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  document.getElementById('t3AssetImgCount').textContent=assetRenamer.files.length+' ảnh đã chọn';
+  renderAssetPreview();
 }
-function clearAssetFiles(){assetRenamer.files=[];assetRenamer.assignments={};renderAssetFileList()}
-function renderAssetFileList(){
-  const list=document.getElementById('assetFileList');
-  if(!assetRenamer.files.length){list.innerHTML='';return}
-  const allAssets=[...document.getElementById('t3Characters').value.split('\n').map(s=>s.trim()).filter(Boolean),...document.getElementById('t3Backgrounds').value.split('\n').map(s=>s.trim()).filter(Boolean)];
-  list.innerHTML=assetRenamer.files.map((f,i)=>{
-    const assigned=assetRenamer.assignments[i]||'';
-    const ext=f.name.match(/\.[a-z0-9]+$/i)?.[0]||'.jpg';
-    return `<div class="file-row" style="grid-template-columns:50px 1fr 30px 1fr 1fr 40px">
-      <div class="idx">${i+1}</div>
-      <div class="from">${escapeHtml(f.name)}</div>
-      <div class="arrow">→</div>
-      <select onchange="assetRenamer.assignments[${i}]=this.value;renderAssetFileList()" style="padding:6px;font-size:11px">
-        <option value="">— Chọn asset —</option>
-        ${allAssets.map(a=>`<option value="${a}" ${assigned===a?'selected':''}>${a}</option>`).join('')}
-      </select>
-      <div class="to" style="color:${assigned?'var(--amber)':'var(--text-dim)'}">${assigned?assigned+ext:'?'}</div>
-      <button class="rm" onclick="assetRenamer.files.splice(${i},1);delete assetRenamer.assignments[${i}];renderAssetFileList()">×</button>
-    </div>`;
-  }).join('');
+function clearAssetFiles(){assetRenamer.files=[];document.getElementById('t3AssetImgCount').textContent='0 ảnh đã chọn';renderAssetPreview()}
+function autoFillAssetNames(){
+  const chars=document.getElementById('t3Characters').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const bgs=document.getElementById('t3Backgrounds').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  document.getElementById('t3AssetNames').value=[...chars,...bgs].join('\n');
+  document.getElementById('t3AssetCount').textContent=[...chars,...bgs].length+' assets';
+  renderAssetPreview();
+}
+function renderAssetPreview(){
+  const panel=document.getElementById('assetPreviewPanel');
+  const list=document.getElementById('assetPreviewList');
+  const names=document.getElementById('t3AssetNames').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  document.getElementById('t3AssetCount').textContent=names.length+' assets';
+  if(!assetRenamer.files.length||!names.length){panel.style.display='none';return}
+  panel.style.display='block';
+  const count=Math.min(assetRenamer.files.length,names.length);
+  list.innerHTML=`<div class="scene-table"><thead><tr><th>#</th><th>FILE GỐC</th><th></th><th>TÊN MỚI</th></tr></thead><tbody>`+
+    assetRenamer.files.slice(0,names.length).map((f,i)=>{
+      const name=names[i]||'?';
+      const ext=f.name.match(/\.[a-z0-9]+$/i)?.[0]||'.jpg';
+      return `<tr><td class="id">${i+1}</td><td style="color:var(--text-muted)">${escapeHtml(f.name)}</td><td style="text-align:center;color:var(--text-dim)">→</td><td style="color:var(--amber);font-weight:600">${escapeHtml(name)}${ext}</td></tr>`;
+    }).join('')+`</tbody></table>`+
+    (assetRenamer.files.length>names.length?`<div style="padding:8px 14px;color:var(--text-dim);font-size:11px">${assetRenamer.files.length-names.length} ảnh thừa (không đủ tên asset)</div>`:'')+
+    (names.length>assetRenamer.files.length?`<div style="padding:8px 14px;color:var(--text-dim);font-size:11px">${names.length-assetRenamer.files.length} asset thiếu ảnh</div>`:'')+
+    `<div style="padding:8px 14px;color:var(--green);font-size:11px">✓ ${count} files sẵn sàng</div>`;
 }
 async function downloadAssetZip(){
-  const assigned=Object.entries(assetRenamer.assignments).filter(([_,v])=>v);
-  if(!assigned.length)return setStatus3('Cần gán tên asset cho ít nhất 1 ảnh.','error');
+  const names=document.getElementById('t3AssetNames').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!assetRenamer.files.length)return setStatus3('Cần thêm ảnh.','error');
+  if(!names.length)return setStatus3('Cần danh sách tên assets.','error');
   if(typeof JSZip==='undefined')return setStatus3('JSZip chưa tải.','error');
   const zip=new JSZip();
-  for(const [idx,name] of assigned){
-    const f=assetRenamer.files[parseInt(idx)];if(!f)continue;
+  const count=Math.min(assetRenamer.files.length,names.length);
+  for(let i=0;i<count;i++){
+    const f=assetRenamer.files[i];
     const ext=f.name.match(/\.[a-z0-9]+$/i)?.[0]||'.jpg';
-    zip.file(name+ext,await f.arrayBuffer());
+    zip.file(names[i]+ext,await f.arrayBuffer());
   }
   const blob=await zip.generateAsync({type:'blob'});
   const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='assets-'+Date.now()+'.zip';a.click();URL.revokeObjectURL(u);
-  setStatus3(`✓ Đã tạo ZIP với ${assigned.length} ảnh.`,'ok');
+  document.getElementById('assetZipStatus').innerHTML='<span style="color:var(--green)">✓ Đã tạo ZIP với '+count+' ảnh.</span>';
+}
+
+// Copy All functions
+function copyAllScenePrompts(){
+  const all=state.scenes.map(s=>{
+    const p=state.scenePrompts[s.id];
+    return p?`[${s.id}] ${p}`:'';
+  }).filter(Boolean).join('\n\n---\n\n');
+  if(!all)return setStatus2('Chưa có prompt nào.','error');
+  navigator.clipboard.writeText(all);
+  document.getElementById('copyAllInfo').textContent=`✓ Đã sao chép ${state.scenes.length} prompts`;
+  setStatus2('✓ Đã sao chép tất cả prompt cảnh.','ok');
+}
+function copyAllAssetPrompts(){
+  const parts=[];
+  const cp=state.assetCharPrompts||{};
+  const bp=state.assetBgPrompts||{};
+  for(const [name,prompt] of Object.entries(cp)){
+    if(prompt)parts.push(`[CHARACTER: ${name}]\n${prompt}`);
+  }
+  for(const [name,prompt] of Object.entries(bp)){
+    if(prompt)parts.push(`[BACKGROUND: ${name}]\n${prompt}`);
+  }
+  if(state.styleRefPrompt)parts.push(`[STYLE REFERENCE]\n${state.styleRefPrompt}`);
+  if(!parts.length)return setStatus3('Chưa có prompt nào.','error');
+  navigator.clipboard.writeText(parts.join('\n\n---\n\n'));
+  setStatus3(`✓ Đã sao chép ${parts.length} prompts.`,'ok');
 }
 
 /* ============ TOOL 02: PHÂN CẢNH ============ */
@@ -1160,9 +1226,9 @@ ${bgCtx||'(không có)'}
 
 Với mỗi cảnh, tạo prompt mô tả:
 - Nhân vật đang làm gì (tư thế, biểu cảm, hành động)
-- NẾU nhân vật là CON NGƯỜI: ghi tên trong ngoặc vuông [tên-nhân-vật] trong prompt (VD: "[agent-young] stands at the desk...")
-- NẾU nhân vật là ĐỘNG VẬT hoặc VẬT THỂ: miêu tả bình thường KHÔNG dùng ngoặc vuông (VD: "a black cat sits on the windowsill...")
-- Bối cảnh (dùng reference, mô tả ngắn)
+- NẾU nhân vật là CON NGƯỜI: ghi tên trong ngoặc vuông [tên-nhân-vật] (VD: "[agent-young] stands at the desk...")
+- NẾU nhân vật là ĐỘNG VẬT hoặc VẬT THỂ: miêu tả bình thường KHÔNG dùng ngoặc vuông
+- BỐI CẢNH: LUÔN ghi tên bối cảnh trong ngoặc vuông [tên-bối-cảnh] (VD: "...inside [dark-office-night], dim lighting...")
 - Ánh sáng và tâm trạng phù hợp VO
 - Góc camera phù hợp loại camera
 - Kết thúc bằng scene aesthetic tag
