@@ -12,7 +12,6 @@
 
 <!-- Libraries -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.min.js"></script>
 
 <!-- Firebase v10 modular CDN -->
 <script type="module">
@@ -784,7 +783,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <span class="num">5</span><span>Tìm Media</span>
         </div>
         <div class="nav-item" data-tool="tool6" onclick="switchTool('tool6')">
-          <span class="num">6</span><span>Tạo Video</span>
+          <span class="num">6</span><span>Prompt Veo 3</span>
         </div>
       </div>
     </div>
@@ -1191,99 +1190,69 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       <div id="mediaSearchResults"></div>
     </div>
 
-    <!-- TOOL 6: TẠO VIDEO (FFmpeg.wasm) -->
+    <!-- TOOL 6: PROMPT VEO 3 -->
     <div class="tool" id="tool-tool6">
       <div class="tool-head">
-        <div class="tool-title">Tạo Video</div>
-        <div class="tool-subtitle">Ghép ảnh + audio VO thành video clips ngay trong browser. Không cần Python/FFmpeg local.</div>
+        <div class="tool-title">Prompt Veo 3</div>
+        <div class="tool-subtitle">Sinh prompt video Veo 3 cho từng cảnh. Copy paste vào Google Vids / Gemini có Veo 3 để gen video.</div>
       </div>
 
       <div class="info-box">
-        <span class="lbl">📋 Quy trình:</span> Upload ảnh (đã đánh số 001, 002...) + file audio VO → Tool tự cắt audio theo timing từng cảnh → Ghép ảnh + audio → Xuất từng clip hoặc 1 video hoàn chỉnh. <strong>Lần đầu sẽ tải ~30MB FFmpeg.wasm.</strong>
-      </div>
-
-      <div class="grid-2 mb-24">
-        <div class="panel">
-          <div class="panel-head">
-            <span>📷 Ảnh các cảnh (đã đánh số)</span>
-            <span class="count" id="v6ImgCount">0 ảnh</span>
-          </div>
-          <div class="panel-body">
-            <div id="v6ImgDrop" class="dropzone" style="min-height:130px;padding:20px">
-              <div class="ico">📁</div>
-              <div>Kéo thả ảnh 001.png, 002.png...</div>
-              <div class="hint">Hoặc click để chọn. Tự sắp xếp theo tên.</div>
-            </div>
-            <input type="file" id="v6ImgInput" multiple accept="image/*" style="display:none">
-            <div id="v6ImgList" style="margin-top:8px;font-size:11px;color:var(--text-muted);max-height:150px;overflow-y:auto"></div>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><span>🎙 Audio Voiceover</span></div>
-          <div class="panel-body">
-            <input type="file" id="v6AudioInput" accept="audio/*" style="margin-bottom:10px">
-            <div id="v6AudioInfo" style="font-size:11.5px;color:var(--text-muted)">Chưa có file audio.</div>
-            <audio id="v6AudioPlayer" controls style="width:100%;margin-top:8px;display:none"></audio>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel mb-24">
-        <div class="panel-head">
-          <span>⏱ Timing các cảnh</span>
-          <button class="btn ghost sm" onclick="loadTimingFromTool2()">Load từ Tool 02</button>
-        </div>
-        <div class="panel-body">
-          <textarea id="v6Timing" style="min-height:100px;background:var(--surface-2);font-size:12px;font-family:'Be Vietnam Pro',monospace" placeholder="Mỗi dòng 1 số (giây). VD:&#10;3&#10;2&#10;5&#10;4"></textarea>
-          <div style="margin-top:6px;font-size:11.5px;color:var(--text-muted)" id="v6TimingInfo">0 cảnh, 0s tổng</div>
-        </div>
+        <span class="lbl">💡 Quy trình:</span> Tool 6 lấy data từ Tool 02 (cảnh, nhân vật, bối cảnh, VO) + Profile (style) → AI sinh prompt Veo 3 chi tiết cho mỗi cảnh. <strong>Bạn paste prompt vào Veo 3 thủ công</strong> — không gọi API trực tiếp để control budget.
       </div>
 
       <div class="grid-3 mb-24">
         <div>
-          <label class="label">KÍCH THƯỚC VIDEO</label>
-          <select id="v6Resolution">
-            <option value="1280x720">720p (1280×720)</option>
-            <option value="1920x1080" selected>1080p (1920×1080)</option>
+          <label class="label">THỜI LƯỢNG MỖI CẢNH</label>
+          <select id="v6Duration">
+            <option value="auto" selected>Tự động (theo VO)</option>
+            <option value="4">4 giây</option>
+            <option value="6">6 giây</option>
+            <option value="8">8 giây (max Veo 3)</option>
           </select>
         </div>
         <div>
-          <label class="label">FPS</label>
-          <select id="v6Fps">
-            <option value="24">24</option>
-            <option value="30" selected>30</option>
+          <label class="label">TỶ LỆ KHUNG HÌNH</label>
+          <select id="v6AspectRatio">
+            <option value="16:9" selected>16:9 (landscape)</option>
+            <option value="9:16">9:16 (portrait/reels)</option>
+            <option value="1:1">1:1 (square)</option>
           </select>
         </div>
         <div>
-          <label class="label">CAMERA EFFECT</label>
-          <select id="v6Effect">
-            <option value="none">Không (ảnh tĩnh)</option>
-            <option value="kenburns" selected>Ken Burns (zoom nhẹ)</option>
+          <label class="label">AUDIO TRONG VIDEO</label>
+          <select id="v6AudioMode">
+            <option value="none" selected>Không (chỉ video)</option>
+            <option value="ambient">Ambient music + SFX</option>
+            <option value="dialog">Music + SFX + Lời thoại VO</option>
           </select>
         </div>
       </div>
 
-      <div class="actions mb-24">
-        <button class="btn primary" onclick="buildAllClips()">🎬 Tạo tất cả clips</button>
-        <button class="btn" onclick="buildMergedVideo()">🎞 Ghép thành 1 video</button>
-        <button class="btn ghost" onclick="downloadAllClips()">↓ Tải ZIP clips</button>
+      <div class="actions">
+        <button class="btn teal" onclick="loadDataForVeo()">📥 Load từ Tool 02</button>
+        <button class="btn primary" onclick="genVeoPrompts()">✨ Sinh Prompt Veo 3</button>
+        <button class="btn" onclick="copyAllVeoPrompts()">📋 Sao chép tất cả</button>
+        <button class="btn ghost" onclick="exportVeoPrompts()">↓ Xuất JSON</button>
+        <div class="batch-control"><span>Batch:</span><input type="number" id="v6BatchSize" value="5" min="1" max="20"></div>
       </div>
 
-      <div style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <span style="font-size:11.5px;color:var(--text-muted)" id="v6ProgressText">Sẵn sàng</span>
-          <span style="font-size:11.5px;color:var(--accent);font-weight:600" id="v6ProgressPct"></span>
-        </div>
-        <div style="background:var(--surface-2);border-radius:4px;height:8px;overflow:hidden">
-          <div id="v6ProgressBar" style="background:var(--accent);height:100%;width:0%;transition:width .3s"></div>
-        </div>
+      <div class="status-bar" id="status6">Sẵn sàng. Load cảnh từ Tool 02 rồi bấm Sinh Prompt.</div>
+
+      <div class="stats">
+        <div class="stat"><div class="k">Cảnh</div><div class="v" id="v6StatScenes">0</div></div>
+        <div class="stat"><div class="k">Prompt đã sinh</div><div class="v dim" id="v6StatPrompts">0</div></div>
+        <div class="stat"><div class="k">Tổng giây video</div><div class="v" id="v6StatDur">0s</div></div>
       </div>
 
-      <div class="status-bar" id="status6">Sẵn sàng. Upload ảnh + audio, load timing rồi bấm Tạo Clips.</div>
-
-      <div class="panel" id="v6ClipsPanel" style="display:none">
-        <div class="panel-head"><span>📹 Clips đã tạo</span><span class="count" id="v6ClipCount">0</span></div>
-        <div id="v6ClipsList" style="padding:14px;max-height:500px;overflow-y:auto"></div>
+      <div class="panel">
+        <div class="panel-head">
+          <span><span class="led"></span>PROMPT VEO 3 CHO TỪNG CẢNH</span>
+          <span class="count" id="v6PromptCount">0 / 0</span>
+        </div>
+        <div id="v6PromptsList" class="prompts-list" style="max-height:none">
+          <div class="empty-state">Chưa có prompt. Bấm Sinh Prompt Veo 3 ở trên.</div>
+        </div>
       </div>
     </div>
 
@@ -1316,7 +1285,8 @@ const state = {
   charactersV: [],
   backgroundsV: [],
   tool: 'tool1',
-  sub: 'list'
+  sub: 'list',
+  cancelRequested: false
 };
 
 /* ============================================================
@@ -2073,7 +2043,17 @@ function setStatusBar(id, msg, type = 'info'){
   const bar = document.getElementById(id);
   if (!bar) return;
   bar.className = 'status-bar' + (type !== 'info' ? ' ' + type : '');
-  bar.innerHTML = (type === 'working' ? '<span class="spinner"></span>' : '') + escapeHtml(msg);
+  const spinner = type === 'working' ? '<span class="spinner"></span>' : '';
+  const cancelBtn = type === 'working'
+    ? '<button class="btn ghost sm" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="requestCancel()">⏸ Dừng</button>'
+    : '';
+  bar.innerHTML = spinner + '<span style="flex:1">' + escapeHtml(msg) + '</span>' + cancelBtn;
+}
+function requestCancel(){
+  state.cancelRequested = true;
+}
+function clearCancel(){
+  state.cancelRequested = false;
 }
 const setStatus1 = (m, t) => setStatusBar('status1', m, t);
 const setStatus2 = (m, t) => setStatusBar('status2', m, t);
@@ -2175,7 +2155,13 @@ async function splitScenesSmart(text, min, max){
     else cur = cur ? cur + '\n\n' + p : p;
   }
   if (cur) batches.push(cur);
+  clearCancel();
   for (let bi = 0; bi < batches.length; bi++) {
+    if (state.cancelRequested) {
+      clearCancel();
+      setStatus2(`⏸ Đã dừng. Đã chia được ${all.length} cảnh.`, 'info');
+      return all;
+    }
     setStatus2(`AI đang chia cảnh... (phần ${bi + 1}/${batches.length})`, 'working');
     const prompt = `Bạn là biên tập video. Chia đoạn kịch bản sau thành các cảnh riêng biệt cho sản xuất video ảnh.
 
@@ -2282,8 +2268,15 @@ async function doAssign(){
 
   const bs = parseInt(document.getElementById('batchSize').value) || 5;
   setStatus2('AI đang gán nhân vật + bối cảnh...', 'working');
+  clearCancel();
   try {
     for (let i = 0; i < state.scenes.length; i += bs) {
+      if (state.cancelRequested) {
+        clearCancel();
+        setStatus2(`⏸ Đã dừng tại ${i}/${state.scenes.length}. Kết quả được giữ lại.`, 'info');
+        saveState();
+        return;
+      }
       const batch = state.scenes.slice(i, i + bs);
       const prompt = `Gán nhân vật + bối cảnh + góc camera cho mỗi cảnh.
 
@@ -2333,10 +2326,17 @@ async function doGenerateScenePrompts(){
   if (!p) return setStatus2('Cần Profile trước.', 'error');
 
   setStatus2('AI đang sinh prompt G-Labs...', 'working');
+  clearCancel();
   const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}`;
 
   try {
     for (let i = 0; i < state.scenes.length; i += bs) {
+      if (state.cancelRequested) {
+        clearCancel();
+        setStatus2(`⏸ Đã dừng tại ${i}/${state.scenes.length}. Prompts đã tạo được giữ lại.`, 'info');
+        saveState();
+        return;
+      }
       const batch = state.scenes.slice(i, i + bs);
       const charCtx = state.charactersV.map(c => '- ' + c).join('\n');
       const bgCtx = state.backgroundsV.map(b => '- ' + b).join('\n');
@@ -2703,10 +2703,17 @@ async function genAllAssetPrompts(){
   setStatus3('AI đang tạo prompt reference sheets...', 'working');
   state.assetCharPrompts = {};
   state.assetBgPrompts = {};
+  clearCancel();
 
   try {
     // Character prompts (use Vision if image available)
     for (const name of chars) {
+      if (state.cancelRequested) {
+        clearCancel();
+        setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật.`, 'info');
+        saveState();
+        return;
+      }
       const img = state.characterImages?.[name];
       let promptText;
       if (img) {
@@ -2750,6 +2757,12 @@ Yêu cầu:
 
     // Background prompts
     for (const name of bgs) {
+      if (state.cancelRequested) {
+        clearCancel();
+        setStatus3(`⏸ Đã dừng. ${chars.length} prompt nhân vật + ${Object.keys(state.assetBgPrompts).length}/${bgs.length} prompt bối cảnh đã tạo.`, 'info');
+        saveState();
+        return;
+      }
       const promptText = `Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
 
 Style template:
@@ -3180,8 +3193,15 @@ async function searchAllScenes(){
   if (state.scenes.length === 0) return setStatus5('Cần load cảnh trước.', 'error');
   if (!getPexelsKey()) return setStatus5('Cần Pexels API key.', 'error');
   setStatus5('Đang tìm media cho tất cả cảnh...', 'working');
+  clearCancel();
 
   for (let i = 0; i < state.scenes.length; i++) {
+    if (state.cancelRequested) {
+      clearCancel();
+      document.getElementById('searchProgress').textContent = '';
+      setStatus5(`⏸ Đã dừng tại cảnh ${i + 1}/${state.scenes.length}. Kết quả đã tìm được giữ lại.`, 'info');
+      return;
+    }
     document.getElementById('searchProgress').textContent = `${i + 1}/${state.scenes.length}`;
     await searchForScene(state.scenes[i].id);
     await new Promise(r => setTimeout(r, 200));
@@ -3224,273 +3244,200 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ============================================================
-   TOOL 06 — TẠO VIDEO (FFmpeg.wasm)
+   TOOL 06 — PROMPT VEO 3
 ============================================================ */
 const setStatus6 = (m, t) => setStatusBar('status6', m, t);
-const videoBuilder = { images: [], audioFile: null, clips: [], ffmpegLoaded: false, ffmpeg: null };
 
-// Local impl, không phụ thuộc FFmpegUtil (script CDN đôi khi không load được do COEP)
-async function _toBlobURL(url, type){
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('Fetch failed: ' + url);
-  const buf = await r.arrayBuffer();
-  return URL.createObjectURL(new Blob([buf], { type }));
-}
-async function _fetchFile(file){
-  if (file instanceof File || file instanceof Blob) {
-    return new Uint8Array(await file.arrayBuffer());
-  }
-  if (typeof file === 'string') {
-    const r = await fetch(file);
-    return new Uint8Array(await r.arrayBuffer());
-  }
-  return file;
+// state.veoPrompts = { sceneId: { prompt, audio } }
+if (!state.veoPrompts) state.veoPrompts = {};
+
+function loadDataForVeo(){
+  if (state.scenes.length === 0) return setStatus6('Tool 02 chưa có cảnh. Chia cảnh trước.', 'error');
+  renderVeoStats();
+  renderVeoPrompts();
+  setStatus6(`✓ Đã load ${state.scenes.length} cảnh từ Tool 02.`, 'ok');
 }
 
-function setupVideoBuilder(){
-  const dz = document.getElementById('v6ImgDrop');
-  if (!dz) return;
-  const inp = document.getElementById('v6ImgInput');
-  dz.addEventListener('click', () => inp.click());
-  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
-  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
-  dz.addEventListener('drop', e => {
-    e.preventDefault(); dz.classList.remove('dragover');
-    addVideoImages(Array.from(e.dataTransfer.files));
-  });
-  inp.addEventListener('change', e => addVideoImages(Array.from(e.target.files)));
+function renderVeoStats(){
+  document.getElementById('v6StatScenes').textContent = state.scenes.length;
+  const promptCount = Object.keys(state.veoPrompts || {}).length;
+  const sp = document.getElementById('v6StatPrompts');
+  sp.textContent = promptCount;
+  sp.className = 'v ' + (promptCount === state.scenes.length && promptCount > 0 ? 'green' : (promptCount > 0 ? '' : 'dim'));
 
-  document.getElementById('v6AudioInput').addEventListener('change', function(){
-    if (!this.files[0]) return;
-    videoBuilder.audioFile = this.files[0];
-    document.getElementById('v6AudioInfo').textContent = '✓ ' + this.files[0].name + ' (' + Math.round(this.files[0].size / 1024) + 'KB)';
-    const player = document.getElementById('v6AudioPlayer');
-    player.src = URL.createObjectURL(this.files[0]);
-    player.style.display = 'block';
-  });
-
-  document.getElementById('v6Timing').addEventListener('input', updateTimingInfo);
-}
-
-function addVideoImages(files){
-  const imgs = files.filter(f => f.type.startsWith('image/'))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  videoBuilder.images = videoBuilder.images.concat(imgs)
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  document.getElementById('v6ImgCount').textContent = videoBuilder.images.length + ' ảnh';
-  document.getElementById('v6ImgList').innerHTML = videoBuilder.images.map((f, i) =>
-    `<div style="padding:2px 0">${String(i + 1).padStart(3, '0')} — ${escapeHtml(f.name)}</div>`
-  ).join('');
-}
-
-function loadTimingFromTool2(){
-  if (state.scenes.length === 0) return setStatus6('Tool 02 chưa có cảnh.', 'error');
-  document.getElementById('v6Timing').value = state.scenes.map(s => s.duration).join('\n');
-  updateTimingInfo();
-  setStatus6(`✓ Đã load timing ${state.scenes.length} cảnh.`, 'ok');
-}
-
-function updateTimingInfo(){
-  const durations = document.getElementById('v6Timing').value.split('\n')
-    .map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
-  const total = durations.reduce((a, b) => a + b, 0);
-  document.getElementById('v6TimingInfo').textContent =
-    durations.length + ' cảnh, ' + Math.round(total) + 's tổng (~' + Math.round(total / 60) + 'p)';
-}
-
-async function loadFFmpeg(){
-  if (videoBuilder.ffmpegLoaded) return;
-  setStatus6('Đang tải FFmpeg.wasm (~30MB lần đầu)...', 'working');
-  setProgress(0, 'Đang tải FFmpeg...');
-  try {
-    // Check global trước
-    if (typeof FFmpegWASM === 'undefined') {
-      throw new Error('FFmpegWASM global chưa load. Script @ffmpeg/ffmpeg có thể bị COEP/CORS chặn. Mở DevTools (F12) → Console xem chi tiết.');
+  const durMode = document.getElementById('v6Duration').value;
+  let totalDur = 0;
+  for (const s of state.scenes) {
+    if (durMode === 'auto') {
+      totalDur += Math.min(s.duration, 8); // Veo 3 max 8s
+    } else {
+      totalDur += parseInt(durMode);
     }
-    if (!FFmpegWASM.FFmpeg) {
-      throw new Error('FFmpegWASM.FFmpeg không tồn tại. FFmpegWASM = ' + JSON.stringify(Object.keys(FFmpegWASM)));
-    }
-    const { FFmpeg } = FFmpegWASM;
-    videoBuilder.ffmpeg = new FFmpeg();
-    videoBuilder.ffmpeg.on('progress', ({ progress }) => {
-      setProgress(Math.round(progress * 100), 'Đang xử lý...');
-    });
-    videoBuilder.ffmpeg.on('log', ({ message }) => {
-      console.log('[FFmpeg]', message);
-    });
-    // FFmpeg 0.12 spawn Worker từ URL cross-origin → bị browser chặn.
-    // Fix: fetch script + convert blob URL (same-origin) trước khi load.
-    const ffmpegBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
-    const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
-    setStatus6('Đang tải FFmpeg worker (~50KB)...', 'working');
-    const classWorkerURL = await _toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript');
-    setStatus6('Đang tải FFmpeg core (~100KB)...', 'working');
-    const coreURL = await _toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript');
-    setStatus6('Đang tải FFmpeg wasm (~30MB, đợi 10-60 giây)...', 'working');
-    const wasmURL = await _toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm');
-    setStatus6('Đang khởi tạo FFmpeg engine...', 'working');
-    await videoBuilder.ffmpeg.load({ classWorkerURL, coreURL, wasmURL });
-    videoBuilder.ffmpegLoaded = true;
-    setStatus6('✓ FFmpeg.wasm đã sẵn sàng.', 'ok');
-  } catch (e) {
-    console.error('FFmpeg load error:', e);
-    const msg = e?.message || e?.toString() || JSON.stringify(e) || 'Unknown error';
-    setStatus6('Lỗi tải FFmpeg: ' + msg, 'error');
-    throw e;
   }
+  document.getElementById('v6StatDur').textContent = totalDur + 's (~' + Math.round(totalDur / 60) + 'p)';
+  document.getElementById('v6PromptCount').textContent = `${promptCount} / ${state.scenes.length}`;
 }
 
-function setProgress(pct, text){
-  document.getElementById('v6ProgressBar').style.width = pct + '%';
-  document.getElementById('v6ProgressPct').textContent = pct > 0 ? pct + '%' : '';
-  if (text) document.getElementById('v6ProgressText').textContent = text;
+function getSceneDuration(scene){
+  const mode = document.getElementById('v6Duration').value;
+  if (mode === 'auto') return Math.min(scene.duration, 8); // max 8s for Veo 3
+  return parseInt(mode);
 }
 
-async function buildAllClips(){
-  const durations = document.getElementById('v6Timing').value.split('\n')
-    .map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
-  if (!videoBuilder.images.length) return setStatus6('Cần upload ảnh.', 'error');
-  if (!videoBuilder.audioFile) return setStatus6('Cần upload file audio VO.', 'error');
-  if (!durations.length) return setStatus6('Cần timing. Bấm Load từ Tool 02.', 'error');
+async function genVeoPrompts(){
+  if (state.scenes.length === 0) return setStatus6('Cần load cảnh từ Tool 02 trước.', 'error');
+  const p = getProfile();
+  if (!p) return setStatus6('Cần Profile (Tool 1) trước.', 'error');
 
-  const count = Math.min(videoBuilder.images.length, durations.length);
+  const bs = parseInt(document.getElementById('v6BatchSize').value) || 5;
+  const aspectRatio = document.getElementById('v6AspectRatio').value;
+  const audioMode = document.getElementById('v6AudioMode').value;
+  const audioInstructions = {
+    'none': 'KHÔNG thêm dòng audio. Chỉ tả visual.',
+    'ambient': 'Thêm dòng "Audio: [mô tả ambient music + sfx phù hợp scene]" cuối prompt.',
+    'dialog': 'Thêm dòng "Audio: [nhân vật] says \'[VO text dịch sang ngôn ngữ phù hợp]\'. Background: [music + sfx]" cuối prompt.'
+  }[audioMode];
+
+  setStatus6('AI đang sinh prompt Veo 3...', 'working');
+  clearCancel();
+
+  const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nVisual Style: ${p.visualStyle}\nPOV: ${p.povStyle}\nScene Aesthetic: ${p.sceneStyle || PRESET.sceneStyle}\nRules: ${p.promptRules || ''}`;
 
   try {
-    await loadFFmpeg();
-    const ffmpeg = videoBuilder.ffmpeg;
-    const fetchFile = _fetchFile;
-    const res = document.getElementById('v6Resolution').value;
-    const [w, h] = res.split('x');
-    const fps = document.getElementById('v6Fps').value;
+    for (let i = 0; i < state.scenes.length; i += bs) {
+      if (state.cancelRequested) {
+        clearCancel();
+        const done = Object.keys(state.veoPrompts).length;
+        setStatus6(`⏸ Đã dừng tại ${i}/${state.scenes.length}. ${done} prompt đã sinh được giữ lại.`, 'info');
+        saveState();
+        return;
+      }
+      const batch = state.scenes.slice(i, i + bs);
+      const charCtx = state.charactersV.length ? state.charactersV.map(c => '- ' + c).join('\n') : '(không có)';
+      const bgCtx = state.backgroundsV.length ? state.backgroundsV.map(b => '- ' + b).join('\n') : '(không có)';
 
-    setStatus6('Đang xử lý audio...', 'working');
-    await ffmpeg.writeFile('audio.mp3', await fetchFile(videoBuilder.audioFile));
+      const prompt = `Bạn là Veo 3 prompt engineer chuyên nghiệp. Tạo prompt video cho mỗi cảnh.
 
-    videoBuilder.clips = [];
-    let timeOffset = 0;
+PROFILE KÊNH:
+${profileContext}
 
-    for (let i = 0; i < count; i++) {
-      const num = String(i + 1).padStart(3, '0');
-      const dur = durations[i];
-      setProgress(Math.round((i / count) * 100), `Clip ${num} (${i + 1}/${count})...`);
-      setStatus6(`Đang tạo clip ${num} (${i + 1}/${count})...`, 'working');
+NHÂN VẬT (dùng [tên-nhân-vật] trong prompt):
+${charCtx}
 
-      const imgData = await fetchFile(videoBuilder.images[i]);
-      await ffmpeg.writeFile('img_' + num + '.png', imgData);
+BỐI CẢNH (dùng [tên-bối-cảnh] trong prompt):
+${bgCtx}
 
-      // Extract audio segment
-      await ffmpeg.exec(['-i', 'audio.mp3', '-ss', String(timeOffset), '-t', String(dur), '-c', 'copy', 'seg_' + num + '.mp3']);
+CẤU HÌNH:
+- Aspect ratio: ${aspectRatio}
+- Audio: ${audioMode === 'none' ? 'KHÔNG' : audioMode === 'ambient' ? 'CÓ (music + sfx, không dialog)' : 'CÓ (music + sfx + dialog)'}
 
-      // Build clip
-      await ffmpeg.exec([
-        '-loop', '1', '-i', 'img_' + num + '.png',
-        '-i', 'seg_' + num + '.mp3',
-        '-c:v', 'libx264', '-tune', 'stillimage',
-        '-c:a', 'aac', '-b:a', '192k',
-        '-vf', 'scale=' + w + ':' + h + ':force_original_aspect_ratio=decrease,pad=' + w + ':' + h + ':(ow-iw)/2:(oh-ih)/2:black',
-        '-pix_fmt', 'yuv420p',
-        '-r', fps,
-        '-shortest',
-        '-t', String(dur),
-        'clip_' + num + '.mp4'
-      ]);
+Yêu cầu prompt Veo 3 cho mỗi cảnh:
+1. **Subject + Action**: ai/cái gì đang làm gì (mô tả CHUYỂN ĐỘNG cụ thể, không chỉ pose tĩnh)
+2. **Setting**: bối cảnh đặt trong [ngoặc] nếu có trong list, không thì miêu tả
+3. **Camera**: shot type (close-up/medium/wide) + camera movement (static/dolly in/pan left/tracking/handheld)
+4. **Lighting + Mood**: ánh sáng + atmosphere
+5. **Style**: ${p.sceneStyle || '2D animated style'}, consistent với cả video
+${audioInstructions}
 
-      const clipData = await ffmpeg.readFile('clip_' + num + '.mp4');
-      const blob = new Blob([clipData], { type: 'video/mp4' });
-      videoBuilder.clips.push({ name: 'clip_' + num + '.mp4', blob, duration: dur });
+Quy tắc:
+- TIẾNG ANH (cho Veo 3)
+- 70-130 từ/prompt
+- Mô tả động (chuyển động), không tĩnh
+- Nhân vật là NGƯỜI: [tên-nhân-vật]. Động vật miêu tả bình thường.
+- Bối cảnh: [tên-bối-cảnh] hoặc tả tự do
+- KHÔNG dùng cảm xúc trừu tượng ("beautifully", "magnificent"), dùng mô tả cụ thể
 
-      // Cleanup intermediate files
-      await ffmpeg.deleteFile('img_' + num + '.png');
-      await ffmpeg.deleteFile('seg_' + num + '.mp3');
-      await ffmpeg.deleteFile('clip_' + num + '.mp4');
+Trả về CHỈ JSON array:
+[{"id":"001","prompt":"prompt text đầy đủ với audio cue ở cuối nếu có"}, ...]
 
-      timeOffset += dur;
+CÁC CẢNH:
+${batch.map(s => {
+  const dur = getSceneDuration(s);
+  const gLabsPrompt = state.scenePrompts[s.id] ? `\n  G-Labs prompt (tham khảo style): ${state.scenePrompts[s.id].slice(0, 200)}` : '';
+  return `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | duration: ${dur}s${gLabsPrompt}`;
+}).join('\n\n')}`;
+
+      const reply = await callClaude(prompt, 4000);
+      for (const x of parseJSON(reply)) {
+        state.veoPrompts[x.id] = { prompt: x.prompt };
+      }
+      renderVeoPrompts();
+      renderVeoStats();
+      setStatus6(`Tạo prompt Veo 3... ${Math.min(i + bs, state.scenes.length)}/${state.scenes.length}`, 'working');
     }
-
-    setProgress(100, 'Hoàn tất!');
-    setStatus6(`✓ Đã tạo ${count} clips.`, 'ok');
-    renderClipsList();
+    setStatus6(`✓ Đã sinh ${state.scenes.length} prompt Veo 3.`, 'ok');
+    saveState();
   } catch (e) {
     console.error(e);
-    setStatus6('Lỗi: ' + e.message, 'error');
-    setProgress(0, 'Lỗi');
+    setStatus6('Lỗi: ' + (e.message || e), 'error');
   }
 }
 
-async function buildMergedVideo(){
-  if (!videoBuilder.clips.length) {
-    await buildAllClips();
-    if (!videoBuilder.clips.length) return;
+function renderVeoPrompts(){
+  const box = document.getElementById('v6PromptsList');
+  if (!box) return;
+  if (state.scenes.length === 0) {
+    box.innerHTML = '<div class="empty-state">Chưa có cảnh. Load từ Tool 02 trước.</div>';
+    return;
   }
-  setStatus6('Đang ghép tất cả clips thành 1 video...', 'working');
-
-  try {
-    const ffmpeg = videoBuilder.ffmpeg;
-    const fetchFile = _fetchFile;
-
-    let concatList = '';
-    for (let i = 0; i < videoBuilder.clips.length; i++) {
-      const name = 'merge_' + String(i).padStart(3, '0') + '.mp4';
-      await ffmpeg.writeFile(name, await fetchFile(videoBuilder.clips[i].blob));
-      concatList += "file '" + name + "'\n";
-    }
-    await ffmpeg.writeFile('list.txt', new TextEncoder().encode(concatList));
-    await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4']);
-
-    const data = await ffmpeg.readFile('output.mp4');
-    const blob = new Blob([data], { type: 'video/mp4' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'video-output.mp4'; a.click();
-    URL.revokeObjectURL(url);
-
-    for (let i = 0; i < videoBuilder.clips.length; i++) {
-      await ffmpeg.deleteFile('merge_' + String(i).padStart(3, '0') + '.mp4');
-    }
-    await ffmpeg.deleteFile('list.txt');
-    await ffmpeg.deleteFile('output.mp4');
-
-    setStatus6('✓ Đã tải video hoàn chỉnh!', 'ok');
-  } catch (e) {
-    console.error(e);
-    setStatus6('Lỗi ghép video: ' + e.message, 'error');
-  }
-}
-
-function renderClipsList(){
-  const panel = document.getElementById('v6ClipsPanel');
-  const list = document.getElementById('v6ClipsList');
-  if (!panel || !list) return;
-  panel.style.display = 'block';
-  document.getElementById('v6ClipCount').textContent = videoBuilder.clips.length;
-  list.innerHTML = videoBuilder.clips.map((c, i) => {
-    const url = URL.createObjectURL(c.blob);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-      <span style="color:var(--accent);font-weight:600;width:60px">${c.name.replace('clip_', '').replace('.mp4', '')}</span>
-      <video src="${url}" style="height:60px;border-radius:4px" preload="metadata"></video>
-      <span style="color:var(--text-muted);font-size:11.5px">${c.duration}s · ${Math.round(c.blob.size / 1024)}KB</span>
-      <a href="${url}" download="${c.name}" class="btn ghost sm" style="margin-left:auto">↓ Tải</a>
+  box.innerHTML = state.scenes.map(s => {
+    const entry = state.veoPrompts?.[s.id];
+    const p = entry?.prompt;
+    const dur = getSceneDuration(s);
+    const promptEsc = p ? p.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
+    return `<div class="prompt-card ${p ? '' : 'empty'}">
+      <div class="prompt-card-head">
+        <span class="prompt-card-id">[${s.id}]</span>
+        <span class="prompt-card-meta">${escapeHtml(s.character) || '—'} · ${escapeHtml(s.background) || '—'} · ${s.camera} · ${dur}s</span>
+      </div>
+      <div class="prompt-card-vo">VO: "${escapeHtml(s.text)}"</div>
+      <div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt. Bấm Sinh Prompt Veo 3.'}</div>
+      ${p ? `<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button></div>` : ''}
     </div>`;
   }).join('');
 }
 
-async function downloadAllClips(){
-  if (!videoBuilder.clips.length) return setStatus6('Chưa có clips. Bấm Tạo Tất Cả Clips trước.', 'error');
-  if (typeof JSZip === 'undefined') return setStatus6('JSZip chưa tải.', 'error');
-  const zip = new JSZip();
-  for (const c of videoBuilder.clips) {
-    zip.file(c.name, await c.blob.arrayBuffer());
-  }
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'clips-' + Date.now() + '.zip'; a.click();
-  URL.revokeObjectURL(url);
-  setStatus6(`✓ Đã tải ZIP ${videoBuilder.clips.length} clips.`, 'ok');
+function copyAllVeoPrompts(){
+  const all = state.scenes.map(s => {
+    const entry = state.veoPrompts?.[s.id];
+    return entry?.prompt ? `[${s.id}] ${entry.prompt}` : '';
+  }).filter(Boolean).join('\n\n---\n\n');
+  if (!all) return setStatus6('Chưa có prompt nào.', 'error');
+  navigator.clipboard.writeText(all);
+  setStatus6(`✓ Đã sao chép ${Object.keys(state.veoPrompts).length} prompt Veo 3.`, 'ok');
 }
 
+function exportVeoPrompts(){
+  const data = state.scenes.map(s => {
+    const entry = state.veoPrompts?.[s.id];
+    return {
+      id: s.id,
+      vo: s.text,
+      character: s.character,
+      background: s.background,
+      camera: s.camera,
+      duration: getSceneDuration(s),
+      veo3_prompt: entry?.prompt || null
+    };
+  });
+  downloadJSON({
+    profile: getProfile()?.tenKenh || '',
+    aspectRatio: document.getElementById('v6AspectRatio').value,
+    audioMode: document.getElementById('v6AudioMode').value,
+    scenes: data,
+    exportedAt: new Date().toISOString()
+  }, 'veo3-prompts-' + Date.now() + '.json');
+  setStatus6('✓ Đã xuất JSON.', 'ok');
+}
+
+// Auto-update stats when settings change
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(setupVideoBuilder, 100);
+  setTimeout(() => {
+    ['v6Duration', 'v6AspectRatio', 'v6AudioMode'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', () => { renderVeoStats(); renderVeoPrompts(); });
+    });
+  }, 200);
 });
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 5 loaded (cloud sync hoàn chỉnh).');
