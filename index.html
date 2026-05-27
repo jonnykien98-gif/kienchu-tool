@@ -3304,27 +3304,39 @@ async function loadFFmpeg(){
   setStatus6('Đang tải FFmpeg.wasm (~30MB lần đầu)...', 'working');
   setProgress(0, 'Đang tải FFmpeg...');
   try {
+    // Check global trước
+    if (typeof FFmpegWASM === 'undefined') {
+      throw new Error('FFmpegWASM global chưa load. Script @ffmpeg/ffmpeg có thể bị COEP/CORS chặn. Mở DevTools (F12) → Console xem chi tiết.');
+    }
+    if (!FFmpegWASM.FFmpeg) {
+      throw new Error('FFmpegWASM.FFmpeg không tồn tại. FFmpegWASM = ' + JSON.stringify(Object.keys(FFmpegWASM)));
+    }
     const { FFmpeg } = FFmpegWASM;
     videoBuilder.ffmpeg = new FFmpeg();
     videoBuilder.ffmpeg.on('progress', ({ progress }) => {
       setProgress(Math.round(progress * 100), 'Đang xử lý...');
     });
+    videoBuilder.ffmpeg.on('log', ({ message }) => {
+      console.log('[FFmpeg]', message);
+    });
     // FFmpeg 0.12 spawn Worker từ URL cross-origin → bị browser chặn.
     // Fix: fetch script + convert blob URL (same-origin) trước khi load.
     const ffmpegBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
     const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
-    setStatus6('Đang tải FFmpeg worker...', 'working');
+    setStatus6('Đang tải FFmpeg worker (~50KB)...', 'working');
     const classWorkerURL = await _toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript');
-    setStatus6('Đang tải FFmpeg core...', 'working');
+    setStatus6('Đang tải FFmpeg core (~100KB)...', 'working');
     const coreURL = await _toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript');
-    setStatus6('Đang tải FFmpeg wasm (~30MB)...', 'working');
+    setStatus6('Đang tải FFmpeg wasm (~30MB, đợi 10-60 giây)...', 'working');
     const wasmURL = await _toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm');
+    setStatus6('Đang khởi tạo FFmpeg engine...', 'working');
     await videoBuilder.ffmpeg.load({ classWorkerURL, coreURL, wasmURL });
     videoBuilder.ffmpegLoaded = true;
     setStatus6('✓ FFmpeg.wasm đã sẵn sàng.', 'ok');
   } catch (e) {
-    console.error(e);
-    setStatus6('Lỗi tải FFmpeg: ' + e.message, 'error');
+    console.error('FFmpeg load error:', e);
+    const msg = e?.message || e?.toString() || JSON.stringify(e) || 'Unknown error';
+    setStatus6('Lỗi tải FFmpeg: ' + msg, 'error');
     throw e;
   }
 }
