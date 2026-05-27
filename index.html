@@ -3287,14 +3287,22 @@ async function loadFFmpeg(){
   setProgress(0, 'Đang tải FFmpeg...');
   try {
     const { FFmpeg } = FFmpegWASM;
+    const { toBlobURL } = FFmpegUtil;
     videoBuilder.ffmpeg = new FFmpeg();
     videoBuilder.ffmpeg.on('progress', ({ progress }) => {
       setProgress(Math.round(progress * 100), 'Đang xử lý...');
     });
-    await videoBuilder.ffmpeg.load({
-      coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-      wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
-    });
+    // FFmpeg 0.12 spawn Worker từ URL cross-origin → bị browser chặn.
+    // Fix: fetch script + convert blob URL (same-origin) trước khi load.
+    const ffmpegBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+    const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+    setStatus6('Đang tải FFmpeg worker...', 'working');
+    const classWorkerURL = await toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript');
+    setStatus6('Đang tải FFmpeg core...', 'working');
+    const coreURL = await toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript');
+    setStatus6('Đang tải FFmpeg wasm (~30MB)...', 'working');
+    const wasmURL = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm');
+    await videoBuilder.ffmpeg.load({ classWorkerURL, coreURL, wasmURL });
     videoBuilder.ffmpegLoaded = true;
     setStatus6('✓ FFmpeg.wasm đã sẵn sàng.', 'ok');
   } catch (e) {
