@@ -2765,28 +2765,51 @@ function migrateProfiles(){
 
 // Re-render tất cả UI sau khi switch profile / load
 function rerenderAllAfterProfileLoad(){
-  const sc = document.getElementById('script'); if (sc) sc.value = state.script || '';
+  // Script textarea (Tool 2) — ID đúng là scriptInput
+  const sc = document.getElementById('scriptInput'); if (sc) sc.value = state.script || '';
+  // Prescan output textareas (Tool 2)
+  const csIn = document.getElementById('charsInputV'); if (csIn) csIn.value = (state.charactersV || []).join('\n');
+  const bgIn = document.getElementById('bgInputV'); if (bgIn) bgIn.value = (state.backgroundsV || []).join('\n');
+  // Tool 3 char/bg textareas
+  const charTA = document.getElementById('t3Characters'); if (charTA) charTA.value = (state.charactersV || []).join('\n');
+  const bgTA = document.getElementById('t3Backgrounds'); if (bgTA) bgTA.value = (state.backgroundsV || []).join('\n');
+  // Tool 3 Style Prompts (display, từ profile object)
+  const p = getProfile();
+  const t3CS = document.getElementById('t3CharStyle'); if (t3CS) t3CS.value = p?.characterStyle || '';
+  const t3BS = document.getElementById('t3BgStyle'); if (t3BS) t3BS.value = p?.backgroundStyle || '';
+  const t3SS = document.getElementById('t3SceneStyle'); if (t3SS) t3SS.value = p?.sceneStyle || '';
+  const t3PR = document.getElementById('t3PromptRules'); if (t3PR) t3PR.value = p?.promptRules || '';
+  // Tool 3 Visual Style/Ngạch/POV
+  const t3Vs = document.getElementById('t3VisualStyle'); if (t3Vs) t3Vs.value = p?.visualStyle || '';
+  const t3Ng = document.getElementById('t3Ngach'); if (t3Ng) t3Ng.value = p?.ngach || '';
+  const t3Pv = document.getElementById('t3PovStyle'); if (t3Pv) t3Pv.value = p?.povStyle || '';
+  // Tool 2 visual style readonly
+  const v2 = document.getElementById('visualStyle2'); if (v2) v2.value = p?.visualStyle || '';
+  // Tool 6 Veo settings
+  const v6Vs = document.getElementById('v6VisualStyle'); if (v6Vs) v6Vs.value = p?.visualStyle || '';
+  // Unified textareas + lists
   if (typeof renderAllT2 === 'function') renderAllT2();
-  if (typeof renderPromptsV === 'function') renderPromptsV();
-  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
   if (typeof renderTable === 'function') renderTable();
   if (typeof renderPreview === 'function') renderPreview();
+  if (typeof renderPromptsV === 'function') renderPromptsV();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
   if (typeof updateStats === 'function') updateStats();
   if (typeof updateAllAssetPromptsBox === 'function') updateAllAssetPromptsBox();
-  // Tool 3 lists
   if (state.charactersV?.length && typeof renderAssetCharPrompts === 'function') renderAssetCharPrompts(state.charactersV);
+  else { const cl = document.getElementById('t3CharPromptsList'); if (cl) cl.innerHTML = '<div class="empty-state">Chưa có nhân vật.</div>'; }
   if (state.backgroundsV?.length && typeof renderAssetBgPrompts === 'function') renderAssetBgPrompts(state.backgroundsV);
-  // Style ref panel
+  else { const bl = document.getElementById('t3BgPromptsList'); if (bl) bl.innerHTML = '<div class="empty-state">Chưa có bối cảnh.</div>'; }
+  // Style Reference panel
   const stPanel = document.getElementById('styleRefPanel');
   if (stPanel) stPanel.style.display = state.styleRefPrompt ? 'block' : 'none';
   if (typeof renderStyleRef === 'function') renderStyleRef();
-  // Tool 5 search results clearing
+  // Tool 5 search results
   document.querySelectorAll('[id^="media-results-"]').forEach(el => el.innerHTML = '');
-  // Tool 3 char/bg textareas
-  const charTA = document.getElementById('t3Characters');
-  if (charTA) charTA.value = (state.charactersV || []).join('\n');
-  const bgTA = document.getElementById('t3Backgrounds');
-  if (bgTA) bgTA.value = (state.backgroundsV || []).join('\n');
+  // Tool 3 character image gallery
+  if (typeof renderCharImageGallery === 'function') renderCharImageGallery();
+  if (typeof renderStyleImageGallery === 'function') renderStyleImageGallery();
+  // Char count display
+  if (typeof updateScriptCount === 'function') updateScriptCount();
   syncTool2FromProfile();
   renderProfileStyles();
 }
@@ -5338,31 +5361,22 @@ function clearAllT2(){
   state.charactersV = [];
   state.backgroundsV = [];
   state.sceneImages = {};
-  // UI clear
-  const sc = document.getElementById('script'); if (sc) sc.value = '';
-  const pv = document.getElementById('scriptPreview'); if (pv) pv.innerHTML = '<div class="empty-state">Paste kịch bản bên trái để xem trước.</div>';
-  if (typeof renderAllT2 === 'function') renderAllT2();
-  if (typeof updateStats === 'function') updateStats();
-  if (typeof renderPromptsV === 'function') renderPromptsV();
-  // Sync vào current profile workData
+  // Sync vào current profile workData TRƯỚC khi UI re-render
   syncStateToCurrentProfile();
+  // Re-render toàn bộ UI để xoá trắng các textarea
+  rerenderAllAfterProfileLoad();
   saveState(true);
   setStatus2('✓ Đã xoá hết data Tool 2 của profile hiện tại.', 'ok');
 }
 
 function clearAllT3(){
-  if (!confirm('Xoá HẾT prompt asset của profile hiện tại (nhân vật + bối cảnh + style reference + ảnh nhân vật)?')) return;
+  if (!confirm('Xoá HẾT prompt asset của profile hiện tại (nhân vật + bối cảnh + style reference + ảnh nhân vật)?\n\nStyle Prompts (Character Style, Background Style...) KHÔNG bị xoá — chúng là của Profile.')) return;
   state.assetCharPrompts = {};
   state.assetBgPrompts = {};
   state.styleRefPrompt = '';
   state.characterImages = {};
-  if (state.charactersV?.length && typeof renderAssetCharPrompts === 'function') renderAssetCharPrompts(state.charactersV);
-  if (state.backgroundsV?.length && typeof renderAssetBgPrompts === 'function') renderAssetBgPrompts(state.backgroundsV);
-  const sp = document.getElementById('styleRefPanel'); if (sp) sp.style.display = 'none';
-  if (typeof renderStyleRef === 'function') renderStyleRef();
-  if (typeof updateAllAssetPromptsBox === 'function') updateAllAssetPromptsBox();
-  if (typeof renderCharImageGallery === 'function') renderCharImageGallery();
   syncStateToCurrentProfile();
+  rerenderAllAfterProfileLoad();
   saveState(true);
   setStatus3('✓ Đã xoá hết prompt asset + ảnh ref của profile hiện tại.', 'ok');
 }
