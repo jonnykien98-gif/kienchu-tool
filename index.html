@@ -218,6 +218,9 @@ html,body{
   font-size:10.5px;font-weight:700;flex-shrink:0;
 }
 .nav-item.active .num{background:var(--accent);color:#fff}
+.nav-item.locked{opacity:.55}
+.nav-item.locked:hover{background:var(--surface-2);color:var(--text-muted)}
+.nav-item.locked .num{background:var(--surface-3);color:var(--text-dim)}
 
 /* User section (bottom) */
 .user-section{margin-top:auto;background:var(--surface-2)}
@@ -861,6 +864,12 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <div class="user-email" id="userEmail">—</div>
         </div>
       </div>
+      <div style="margin-top:10px;display:flex;justify-content:center">
+        <span id="tierBadge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#94918a;color:#fff;letter-spacing:.5px">FREE</span>
+      </div>
+      <button id="upgradeBtn" class="btn sm block" style="margin-top:8px;background:linear-gradient(135deg,#f97316,#c2410c);color:#fff;border:none;font-weight:600" onclick="showUpgradeModal()">
+        🌟 Nâng cấp Pro
+      </button>
       <div id="syncStatus" style="margin-top:8px;font-size:11px;color:var(--text-dim);text-align:center;min-height:14px">—</div>
       <button class="btn sm block ghost" style="margin-top:8px" onclick="window.firebaseSignOut()">
         Đăng xuất
@@ -1351,6 +1360,82 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
   </main>
 </div>
 
+<!-- ============ UPGRADE MODAL ============ -->
+<div id="upgradeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeUpgradeModal()">
+  <div style="background:var(--surface);border-radius:14px;padding:32px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;border:1px solid var(--border)">
+    <button onclick="closeUpgradeModal()" style="position:absolute;top:14px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text-muted);width:32px;height:32px;border-radius:6px" title="Đóng">×</button>
+
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:36px;margin-bottom:8px">🌟</div>
+      <div style="font-size:22px;font-weight:700;color:var(--text)">Nâng cấp gói Pro</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Mở khoá toàn bộ tính năng</div>
+    </div>
+
+    <div id="upgradeReason" style="background:var(--accent-soft);color:var(--accent);padding:10px 14px;border-radius:8px;font-size:12.5px;margin-bottom:20px;text-align:center;font-weight:500;border:1px solid rgba(194,65,12,.2)"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px">
+      <div style="background:var(--surface-2);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.5px;margin-bottom:8px">GÓI FREE (hiện tại)</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text)">
+          • 1 profile<br>
+          • 10 cảnh/video<br>
+          • Tool 1 + Tool 2<br>
+          • <span style="color:var(--text-dim)">Không có Asset Prompts</span><br>
+          • <span style="color:var(--text-dim)">Không có Veo 3</span><br>
+          • <span style="color:var(--text-dim)">Không có Tìm Media</span>
+        </div>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(249,115,22,.08),rgba(194,65,12,.04));border-radius:10px;padding:14px;border:2px solid var(--accent);position:relative">
+        <div style="position:absolute;top:-10px;right:10px;background:linear-gradient(135deg,#f97316,#c2410c);color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px">PRO</div>
+        <div style="font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.5px;margin-bottom:8px">GÓI PRO</div>
+        <div style="font-size:13px;line-height:1.7;color:var(--text)">
+          ✓ Profile <strong>không giới hạn</strong><br>
+          ✓ Cảnh <strong>không giới hạn</strong><br>
+          ✓ <strong>Tất cả 6 Tool</strong><br>
+          ✓ Asset Prompts + Vision<br>
+          ✓ Prompt Veo 3<br>
+          ✓ Tìm Media Pexels
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--surface-2);border-radius:10px;padding:16px;border:1px solid var(--border);margin-bottom:20px">
+      <div style="text-align:center;margin-bottom:14px">
+        <span style="font-size:28px;font-weight:800;color:var(--accent)">500.000đ</span>
+        <span style="font-size:13px;color:var(--text-muted)"> / tháng</span>
+      </div>
+
+      <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:14px">💳 THANH TOÁN</div>
+
+      <div style="display:grid;gap:10px;font-size:13px">
+        <div style="background:var(--surface);padding:10px 12px;border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">🏦 Chuyển khoản ngân hàng</div>
+          <div><strong id="payBankName">Vietcombank</strong> • <span id="payBankNum">0123456789</span></div>
+          <div style="font-size:12px;color:var(--text-muted)" id="payBankOwner">CHU VAN KIEN</div>
+        </div>
+        <div style="background:var(--surface);padding:10px 12px;border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">📱 MoMo</div>
+          <div><strong id="payMomoPhone">0901234567</strong></div>
+          <div style="font-size:12px;color:var(--text-muted)" id="payMomoOwner">CHU VAN KIEN</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:11.5px;color:var(--text-muted);text-align:center">
+        Sau khi chuyển khoản, gửi <strong>email/UID Google</strong> qua<br>
+        Zalo <strong id="payZalo">0901234567</strong> hoặc Email <strong id="payEmail">chukienmedia@gmail.com</strong><br>
+        để admin nâng cấp tài khoản (trong 24h).
+      </div>
+
+      <div style="margin-top:10px;padding:8px 10px;background:var(--accent-soft);border-radius:6px;font-size:11.5px;color:var(--accent);text-align:center">
+        UID của bạn: <code id="payUserUid" style="font-family:monospace;background:var(--surface);padding:2px 6px;border-radius:4px">—</code>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('payUserUid').textContent);this.textContent='✓ Đã copy'" style="margin-left:6px;background:none;border:1px solid var(--accent);color:var(--accent);padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">📋 Copy</button>
+      </div>
+    </div>
+
+    <button onclick="closeUpgradeModal()" class="btn block ghost" style="font-size:13px">Để sau</button>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    GLOBAL STATE
@@ -1379,7 +1464,49 @@ const state = {
   tool: 'tool1',
   sub: 'list',
   cancelRequested: false,
-  editingSceneIdx: -1
+  editingSceneIdx: -1,
+  userTier: 'free'  // 'free' | 'pro' — load từ Firestore, admin edit thủ công
+};
+
+/* ============================================================
+   TIER / PAYMENT CONFIG — BẠN SỬA Ở ĐÂY
+============================================================ */
+const TIER_CONFIG = {
+  free: {
+    name: 'Free',
+    maxProfiles: 1,
+    maxScenes: 10,
+    allowedTools: ['tool1', 'tool2'],
+    badge: { text: 'FREE', bg: '#94918a', color: '#fff' }
+  },
+  pro: {
+    name: 'Pro',
+    maxProfiles: Infinity,
+    maxScenes: Infinity,
+    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6'],
+    badge: { text: 'PRO ✨', bg: 'linear-gradient(135deg,#f97316,#c2410c)', color: '#fff' }
+  }
+};
+
+const PRICING = {
+  pro: { priceVND: 500000, period: '1 tháng' }
+};
+
+// ⚠️ SỬA INFO CHUYỂN KHOẢN CỦA BẠN VÀO ĐÂY
+const PAYMENT_INFO = {
+  bank: {
+    name: 'Vietcombank',                // ← Tên ngân hàng
+    accountNumber: '0123456789',         // ← Số tài khoản
+    owner: 'CHU VAN KIEN'                // ← Tên chủ tài khoản
+  },
+  momo: {
+    phone: '0901234567',                 // ← Số MoMo
+    owner: 'CHU VAN KIEN'                // ← Tên chủ MoMo
+  },
+  contact: {
+    zalo: '0901234567',                  // ← Zalo bạn
+    email: 'chukienmedia@gmail.com'      // ← Email bạn
+  }
 };
 
 /* ============================================================
@@ -1410,6 +1537,65 @@ function onProviderChange(){
 /* ============================================================
    API SETTINGS — load/save/test
 ============================================================ */
+/* ============================================================
+   TIER HELPERS
+============================================================ */
+function isPro(){ return state.userTier === 'pro'; }
+function tierConfig(){ return TIER_CONFIG[state.userTier] || TIER_CONFIG.free; }
+function getMaxScenes(){ return tierConfig().maxScenes; }
+function getMaxProfiles(){ return tierConfig().maxProfiles; }
+function isToolAllowed(toolId){ return tierConfig().allowedTools.includes(toolId); }
+
+function showUpgradeModal(reason){
+  const modal = document.getElementById('upgradeModal');
+  const reasonEl = document.getElementById('upgradeReason');
+  if (reason) reasonEl.textContent = reason;
+  else reasonEl.textContent = '';
+  // Fill payment info từ constants
+  document.getElementById('payBankName').textContent = PAYMENT_INFO.bank.name;
+  document.getElementById('payBankNum').textContent = PAYMENT_INFO.bank.accountNumber;
+  document.getElementById('payBankOwner').textContent = PAYMENT_INFO.bank.owner;
+  document.getElementById('payMomoPhone').textContent = PAYMENT_INFO.momo.phone;
+  document.getElementById('payMomoOwner').textContent = PAYMENT_INFO.momo.owner;
+  document.getElementById('payZalo').textContent = PAYMENT_INFO.contact.zalo;
+  document.getElementById('payEmail').textContent = PAYMENT_INFO.contact.email;
+  document.getElementById('payUserUid').textContent = window.currentUser?.uid || '—';
+  modal.style.display = 'flex';
+}
+function closeUpgradeModal(){
+  document.getElementById('upgradeModal').style.display = 'none';
+}
+
+function renderTierBadge(){
+  const el = document.getElementById('tierBadge');
+  if (!el) return;
+  const cfg = tierConfig().badge;
+  el.textContent = cfg.text;
+  el.style.background = cfg.bg;
+  el.style.color = cfg.color;
+  // Show/hide upgrade button
+  const btn = document.getElementById('upgradeBtn');
+  if (btn) btn.style.display = isPro() ? 'none' : 'block';
+  // Lock icons on nav
+  document.querySelectorAll('.nav-item').forEach(item => {
+    const tool = item.getAttribute('data-tool');
+    const lock = item.querySelector('.nav-lock');
+    if (!isToolAllowed(tool)) {
+      item.classList.add('locked');
+      if (!lock) {
+        const l = document.createElement('span');
+        l.className = 'nav-lock';
+        l.textContent = '🔒';
+        l.style.cssText = 'margin-left:auto;font-size:11px;opacity:.7';
+        item.appendChild(l);
+      }
+    } else {
+      item.classList.remove('locked');
+      if (lock) lock.remove();
+    }
+  });
+}
+
 /* ============================================================
    THEME (Dark / Light Mode)
 ============================================================ */
@@ -1645,6 +1831,9 @@ function parseJSON(text){
    TOOL NAV
 ============================================================ */
 function switchTool(name){
+  if (!isToolAllowed(name)) {
+    return showUpgradeModal('Tool này chỉ có ở gói Pro. Nâng cấp để mở khoá toàn bộ tính năng.');
+  }
   state.tool = name;
   document.querySelectorAll('.nav-item').forEach(t =>
     t.classList.toggle('active', t.dataset.tool === name)
@@ -1793,6 +1982,10 @@ async function loadCloudState(){
       Object.assign(state, data.state);
       console.log('✓ Loaded state from Firestore');
     }
+    // 1b. Load tier (admin set thủ công qua Firebase Console)
+    // Tier nằm ở root doc, KHÔNG ở data.state, để client không tự sửa được
+    state.userTier = (data && data.tier) || 'free';
+    console.log('✓ User tier:', state.userTier);
     // 2. Load ảnh từ IndexedDB
     try {
       const styleImgs = await IDB.get(uid + '/styleRefImages');
@@ -1803,6 +1996,8 @@ async function loadCloudState(){
     } catch (e) {
       console.warn('IDB load failed:', e);
     }
+    // 3. Render tier-dependent UI
+    renderTierBadge();
   } catch (e) {
     console.warn('Cloud load failed:', e);
   }
@@ -1817,8 +2012,9 @@ async function saveCloudState(immediate = false){
     setSyncStatus('💾 Đang lưu...', 'working');
     try {
       // Tách ảnh ra khỏi state — Firestore giới hạn 1MB/doc
-      const { styleRefImages, characterImages, ...lightState } = state;
-      // Lưu state nhẹ lên Firestore
+      // Tách userTier — tier là admin-controlled, không lưu cùng state
+      const { styleRefImages, characterImages, userTier, ...lightState } = state;
+      // Lưu state nhẹ lên Firestore — merge:true để không ghi đè field "tier" ở root doc
       await window.firebaseSaveDoc(uid, {
         state: lightState,
         updatedAt: Date.now()
@@ -1908,6 +2104,9 @@ function switchProfile(val){
 }
 
 function newProfile(){
+  if (state.profiles.length >= getMaxProfiles()) {
+    return showUpgradeModal(`Gói Free chỉ tạo được ${getMaxProfiles()} profile. Nâng cấp Pro để tạo không giới hạn.`);
+  }
   state.profiles.push(makeEmptyProfile());
   state.currentProfileIdx = state.profiles.length - 1;
   renderProfileSelect();
@@ -1999,6 +2198,10 @@ function exportProfile(){
 
 function importProfile(event){
   const f = event.target.files[0]; if (!f) return;
+  if (state.profiles.length >= getMaxProfiles()) {
+    event.target.value = '';
+    return showUpgradeModal(`Gói Free chỉ chứa được ${getMaxProfiles()} profile. Xoá profile cũ hoặc nâng cấp Pro.`);
+  }
   const reader = new FileReader();
   reader.onload = e => {
     try {
@@ -2393,9 +2596,19 @@ async function doSplit(){
       camera: 'medium',
       duration: calcDur(s)
     }));
+    // Cap số cảnh theo tier
+    const maxScenes = getMaxScenes();
+    let trimmedNotice = '';
+    if (state.scenes.length > maxScenes) {
+      const cut = state.scenes.length - maxScenes;
+      state.scenes = state.scenes.slice(0, maxScenes);
+      trimmedNotice = ` (Đã cắt ${cut} cảnh vượt giới hạn gói Free — nâng cấp Pro để mở khoá)`;
+      // Show upgrade modal sau 500ms để user kịp đọc status
+      setTimeout(() => showUpgradeModal(`Kịch bản chia ra ${maxScenes + cut} cảnh, nhưng gói Free chỉ giữ ${maxScenes}. Nâng cấp Pro để dùng không giới hạn.`), 500);
+    }
     state.scenePrompts = {};
     renderAllT2();
-    setStatus2(`✓ Đã chia thành ${scenes.length} cảnh.`, 'ok');
+    setStatus2(`✓ Đã chia thành ${state.scenes.length} cảnh.${trimmedNotice}`, 'ok');
     saveState();
   } catch (e) {
     console.error(e);
@@ -2784,6 +2997,9 @@ function mergeSceneWithNext(idx){
 }
 
 function addSceneAfter(idx){
+  if (state.scenes.length >= getMaxScenes()) {
+    return showUpgradeModal(`Gói Free chỉ chứa ${getMaxScenes()} cảnh. Nâng cấp Pro để thêm.`);
+  }
   const newScene = {
     id: 'tmp',
     text: '',
@@ -2860,6 +3076,9 @@ function delScene(i){
 }
 
 function splitAt(i){
+  if (state.scenes.length >= getMaxScenes()) {
+    return showUpgradeModal(`Gói Free chỉ chứa ${getMaxScenes()} cảnh. Nâng cấp Pro để chia thêm.`);
+  }
   const s = state.scenes[i];
   const w = s.text.split(' ');
   if (w.length < 2) return;
