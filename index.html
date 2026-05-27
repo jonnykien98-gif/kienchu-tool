@@ -11,8 +11,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
 <!-- Libraries -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.min.js"></script>
 
 <!-- Firebase v10 modular CDN -->
 <script type="module">
@@ -3320,9 +3320,8 @@ async function loadFFmpeg(){
     });
     // FFmpeg 0.12 spawn Worker từ URL cross-origin → bị browser chặn.
     // Fix: fetch script + convert blob URL (same-origin) trước khi load.
-    // Dùng unpkg.com vì CORS/CORP headers tương thích hơn jsdelivr cho FFmpeg.
-    const ffmpegBase = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
-    const coreBase = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    const ffmpegBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+    const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
     setStatus6('Đang tải FFmpeg worker (~50KB)...', 'working');
     const classWorkerURL = await _toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript');
     setStatus6('Đang tải FFmpeg core (~100KB)...', 'working');
