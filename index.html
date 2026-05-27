@@ -600,6 +600,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
 .scene-table tbody td{padding:11px 14px;vertical-align:top}
 .scene-table td.id{color:var(--accent);font-weight:600;width:50px}
 .scene-table td.level{width:80px}
+.scene-table td.sb-cell{width:72px;padding:4px !important;text-align:center}
+.scene-table td.sb-cell .sb-thumb img{transition:transform .15s}
+.scene-table td.sb-cell .sb-thumb:hover img{transform:scale(1.05)}
 .level-tag{
   background:var(--accent-soft);color:var(--accent);
   padding:2px 8px;border-radius:3px;font-size:10.5px;font-weight:600;
@@ -887,6 +890,11 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <span class="num">7</span><span>Đổi Tên Ảnh</span>
         </div>
       </div>
+      <div style="margin-top:14px;padding:0 4px">
+        <button class="btn ghost" onclick="openAssetLibrary()" style="width:100%;display:flex;align-items:center;gap:8px;font-size:13px;justify-content:flex-start;padding:9px 12px" title="Thư viện nhân vật & bối cảnh dùng chung">
+          <span style="font-size:16px">📚</span><span>Asset Library</span>
+        </button>
+      </div>
     </div>
 
     <!-- User section (bottom) -->
@@ -1033,11 +1041,16 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div id="sub-list">
           <div class="empty-state" id="emptyList">Chưa có cảnh nào.</div>
           <table class="scene-table" id="sceneTable" style="display:none">
-            <thead><tr><th>#</th><th>Cấp</th><th>Lời thoại</th><th>Nhân vật</th><th>Bối cảnh</th><th>Camera</th><th>Dài</th><th style="text-align:center">Hành động</th></tr></thead>
+            <thead><tr><th>#</th><th>Cấp</th><th>Lời thoại</th><th>Nhân vật</th><th>Bối cảnh</th><th>Camera</th><th>Dài</th><th style="text-align:center">📷 Ảnh</th><th style="text-align:center">Hành động</th></tr></thead>
             <tbody id="sceneBody"></tbody>
           </table>
-          <div id="addSceneRow" style="display:none;padding:14px;border-top:1px solid var(--border);text-align:center">
+          <div id="addSceneRow" style="display:none;padding:14px;border-top:1px solid var(--border);text-align:center;display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap">
             <button class="btn ghost sm" onclick="addSceneAtEnd()">+ Thêm cảnh thủ công</button>
+            <span style="color:var(--text-muted);font-size:11px">|</span>
+            <label class="btn ghost sm" style="cursor:pointer">📷 Upload ảnh storyboard hàng loạt
+              <input type="file" multiple accept="image/*" style="display:none" onchange="t2BulkUploadSceneImages(this.files);this.value='';">
+            </label>
+            <button class="btn ghost sm" style="color:var(--red)" onclick="if(confirm('Xoá hết ảnh storyboard?')){state.sceneImages={};renderTable();saveState(true);setStatus2('✓ Đã xoá ảnh storyboard.','ok');}" title="Xoá hết ảnh storyboard">🗑 Xoá ảnh storyboard</button>
           </div>
         </div>
         <div id="sub-prompts" style="display:none">
@@ -1422,6 +1435,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
               <div class="hint" style="font-size:11.5px;color:var(--text-muted);margin-top:4px">Tự sắp xếp theo tên. Hoặc kéo thả vào đây.</div>
             </label>
             <input type="file" id="t7ImgInput" multiple accept="image/*" style="display:none" onchange="t7HandleImages(this.files)">
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn ghost sm" onclick="t7LoadFromStoryboard()" title="Lấy toàn bộ ảnh storyboard đã upload trong Tool 02">📥 Lấy từ Storyboard Tool 02</button>
+            </div>
             <div id="t7ImgList" style="margin-top:8px;font-size:11px;color:var(--text-muted);max-height:120px;overflow-y:auto"></div>
           </div>
         </div>
@@ -1551,6 +1567,23 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
   </main>
 </div>
 
+<!-- ============ ASSET LIBRARY MODAL ============ -->
+<div id="libraryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeAssetLibrary()">
+  <div style="background:var(--surface);border-radius:14px;padding:26px;max-width:960px;width:100%;max-height:88vh;overflow-y:auto;position:relative;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <button onclick="closeAssetLibrary()" style="position:absolute;top:14px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text-muted);width:32px;height:32px;border-radius:6px" title="Đóng">×</button>
+    <h2 style="margin:0 0 6px;font-size:22px">📚 Asset Library</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin:0 0 18px;line-height:1.6">
+      Lưu & tái sử dụng <strong>nhân vật + bối cảnh</strong> qua các video. Mỗi video sau, AI sẽ tự pull asset từ Library (không gen lại) → đảm bảo character giống nhau xuyên suốt series.
+    </p>
+    <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border)">
+      <button class="lib-tab" data-tab="chars" onclick="switchLibTab('chars')" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid var(--accent);cursor:pointer;font-size:14px;color:var(--text);font-weight:600">👤 Nhân vật <span id="libCharCount" style="background:var(--accent);color:#fff;padding:1px 7px;border-radius:10px;font-size:11px;margin-left:4px">0</span></button>
+      <button class="lib-tab" data-tab="bgs" onclick="switchLibTab('bgs')" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-size:14px;color:var(--text-muted)">🏛 Bối cảnh <span id="libBgCount" style="background:var(--text-muted);color:#fff;padding:1px 7px;border-radius:10px;font-size:11px;margin-left:4px">0</span></button>
+    </div>
+    <input id="libSearch" placeholder="🔍 Tìm theo tên..." style="margin-bottom:14px;width:100%;padding:9px 12px" oninput="renderAssetLibrary()">
+    <div id="libContent" style="min-height:200px"></div>
+  </div>
+</div>
+
 <!-- ============ UPGRADE MODAL ============ -->
 <div id="upgradeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeUpgradeModal()">
   <div style="background:var(--surface);border-radius:14px;padding:32px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;border:1px solid var(--border)">
@@ -1658,6 +1691,8 @@ const state = {
   cancelRequested: false,
   editingSceneIdx: -1,
   editingPrompt: null,  // {type, key} — only one prompt edit at a time
+  assetLibrary: { chars: {}, bgs: {} },  // Library nhân vật + bối cảnh dùng chung qua các video
+  sceneImages: {},  // {sceneId: {base64, mediaType, fileName}} — storyboard ảnh từng cảnh (IDB)
   userTier: 'free'  // 'free' | 'pro' — load từ Firestore, admin edit thủ công
 };
 
@@ -2161,6 +2196,238 @@ async function notifyDone(title, body){
   } catch(e) {}
 }
 
+/* ============================================================
+   ASSET LIBRARY — Tái sử dụng nhân vật / bối cảnh qua các video
+============================================================ */
+function _getLib(){
+  if (!state.assetLibrary) state.assetLibrary = { chars: {}, bgs: {} };
+  if (!state.assetLibrary.chars) state.assetLibrary.chars = {};
+  if (!state.assetLibrary.bgs) state.assetLibrary.bgs = {};
+  return state.assetLibrary;
+}
+
+async function saveToLibraryUI(type, name){
+  const isChar = type === 'char';
+  const prompt = isChar ? state.assetCharPrompts?.[name] : state.assetBgPrompts?.[name];
+  if (!prompt) return alert(`Asset "${name}" chưa có prompt. Generate trước khi lưu Library.`);
+  const lib = _getLib();
+  const target = isChar ? lib.chars : lib.bgs;
+  const isUpdate = !!target[name];
+  if (isUpdate && !confirm(`"${name}" đã có trong Library. Ghi đè?`)) return;
+  // Save image to IDB if char has image
+  let hasImage = false;
+  if (isChar && state.characterImages?.[name]) {
+    const uid = window.currentUser?.uid;
+    if (uid) {
+      try {
+        await IDB.set(uid + '/libraryImages/' + name, state.characterImages[name]);
+        hasImage = true;
+      } catch(e) { console.warn('IDB save lib image failed:', e); }
+    }
+  }
+  target[name] = { name, prompt, hasImage, savedAt: Date.now() };
+  saveState(true);
+  setStatus3(`📚 ✓ Đã lưu "${name}" vào Library${hasImage ? ' (có ảnh)' : ''}.`, 'ok');
+  if (document.getElementById('libraryModal')?.style.display === 'flex') renderAssetLibrary();
+}
+
+async function deleteFromLibrary(type, name){
+  if (!confirm(`Xoá "${name}" khỏi Library?\nVideo đã dùng asset này vẫn không bị ảnh hưởng.`)) return;
+  const lib = _getLib();
+  const target = type === 'char' ? lib.chars : lib.bgs;
+  if (!target[name]) return;
+  const hasImg = target[name].hasImage;
+  delete target[name];
+  if (hasImg) {
+    const uid = window.currentUser?.uid;
+    if (uid) {
+      try { await IDB.set(uid + '/libraryImages/' + name, null); } catch(e) {}
+    }
+  }
+  renderAssetLibrary();
+  saveState(true);
+}
+
+async function useFromLibrary(type, name){
+  const isChar = type === 'char';
+  const lib = _getLib();
+  const entry = isChar ? lib.chars[name] : lib.bgs[name];
+  if (!entry) return false;
+  if (isChar) {
+    if (!state.assetCharPrompts) state.assetCharPrompts = {};
+    state.assetCharPrompts[name] = entry.prompt;
+    state.charactersV = state.charactersV || [];
+    if (!state.charactersV.includes(name)) state.charactersV.push(name);
+    if (entry.hasImage) {
+      const uid = window.currentUser?.uid;
+      if (uid) {
+        try {
+          const img = await IDB.get(uid + '/libraryImages/' + name);
+          if (img) {
+            if (!state.characterImages) state.characterImages = {};
+            state.characterImages[name] = img;
+          }
+        } catch(e) {}
+      }
+    }
+    if (typeof renderAssetCharPrompts === 'function') renderAssetCharPrompts(state.charactersV);
+  } else {
+    if (!state.assetBgPrompts) state.assetBgPrompts = {};
+    state.assetBgPrompts[name] = entry.prompt;
+    state.backgroundsV = state.backgroundsV || [];
+    if (!state.backgroundsV.includes(name)) state.backgroundsV.push(name);
+    if (typeof renderAssetBgPrompts === 'function') renderAssetBgPrompts(state.backgroundsV);
+  }
+  if (typeof updateAllAssetPromptsBox === 'function') updateAllAssetPromptsBox();
+  saveState(true);
+  setStatus3(`📚 ✓ Đã pull "${name}" từ Library vào video hiện tại.`, 'ok');
+  closeAssetLibrary();
+  return true;
+}
+
+// Auto-pull library entries khi genAllAssetPrompts (skip AI call nếu đã có trong library)
+function checkLibraryFor(type, name){
+  const lib = _getLib();
+  return type === 'char' ? lib.chars[name] : lib.bgs[name];
+}
+
+let _libTab = 'chars';
+function openAssetLibrary(){
+  const modal = document.getElementById('libraryModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  switchLibTab(_libTab);
+  renderAssetLibrary();
+}
+function closeAssetLibrary(){
+  const m = document.getElementById('libraryModal');
+  if (m) m.style.display = 'none';
+}
+function switchLibTab(tab){
+  _libTab = tab;
+  document.querySelectorAll('.lib-tab').forEach(b => {
+    const active = b.dataset.tab === tab;
+    b.style.borderBottom = active ? '2px solid var(--accent)' : '2px solid transparent';
+    b.style.color = active ? 'var(--text)' : 'var(--text-muted)';
+    b.style.fontWeight = active ? '600' : '400';
+  });
+  renderAssetLibrary();
+}
+
+function renderAssetLibrary(){
+  const content = document.getElementById('libContent');
+  if (!content) return;
+  const lib = _getLib();
+  const charCount = Object.keys(lib.chars).length;
+  const bgCount = Object.keys(lib.bgs).length;
+  const cc = document.getElementById('libCharCount'); if (cc) cc.textContent = charCount;
+  const bc = document.getElementById('libBgCount'); if (bc) bc.textContent = bgCount;
+  const target = _libTab === 'chars' ? lib.chars : lib.bgs;
+  const items = Object.values(target).sort((a,b) => (b.savedAt||0) - (a.savedAt||0));
+  const search = (document.getElementById('libSearch')?.value || '').toLowerCase().trim();
+  const filtered = items.filter(a => !search || a.name.toLowerCase().includes(search));
+  if (filtered.length === 0) {
+    content.innerHTML = `<div style="text-align:center;padding:50px 20px;color:var(--text-muted);font-size:13px">
+      ${search ? `Không tìm thấy "${escapeHtml(search)}".` : 'Library rỗng. Vào Tool 3, bấm <strong>💾 Lưu Library</strong> trên prompt asset để bắt đầu.'}
+    </div>`;
+    return;
+  }
+  const typeKey = _libTab === 'chars' ? 'char' : 'bg';
+  content.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px">` +
+    filtered.map(a => {
+      const nameEsc = a.name.replace(/'/g, "\\'");
+      const promptPreview = (a.prompt || '').slice(0, 200);
+      const dateStr = a.savedAt ? new Date(a.savedAt).toLocaleDateString('vi-VN') : '';
+      return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;margin-bottom:8px">
+          <strong style="font-size:13px;line-height:1.3;word-break:break-word">${escapeHtml(a.name)}</strong>
+          ${a.hasImage ? '<span style="font-size:10px;background:var(--accent-soft);color:var(--accent);padding:2px 6px;border-radius:8px;white-space:nowrap">🖼 Có ảnh</span>' : ''}
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);line-height:1.55;flex:1;max-height:80px;overflow:hidden;margin-bottom:10px">${escapeHtml(promptPreview)}${a.prompt.length>200?'...':''}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn primary sm" style="flex:1;font-size:11.5px" onclick="useFromLibrary('${typeKey}','${nameEsc}')">↓ Dùng vào video này</button>
+          <button class="btn ghost sm" onclick="deleteFromLibrary('${typeKey}','${nameEsc}')" title="Xoá khỏi Library">🗑</button>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;text-align:right">Lưu: ${dateStr}</div>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+/* ============================================================
+   STORYBOARD VIEW — Ảnh từng cảnh trong Tool 2
+============================================================ */
+function t2HandleSceneImage(sceneId, file){
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return setStatus2('File phải là ảnh.', 'error');
+  if (file.size > 5 * 1024 * 1024) return setStatus2('Ảnh > 5MB, dùng ảnh nhỏ hơn.', 'error');
+  const reader = new FileReader();
+  reader.onload = e => {
+    if (!state.sceneImages) state.sceneImages = {};
+    state.sceneImages[sceneId] = {
+      base64: e.target.result,
+      mediaType: file.type,
+      fileName: file.name
+    };
+    renderTable();
+    saveState(true);
+    setStatus2(`✓ Đã thêm ảnh cảnh ${sceneId}.`, 'ok');
+  };
+  reader.onerror = () => setStatus2('Lỗi đọc file ảnh.', 'error');
+  reader.readAsDataURL(file);
+}
+
+function t2RemoveSceneImage(sceneId){
+  if (!state.sceneImages?.[sceneId]) return;
+  delete state.sceneImages[sceneId];
+  renderTable();
+  saveState(true);
+  setStatus2(`✓ Đã xoá ảnh cảnh ${sceneId}.`, 'ok');
+}
+
+function t2EnlargeSceneImage(sceneId){
+  const img = state.sceneImages?.[sceneId];
+  if (!img) return;
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:30px';
+  modal.onclick = () => modal.remove();
+  modal.innerHTML = `<div style="position:relative;max-width:90%;max-height:90%">
+    <img src="${img.base64}" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;display:block">
+    <div style="position:absolute;bottom:-30px;left:0;right:0;text-align:center;color:#fff;font-size:13px">Cảnh ${sceneId} · ${escapeHtml(img.fileName || '')}</div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+// Bulk upload — nhiều ảnh 1 lần, tự match theo natural sort vào các scene
+function t2BulkUploadSceneImages(files){
+  if (!files || files.length === 0) return;
+  const imgFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+  if (imgFiles.length === 0) return setStatus2('Không có ảnh hợp lệ.', 'error');
+  imgFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  const sceneIds = state.scenes.map(s => s.id);
+  if (imgFiles.length > sceneIds.length) {
+    if (!confirm(`Có ${imgFiles.length} ảnh nhưng chỉ ${sceneIds.length} cảnh. Chỉ assign cho ${sceneIds.length} cảnh đầu, bỏ qua ảnh thừa. Tiếp tục?`)) return;
+  }
+  setStatus2(`Đang gán ${Math.min(imgFiles.length, sceneIds.length)} ảnh...`, 'working');
+  if (!state.sceneImages) state.sceneImages = {};
+  let done = 0;
+  const total = Math.min(imgFiles.length, sceneIds.length);
+  for (let i = 0; i < total; i++) {
+    const sid = sceneIds[i];
+    const f = imgFiles[i];
+    const reader = new FileReader();
+    reader.onload = e => {
+      state.sceneImages[sid] = { base64: e.target.result, mediaType: f.type, fileName: f.name };
+      done++;
+      if (done === total) {
+        renderTable();
+        saveState(true);
+        setStatus2(`✓ Đã gán ${total} ảnh cho ${total} cảnh đầu.`, 'ok');
+      }
+    };
+    reader.readAsDataURL(f);
+  }
+}
+
 function copyText(t){
   navigator.clipboard.writeText(t);
 }
@@ -2281,6 +2548,8 @@ async function loadCloudState(){
       if (styleImgs) state.styleRefImages = styleImgs;
       const charImgs = await IDB.get(uid + '/characterImages');
       if (charImgs) state.characterImages = charImgs;
+      const scImgs = await IDB.get(uid + '/sceneImages');
+      if (scImgs) state.sceneImages = scImgs;
       console.log('✓ Loaded images from IndexedDB');
     } catch (e) {
       console.warn('IDB load failed:', e);
@@ -2302,7 +2571,7 @@ async function saveCloudState(immediate = false){
     try {
       // Tách ảnh ra khỏi state — Firestore giới hạn 1MB/doc
       // Tách userTier — tier là admin-controlled, không lưu cùng state
-      const { styleRefImages, characterImages, userTier, ...lightState } = state;
+      const { styleRefImages, characterImages, sceneImages, userTier, ...lightState } = state;
       // Lưu state nhẹ lên Firestore — merge:true để không ghi đè field "tier" ở root doc
       await window.firebaseSaveDoc(uid, {
         state: lightState,
@@ -2312,6 +2581,7 @@ async function saveCloudState(immediate = false){
       try {
         await IDB.set(uid + '/styleRefImages', styleRefImages || []);
         await IDB.set(uid + '/characterImages', characterImages || {});
+        await IDB.set(uid + '/sceneImages', sceneImages || {});
       } catch (e) {
         console.warn('IDB save failed:', e);
       }
@@ -3145,7 +3415,7 @@ function renderTable(){
     if (isEditing) {
       return `<tr class="editing-row">
         <td class="id">${s.id}</td>
-        <td colspan="6" style="padding:8px">
+        <td colspan="7" style="padding:8px">
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;margin-bottom:6px">
             <input type="text" id="edt_char_${i}" placeholder="Nhân vật" value="${escapeHtml(s.character || '')}" style="padding:5px 8px;font-size:12px">
             <input type="text" id="edt_bg_${i}" placeholder="Bối cảnh" value="${escapeHtml(s.background || '')}" style="padding:5px 8px;font-size:12px">
@@ -3161,7 +3431,18 @@ function renderTable(){
       </tr>`;
     }
     const isLast = i === state.scenes.length - 1;
-    return `<tr>
+    // Storyboard image cell
+    const sImg = state.sceneImages?.[s.id];
+    const imgCell = sImg
+      ? `<div class="sb-thumb" style="position:relative;width:56px;height:42px;border-radius:4px;overflow:hidden;cursor:pointer;background:var(--surface-2)" onclick="t2EnlargeSceneImage('${s.id}')" title="Click xem to">
+          <img src="${sImg.base64}" style="width:100%;height:100%;object-fit:cover">
+          <button onclick="event.stopPropagation();t2RemoveSceneImage('${s.id}')" style="position:absolute;top:1px;right:1px;background:rgba(0,0,0,.7);color:#fff;border:none;width:16px;height:16px;border-radius:50%;font-size:11px;cursor:pointer;line-height:1;padding:0" title="Xoá ảnh">×</button>
+        </div>`
+      : `<label class="sb-drop" style="display:flex;align-items:center;justify-content:center;width:56px;height:42px;border:1.5px dashed var(--border);border-radius:4px;cursor:pointer;color:var(--text-muted);font-size:18px;background:var(--surface-2)" title="Click hoặc kéo ảnh vào đây">
+          📷
+          <input type="file" accept="image/*" style="display:none" onchange="t2HandleSceneImage('${s.id}', this.files[0])">
+        </label>`;
+    return `<tr data-sid="${s.id}">
       <td class="id">${s.id}</td>
       <td class="level"><span class="level-tag">${s.level || ''}</span></td>
       <td class="vo">${escapeHtml(s.text)}</td>
@@ -3169,6 +3450,7 @@ function renderTable(){
       <td class="${s.background ? '' : 'pending'}">${escapeHtml(s.background) || 'chờ...'}</td>
       <td class="cam">${s.camera || ''}</td>
       <td class="dur">${s.duration || 0}s</td>
+      <td class="sb-cell" style="text-align:center;padding:4px">${imgCell}</td>
       <td class="actions" style="white-space:nowrap">
         <button onclick="moveSceneUp(${i})" title="Lên" ${i === 0 ? 'disabled style="opacity:.3"' : ''}>↑</button>
         <button onclick="moveSceneDown(${i})" title="Xuống" ${isLast ? 'disabled style="opacity:.3"' : ''}>↓</button>
@@ -3179,6 +3461,18 @@ function renderTable(){
       </td>
     </tr>`;
   }).join('');
+  // Setup drag-drop on each empty image cell
+  document.querySelectorAll('#sceneBody .sb-drop').forEach(el => {
+    el.addEventListener('dragover', e => { e.preventDefault(); el.style.background = 'var(--accent-soft)'; });
+    el.addEventListener('dragleave', () => { el.style.background = ''; });
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.style.background = '';
+      const tr = el.closest('tr');
+      const sid = tr?.dataset.sid;
+      if (sid && e.dataTransfer.files[0]) t2HandleSceneImage(sid, e.dataTransfer.files[0]);
+    });
+  });
 }
 
 /* ----------------- SCENE MANAGEMENT ----------------- */
@@ -3218,6 +3512,19 @@ function renumberScenes(){
       if (state.scenes.find(s => s.id === k) && !newVP[k]) newVP[k] = v;
     }
     state.veoPrompts = newVP;
+  }
+  // Remap sceneImages (storyboard)
+  if (state.sceneImages) {
+    const newSI = {};
+    for (const s of state.scenes) {
+      const oldId = Object.keys(oldToNew).find(k => oldToNew[k] === s.id);
+      const sourceId = oldId || s.id;
+      if (state.sceneImages[sourceId]) newSI[s.id] = state.sceneImages[sourceId];
+    }
+    for (const [k, v] of Object.entries(state.sceneImages)) {
+      if (state.scenes.find(s => s.id === k) && !newSI[k]) newSI[k] = v;
+    }
+    state.sceneImages = newSI;
   }
 }
 
@@ -3577,13 +3884,36 @@ async function genAllAssetPrompts(){
   clearCancel();
 
   try {
-    // Character prompts (use Vision if image available)
+    // Character prompts (check Library first → skip AI if exists)
+    let libPulledChars = 0;
     for (const name of chars) {
       if (state.cancelRequested) {
         clearCancel();
         setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật.`, 'info');
         saveState();
         return;
+      }
+      // 📚 LIBRARY CHECK — nếu nhân vật đã có trong Library thì pull, skip AI gen
+      const libEntry = checkLibraryFor('char', name);
+      if (libEntry) {
+        state.assetCharPrompts[name] = libEntry.prompt;
+        // Pull image từ IDB nếu có
+        if (libEntry.hasImage) {
+          const uid = window.currentUser?.uid;
+          if (uid) {
+            try {
+              const img = await IDB.get(uid + '/libraryImages/' + name);
+              if (img) {
+                if (!state.characterImages) state.characterImages = {};
+                state.characterImages[name] = img;
+              }
+            } catch(e) {}
+          }
+        }
+        libPulledChars++;
+        renderAssetCharPrompts(chars);
+        setStatus3(`📚 ${name}: pull từ Library (${libPulledChars} char đã pull, đỡ gọi AI)`, 'info');
+        continue;
       }
       const img = state.characterImages?.[name];
       let promptText;
@@ -3626,13 +3956,23 @@ Yêu cầu:
       setStatus3(`Nhân vật ${Object.keys(state.assetCharPrompts).length}/${chars.length}...`, 'working');
     }
 
-    // Background prompts
+    // Background prompts (check Library first)
+    let libPulledBgs = 0;
     for (const name of bgs) {
       if (state.cancelRequested) {
         clearCancel();
         setStatus3(`⏸ Đã dừng. ${chars.length} prompt nhân vật + ${Object.keys(state.assetBgPrompts).length}/${bgs.length} prompt bối cảnh đã tạo.`, 'info');
         saveState();
         return;
+      }
+      // 📚 LIBRARY CHECK
+      const libEntry = checkLibraryFor('bg', name);
+      if (libEntry) {
+        state.assetBgPrompts[name] = libEntry.prompt;
+        libPulledBgs++;
+        renderAssetBgPrompts(bgs);
+        setStatus3(`📚 ${name}: pull từ Library (${libPulledBgs} bg đã pull)`, 'info');
+        continue;
       }
       const promptText = `Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
 
@@ -3701,12 +4041,15 @@ function renderAssetCharPrompts(chars){
     const pr = state.assetCharPrompts?.[name];
     const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
     const editing = isEditingPrompt('char', name);
+    const nameEsc = name.replace(/'/g, "\\'");
+    const inLib = !!_getLib().chars[name];
     return `<div class="ref-sheet-card ${pr ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="ref-sheet-card-head">
-        <span class="ref-sheet-card-name">${escapeHtml(name)}</span>
+        <span class="ref-sheet-card-name">${escapeHtml(name)} ${inLib ? '<span style="font-size:10px;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:6px;margin-left:4px">📚 Library</span>' : ''}</span>
         ${editing ? '' : (pr ? `<div style="display:flex;gap:6px">
-          <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋</button>
-          <button class="btn ghost sm" onclick="startEditPrompt('char','${name.replace(/'/g, "\\'")}')">✏️</button>
+          <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)" title="Sao chép">📋</button>
+          <button class="btn ghost sm" onclick="startEditPrompt('char','${nameEsc}')" title="Sửa prompt">✏️</button>
+          <button class="btn ghost sm" onclick="saveToLibraryUI('char','${nameEsc}')" title="Lưu vào Library để dùng cho video sau" style="color:var(--accent)">💾</button>
         </div>` : '')}
       </div>
       ${editing ? renderEditPromptUI(pr) : `<div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>`}
@@ -3724,12 +4067,15 @@ function renderAssetBgPrompts(bgs){
     const pr = state.assetBgPrompts?.[name];
     const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
     const editing = isEditingPrompt('bg', name);
+    const nameEsc = name.replace(/'/g, "\\'");
+    const inLib = !!_getLib().bgs[name];
     return `<div class="ref-sheet-card bg-card ${pr ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="ref-sheet-card-head">
-        <span class="ref-sheet-card-name">${escapeHtml(name)}</span>
+        <span class="ref-sheet-card-name">${escapeHtml(name)} ${inLib ? '<span style="font-size:10px;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:6px;margin-left:4px">📚 Library</span>' : ''}</span>
         ${editing ? '' : (pr ? `<div style="display:flex;gap:6px">
-          <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋</button>
-          <button class="btn ghost sm" onclick="startEditPrompt('bg','${name.replace(/'/g, "\\'")}')">✏️</button>
+          <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)" title="Sao chép">📋</button>
+          <button class="btn ghost sm" onclick="startEditPrompt('bg','${nameEsc}')" title="Sửa prompt">✏️</button>
+          <button class="btn ghost sm" onclick="saveToLibraryUI('bg','${nameEsc}')" title="Lưu vào Library để dùng cho video sau" style="color:var(--accent)">💾</button>
         </div>` : '')}
       </div>
       ${editing ? renderEditPromptUI(pr) : `<div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>`}
@@ -4424,6 +4770,49 @@ function t7LoadFromTool2(){
   setStatus7(`✓ Đã load ${timings.length} cảnh từ Tool 02.`, 'ok');
 }
 
+// Lấy ảnh storyboard từ Tool 2 → t7State.images
+function t7LoadFromStoryboard(){
+  if (!state.scenes || state.scenes.length === 0) {
+    return setStatus7('Tool 2 chưa có cảnh.', 'error');
+  }
+  if (!state.sceneImages || Object.keys(state.sceneImages).length === 0) {
+    return setStatus7('Tool 2 chưa có ảnh storyboard nào. Upload ảnh vào danh sách cảnh trước.', 'error');
+  }
+  setStatus7('Đang load ảnh storyboard...', 'working');
+  t7State.images = [];
+  let loaded = 0;
+  let missing = 0;
+  const scenesWithImg = state.scenes.filter(s => state.sceneImages[s.id]);
+  const total = scenesWithImg.length;
+  if (total === 0) {
+    return setStatus7('Không có cảnh nào có ảnh storyboard.', 'error');
+  }
+  state.scenes.forEach(s => {
+    const si = state.sceneImages[s.id];
+    if (!si) { missing++; return; }
+    const img = new Image();
+    img.onload = () => {
+      t7State.images.push({ name: `scene-${s.id}.${(si.fileName || '').split('.').pop() || 'png'}`, file: null, img });
+      loaded++;
+      if (loaded === total) {
+        // Re-sort by scene order (s.id ascending)
+        t7State.images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        renderT7ImgList();
+        const msg = `✓ Load ${loaded} ảnh từ Storyboard. ${missing > 0 ? '⚠️ ' + missing + ' cảnh thiếu ảnh — tự skip.' : ''}`;
+        setStatus7(msg, 'ok');
+      }
+    };
+    img.onerror = () => {
+      loaded++;
+      if (loaded === total) {
+        renderT7ImgList();
+        setStatus7(`⚠️ Có lỗi load ảnh. Đã load ${t7State.images.length}/${total}.`, 'info');
+      }
+    };
+    img.src = si.base64;
+  });
+}
+
 function parseT7Timings(){
   const text = document.getElementById('t7Timing').value;
   return text.split('\n').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0);
@@ -4764,12 +5153,13 @@ function t7Reset(){
    CLEAR ALL — Xoá toàn bộ data từng tool
 ============================================================ */
 function clearAllT2(){
-  if (!confirm('Xoá HẾT data Tool 2: kịch bản, cảnh, prompt G-Labs, characters, backgrounds?\n\nProfile KHÔNG bị xoá.')) return;
+  if (!confirm('Xoá HẾT data Tool 2: kịch bản, cảnh, prompt G-Labs, characters, backgrounds, ảnh storyboard?\n\nProfile KHÔNG bị xoá.')) return;
   state.script = '';
   state.scenes = [];
   state.scenePrompts = {};
   state.charactersV = [];
   state.backgroundsV = [];
+  state.sceneImages = {};
   const sc = document.getElementById('script'); if (sc) sc.value = '';
   const pv = document.getElementById('scriptPreview'); if (pv) pv.innerHTML = '<div class="empty-state">Paste kịch bản bên trái để xem trước.</div>';
   if (typeof renderAllT2 === 'function') renderAllT2();
