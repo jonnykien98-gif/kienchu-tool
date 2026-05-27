@@ -1559,6 +1559,26 @@ function escapeHtml(s){
   );
 }
 
+/**
+ * Strip AI-added prefixes from generated prompts.
+ * Removes patterns like "LOẠI 1 — ", "LOẠI 2 - ", "[001] ", "Type 1: " at the start.
+ */
+function cleanPrompt(p){
+  if (!p) return '';
+  let s = String(p).trim();
+  // Loop strip multiple prefixes if AI stacks them
+  for (let i = 0; i < 3; i++) {
+    const before = s;
+    s = s.replace(/^LO[ẠA]I\s*\d+\s*[—–\-:]\s*/i, '');
+    s = s.replace(/^TYPE\s*\d+\s*[—–\-:]\s*/i, '');
+    s = s.replace(/^\[\s*\d+\s*\]\s*/, '');
+    s = s.replace(/^SCENE\s*\d+\s*[—–\-:]\s*/i, '');
+    s = s.trim();
+    if (s === before) break;
+  }
+  return s;
+}
+
 function copyText(t){
   navigator.clipboard.writeText(t);
 }
@@ -2412,6 +2432,13 @@ QUY TẮC CHUNG:
 - Ánh sáng và tông màu phù hợp VO
 - Kết thúc bằng scene aesthetic tag
 
+⚠️ TUYỆT ĐỐI KHÔNG:
+- KHÔNG ghi "LOẠI 1", "LOẠI 2", "LOẠI 3", "LOẠI 4", "LOẠI 5" vào prompt output
+- KHÔNG ghi "Type 1", "Type 2", ... hay bất kỳ label phân loại nào
+- KHÔNG ghi "[001]", "[002]" hay chỉ số cảnh vào prompt
+- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
+- Prompt trả về phải BẮT ĐẦU NGAY bằng mô tả visual (vd: "Medium shot of...", "Split layout showing...", "Wide angle of..."), KHÔNG có prefix nào khác
+
 Ngôn ngữ prompt: TIẾNG ANH (cho image gen). 60-120 từ/prompt.
 
 Trả về CHỈ JSON array:
@@ -2420,7 +2447,7 @@ Trả về CHỈ JSON array:
 CÁC CẢNH:
 ${batch.map(s => `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | ${s.duration}s`).join('\n')}`;
       const reply = await callClaude(prompt, 4000);
-      for (const x of parseJSON(reply)) state.scenePrompts[x.id] = x.prompt;
+      for (const x of parseJSON(reply)) state.scenePrompts[x.id] = cleanPrompt(x.prompt);
       renderPromptsV();
       setStatus2(`Tạo prompt... ${Math.min(i + bs, state.scenes.length)}/${state.scenes.length}`, 'working');
     }
@@ -2477,7 +2504,7 @@ function renderPromptsV(){
   document.getElementById('badge-prompts').textContent = cnt;
   if (state.scenes.length === 0) { box.innerHTML = '<div class="empty-state">Chưa có cảnh.</div>'; return; }
   box.innerHTML = state.scenes.map(s => {
-    const p = state.scenePrompts[s.id];
+    const p = cleanPrompt(state.scenePrompts[s.id]);
     const promptEsc = p ? p.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
     return `<div class="prompt-card ${p ? '' : 'empty'}">
       <div class="prompt-card-head">
@@ -2489,13 +2516,10 @@ function renderPromptsV(){
       ${p ? `<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button></div>` : ''}
     </div>`;
   }).join('');
-  // Fill unified textarea
+  // Fill unified textarea — chỉ prompts thuần, không có [id] prefix
   const ta = document.getElementById('allPromptsV');
   if (ta) {
-    ta.value = state.scenes.map(s => {
-      const p = state.scenePrompts[s.id];
-      return p ? `[${s.id}] ${p}` : '';
-    }).filter(Boolean).join('\n\n');
+    ta.value = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean).join('\n\n');
   }
 }
 
@@ -2559,10 +2583,7 @@ function exportVideo(){
 }
 
 function copyAllScenePrompts(){
-  const all = state.scenes.map(s => {
-    const p = state.scenePrompts[s.id];
-    return p ? `[${s.id}] ${p}` : '';
-  }).filter(Boolean).join('\n\n---\n\n');
+  const all = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean).join('\n\n');
   if (!all) return setStatus2('Chưa có prompt nào.', 'error');
   navigator.clipboard.writeText(all);
   document.getElementById('copyAllInfo').textContent = `✓ Đã sao chép ${state.scenes.length} prompts`;
@@ -3394,6 +3415,11 @@ Quy tắc:
 - Bối cảnh: [tên-bối-cảnh] hoặc tả tự do
 - KHÔNG dùng cảm xúc trừu tượng ("beautifully", "magnificent"), dùng mô tả cụ thể
 
+⚠️ TUYỆT ĐỐI KHÔNG:
+- KHÔNG ghi "LOẠI 1", "Type 1", "Scene type 1" hay bất kỳ label phân loại nào vào prompt
+- KHÔNG ghi "[001]", "[002]" hay chỉ số cảnh vào prompt
+- Prompt phải BẮT ĐẦU NGAY bằng mô tả visual (vd: "Medium tracking shot of...", "Close-up of..."), KHÔNG có prefix
+
 Trả về CHỈ JSON array:
 [{"id":"001","prompt":"prompt text đầy đủ với audio cue ở cuối nếu có"}, ...]
 
@@ -3406,7 +3432,7 @@ ${batch.map(s => {
 
       const reply = await callClaude(prompt, 4000);
       for (const x of parseJSON(reply)) {
-        state.veoPrompts[x.id] = { prompt: x.prompt };
+        state.veoPrompts[x.id] = { prompt: cleanPrompt(x.prompt) };
       }
       renderVeoPrompts();
       renderVeoStats();
@@ -3431,7 +3457,7 @@ function renderVeoPrompts(){
   }
   box.innerHTML = state.scenes.map(s => {
     const entry = state.veoPrompts?.[s.id];
-    const p = entry?.prompt;
+    const p = cleanPrompt(entry?.prompt);
     const dur = getSceneDuration(s);
     const promptEsc = p ? p.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
     return `<div class="prompt-card ${p ? '' : 'empty'}">
@@ -3444,21 +3470,15 @@ function renderVeoPrompts(){
       ${p ? `<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button></div>` : ''}
     </div>`;
   }).join('');
-  // Fill unified textarea
+  // Fill unified textarea — chỉ prompts thuần, không có [id]
   const ta = document.getElementById('allVeoPromptsBox');
   if (ta) {
-    ta.value = state.scenes.map(s => {
-      const entry = state.veoPrompts?.[s.id];
-      return entry?.prompt ? `[${s.id}] ${entry.prompt}` : '';
-    }).filter(Boolean).join('\n\n');
+    ta.value = state.scenes.map(s => cleanPrompt(state.veoPrompts?.[s.id]?.prompt)).filter(Boolean).join('\n\n');
   }
 }
 
 function copyAllVeoPrompts(){
-  const all = state.scenes.map(s => {
-    const entry = state.veoPrompts?.[s.id];
-    return entry?.prompt ? `[${s.id}] ${entry.prompt}` : '';
-  }).filter(Boolean).join('\n\n---\n\n');
+  const all = state.scenes.map(s => cleanPrompt(state.veoPrompts?.[s.id]?.prompt)).filter(Boolean).join('\n\n');
   if (!all) return setStatus6('Chưa có prompt nào.', 'error');
   navigator.clipboard.writeText(all);
   setStatus6(`✓ Đã sao chép ${Object.keys(state.veoPrompts).length} prompt Veo 3.`, 'ok');
