@@ -1,8 +1,22 @@
 {
-  "version": 2,
-  "functions": {
-    "api/claude.js": {
-      "maxDuration": 60
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
     }
+  ],
+  "functions": {
+    "api/claude.js": { "maxDuration": 60 },
+    "api/openai.js": { "maxDuration": 60 }
   }
 }
