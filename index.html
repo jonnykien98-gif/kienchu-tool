@@ -3230,6 +3230,24 @@ document.addEventListener('DOMContentLoaded', () => {
 const setStatus6 = (m, t) => setStatusBar('status6', m, t);
 const videoBuilder = { images: [], audioFile: null, clips: [], ffmpegLoaded: false, ffmpeg: null };
 
+// Local impl, không phụ thuộc FFmpegUtil (script CDN đôi khi không load được do COEP)
+async function _toBlobURL(url, type){
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Fetch failed: ' + url);
+  const buf = await r.arrayBuffer();
+  return URL.createObjectURL(new Blob([buf], { type }));
+}
+async function _fetchFile(file){
+  if (file instanceof File || file instanceof Blob) {
+    return new Uint8Array(await file.arrayBuffer());
+  }
+  if (typeof file === 'string') {
+    const r = await fetch(file);
+    return new Uint8Array(await r.arrayBuffer());
+  }
+  return file;
+}
+
 function setupVideoBuilder(){
   const dz = document.getElementById('v6ImgDrop');
   if (!dz) return;
@@ -3287,7 +3305,6 @@ async function loadFFmpeg(){
   setProgress(0, 'Đang tải FFmpeg...');
   try {
     const { FFmpeg } = FFmpegWASM;
-    const { toBlobURL } = FFmpegUtil;
     videoBuilder.ffmpeg = new FFmpeg();
     videoBuilder.ffmpeg.on('progress', ({ progress }) => {
       setProgress(Math.round(progress * 100), 'Đang xử lý...');
@@ -3297,11 +3314,11 @@ async function loadFFmpeg(){
     const ffmpegBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
     const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
     setStatus6('Đang tải FFmpeg worker...', 'working');
-    const classWorkerURL = await toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript');
+    const classWorkerURL = await _toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript');
     setStatus6('Đang tải FFmpeg core...', 'working');
-    const coreURL = await toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript');
+    const coreURL = await _toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript');
     setStatus6('Đang tải FFmpeg wasm (~30MB)...', 'working');
-    const wasmURL = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm');
+    const wasmURL = await _toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm');
     await videoBuilder.ffmpeg.load({ classWorkerURL, coreURL, wasmURL });
     videoBuilder.ffmpegLoaded = true;
     setStatus6('✓ FFmpeg.wasm đã sẵn sàng.', 'ok');
@@ -3330,7 +3347,7 @@ async function buildAllClips(){
   try {
     await loadFFmpeg();
     const ffmpeg = videoBuilder.ffmpeg;
-    const { fetchFile } = FFmpegUtil;
+    const fetchFile = _fetchFile;
     const res = document.getElementById('v6Resolution').value;
     const [w, h] = res.split('x');
     const fps = document.getElementById('v6Fps').value;
@@ -3398,7 +3415,7 @@ async function buildMergedVideo(){
 
   try {
     const ffmpeg = videoBuilder.ffmpeg;
-    const { fetchFile } = FFmpegUtil;
+    const fetchFile = _fetchFile;
 
     let concatList = '';
     for (let i = 0; i < videoBuilder.clips.length; i++) {
