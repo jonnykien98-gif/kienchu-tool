@@ -2538,21 +2538,28 @@ async function loadCloudState(){
       Object.assign(state, data.state);
       console.log('✓ Loaded state from Firestore');
     }
-    // 1b. Load tier (admin set thủ công qua Firebase Console)
-    // Tier nằm ở root doc, KHÔNG ở data.state, để client không tự sửa được
+    // 1b. Load tier
     state.userTier = (data && data.tier) || 'free';
     console.log('✓ User tier:', state.userTier);
-    // 2. Load ảnh từ IndexedDB
-    try {
-      const styleImgs = await IDB.get(uid + '/styleRefImages');
-      if (styleImgs) state.styleRefImages = styleImgs;
-      const charImgs = await IDB.get(uid + '/characterImages');
-      if (charImgs) state.characterImages = charImgs;
-      const scImgs = await IDB.get(uid + '/sceneImages');
-      if (scImgs) state.sceneImages = scImgs;
-      console.log('✓ Loaded images from IndexedDB');
-    } catch (e) {
-      console.warn('IDB load failed:', e);
+    // 1c. Migration: ensure all profiles have profileId + workData; migrate global state nếu cần
+    if (typeof migrateProfiles === 'function' && state.profiles?.length) {
+      const migrated = migrateProfiles();
+      if (migrated) saveCloudState(true);
+    }
+    // 1d. Load current profile's workData → state (pull data từ profile vào state)
+    const curP = getProfile();
+    if (curP) {
+      loadStateFromProfile(curP);
+      // 2. Load ảnh per-profile từ IndexedDB
+      try {
+        await loadProfileImages(curP.profileId);
+        console.log('✓ Loaded images from IndexedDB for profile:', curP.profileId);
+      } catch (e) {
+        console.warn('IDB load failed:', e);
+      }
+    } else {
+      // Không có profile → state rỗng
+      loadStateFromProfile(null);
     }
     // 3. Render tier-dependent UI
     renderTierBadge();
@@ -2569,19 +2576,29 @@ async function saveCloudState(immediate = false){
     const uid = window.currentUser.uid;
     setSyncStatus('💾 Đang lưu...', 'working');
     try {
+      // Sync state.{...} → current profile's workData trước khi save
+      if (typeof syncStateToCurrentProfile === 'function') syncStateToCurrentProfile();
       // Tách ảnh ra khỏi state — Firestore giới hạn 1MB/doc
       // Tách userTier — tier là admin-controlled, không lưu cùng state
-      const { styleRefImages, characterImages, sceneImages, userTier, ...lightState } = state;
-      // Lưu state nhẹ lên Firestore — merge:true để không ghi đè field "tier" ở root doc
+      // Tách working data (script, scenes...) — chúng đã được sync vào profile.workData, không cần ở root state
+      const { styleRefImages, characterImages, sceneImages, userTier,
+              script, scenes, scenePrompts, charactersV, backgroundsV,
+              assetCharPrompts, assetBgPrompts, styleRefPrompt, veoPrompts, pexelsResults,
+              ...lightState } = state;
+      // Lưu state nhẹ lên Firestore — workData nằm trong profiles[i].workData
       await window.firebaseSaveDoc(uid, {
         state: lightState,
         updatedAt: Date.now()
       });
-      // Lưu ảnh xuống IndexedDB local
+      // Lưu ảnh xuống IndexedDB theo profileId
+      const curP = getProfile();
+      const pid = curP?.profileId;
       try {
-        await IDB.set(uid + '/styleRefImages', styleRefImages || []);
-        await IDB.set(uid + '/characterImages', characterImages || {});
-        await IDB.set(uid + '/sceneImages', sceneImages || {});
+        if (pid) {
+          await IDB.set(uid + '/' + pid + '/styleRefImages', styleRefImages || []);
+          await IDB.set(uid + '/' + pid + '/characterImages', characterImages || {});
+          await IDB.set(uid + '/' + pid + '/sceneImages', sceneImages || {});
+        }
       } catch (e) {
         console.warn('IDB save failed:', e);
       }
@@ -2632,6 +2649,7 @@ function getProfile(){ return state.currentProfileIdx >= 0 ? state.profiles[stat
 
 function makeEmptyProfile(){
   return {
+    profileId: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
     tenKenh: '', ngach: '',
     visualStyle: 'Crayon Capital — Dark',
     ngonNgu: 'Tiếng Việt',
@@ -2641,8 +2659,136 @@ function makeEmptyProfile(){
     characterStyle: '', backgroundStyle: '', sceneStyle: '',
     promptRules: 'No text, no watermark, consistent character design, avoid gore',
     styleGuide: '', dnaKenh: '', chuDe: '',
-    characters: [], backgrounds: []
+    characters: [], backgrounds: [],
+    workData: createEmptyWorkData()  // Per-profile working data
   };
+}
+
+function createEmptyWorkData(){
+  return {
+    script: '',
+    scenes: [],
+    scenePrompts: {},
+    charactersV: [],
+    backgroundsV: [],
+    assetCharPrompts: {},
+    assetBgPrompts: {},
+    styleRefPrompt: '',
+    veoPrompts: {},
+    pexelsResults: {}
+  };
+}
+
+// Push state.{script,scenes,...} → current profile's workData (gọi trước khi save / switch)
+function syncStateToCurrentProfile(){
+  const p = getProfile();
+  if (!p) return;
+  if (!p.workData) p.workData = createEmptyWorkData();
+  p.workData.script = state.script || '';
+  p.workData.scenes = state.scenes || [];
+  p.workData.scenePrompts = state.scenePrompts || {};
+  p.workData.charactersV = state.charactersV || [];
+  p.workData.backgroundsV = state.backgroundsV || [];
+  p.workData.assetCharPrompts = state.assetCharPrompts || {};
+  p.workData.assetBgPrompts = state.assetBgPrompts || {};
+  p.workData.styleRefPrompt = state.styleRefPrompt || '';
+  p.workData.veoPrompts = state.veoPrompts || {};
+  p.workData.pexelsResults = state.pexelsResults || {};
+}
+
+// Pull profile's workData → state.{script,scenes,...} (gọi sau khi switch / load)
+function loadStateFromProfile(p){
+  const wd = (p && p.workData) || createEmptyWorkData();
+  state.script = wd.script || '';
+  state.scenes = wd.scenes || [];
+  state.scenePrompts = wd.scenePrompts || {};
+  state.charactersV = wd.charactersV || [];
+  state.backgroundsV = wd.backgroundsV || [];
+  state.assetCharPrompts = wd.assetCharPrompts || {};
+  state.assetBgPrompts = wd.assetBgPrompts || {};
+  state.styleRefPrompt = wd.styleRefPrompt || '';
+  state.veoPrompts = wd.veoPrompts || {};
+  state.pexelsResults = wd.pexelsResults || {};
+  // Images sẽ load từ IDB theo profileId — clear trước
+  state.characterImages = {};
+  state.sceneImages = {};
+  state.styleRefImages = [];
+}
+
+async function loadProfileImages(profileId){
+  const uid = window.currentUser?.uid;
+  if (!uid || !profileId) return;
+  try {
+    state.characterImages = (await IDB.get(uid + '/' + profileId + '/characterImages')) || {};
+    state.sceneImages = (await IDB.get(uid + '/' + profileId + '/sceneImages')) || {};
+    state.styleRefImages = (await IDB.get(uid + '/' + profileId + '/styleRefImages')) || [];
+  } catch(e) { console.warn('Load profile images failed:', e); }
+}
+
+// Migration: profile cũ chưa có profileId/workData → thêm vào, migrate global state nếu cần
+function migrateProfiles(){
+  let needSave = false;
+  state.profiles.forEach(p => {
+    if (!p.profileId) {
+      p.profileId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      needSave = true;
+    }
+    if (!p.workData) {
+      p.workData = createEmptyWorkData();
+      needSave = true;
+    }
+  });
+  // One-time: nếu có data global từ version cũ + current profile workData rỗng → migrate
+  const curP = getProfile();
+  if (curP && curP.workData) {
+    const wdEmpty = !curP.workData.script && !curP.workData.scenes?.length;
+    const hasGlobal = state.script || (state.scenes && state.scenes.length) || (state.scenePrompts && Object.keys(state.scenePrompts).length);
+    if (wdEmpty && hasGlobal) {
+      curP.workData = {
+        script: state.script || '',
+        scenes: state.scenes || [],
+        scenePrompts: state.scenePrompts || {},
+        charactersV: state.charactersV || [],
+        backgroundsV: state.backgroundsV || [],
+        assetCharPrompts: state.assetCharPrompts || {},
+        assetBgPrompts: state.assetBgPrompts || {},
+        styleRefPrompt: state.styleRefPrompt || '',
+        veoPrompts: state.veoPrompts || {},
+        pexelsResults: state.pexelsResults || {}
+      };
+      needSave = true;
+      console.log('✓ Migrated global state → current profile workData');
+    }
+  }
+  return needSave;
+}
+
+// Re-render tất cả UI sau khi switch profile / load
+function rerenderAllAfterProfileLoad(){
+  const sc = document.getElementById('script'); if (sc) sc.value = state.script || '';
+  if (typeof renderAllT2 === 'function') renderAllT2();
+  if (typeof renderPromptsV === 'function') renderPromptsV();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  if (typeof renderTable === 'function') renderTable();
+  if (typeof renderPreview === 'function') renderPreview();
+  if (typeof updateStats === 'function') updateStats();
+  if (typeof updateAllAssetPromptsBox === 'function') updateAllAssetPromptsBox();
+  // Tool 3 lists
+  if (state.charactersV?.length && typeof renderAssetCharPrompts === 'function') renderAssetCharPrompts(state.charactersV);
+  if (state.backgroundsV?.length && typeof renderAssetBgPrompts === 'function') renderAssetBgPrompts(state.backgroundsV);
+  // Style ref panel
+  const stPanel = document.getElementById('styleRefPanel');
+  if (stPanel) stPanel.style.display = state.styleRefPrompt ? 'block' : 'none';
+  if (typeof renderStyleRef === 'function') renderStyleRef();
+  // Tool 5 search results clearing
+  document.querySelectorAll('[id^="media-results-"]').forEach(el => el.innerHTML = '');
+  // Tool 3 char/bg textareas
+  const charTA = document.getElementById('t3Characters');
+  if (charTA) charTA.value = (state.charactersV || []).join('\n');
+  const bgTA = document.getElementById('t3Backgrounds');
+  if (bgTA) bgTA.value = (state.backgroundsV || []).join('\n');
+  syncTool2FromProfile();
+  renderProfileStyles();
 }
 
 function renderProfileSelect(){
@@ -2654,34 +2800,66 @@ function renderProfileSelect(){
     ).join('');
 }
 
-function switchProfile(val){
-  const idx = val === '' ? -1 : parseInt(val);
-  state.currentProfileIdx = idx;
-  syncTool2FromProfile();
-  renderProfileStyles();
-  saveState();
+async function switchProfile(val){
+  const newIdx = val === '' ? -1 : parseInt(val);
+  // Save current profile's workData trước khi switch
+  if (state.currentProfileIdx >= 0 && state.currentProfileIdx !== newIdx) {
+    syncStateToCurrentProfile();
+  }
+  state.currentProfileIdx = newIdx;
+  if (newIdx >= 0) {
+    const newP = state.profiles[newIdx];
+    if (!newP.workData) newP.workData = createEmptyWorkData();
+    loadStateFromProfile(newP);
+    await loadProfileImages(newP.profileId);
+  } else {
+    loadStateFromProfile(null); // clear all
+  }
+  rerenderAllAfterProfileLoad();
+  saveState(true);
 }
 
-function newProfile(){
+async function newProfile(){
   if (state.profiles.length >= getMaxProfiles()) {
     return showUpgradeModal(`Gói Free chỉ tạo được ${getMaxProfiles()} profile. Nâng cấp Pro để tạo không giới hạn.`);
   }
+  // Save current profile workData
+  if (state.currentProfileIdx >= 0) syncStateToCurrentProfile();
   state.profiles.push(makeEmptyProfile());
   state.currentProfileIdx = state.profiles.length - 1;
+  // Reset state về workData rỗng của profile mới (đã rỗng sẵn)
+  loadStateFromProfile(state.profiles[state.currentProfileIdx]);
   renderProfileSelect();
+  rerenderAllAfterProfileLoad();
   openProfile();
   saveState(true);
 }
 
-function deleteProfile(){
+async function deleteProfile(){
   if (state.currentProfileIdx < 0) return;
   const p = getProfile();
-  if (!confirm('Xoá profile "' + (p.tenKenh || 'unnamed') + '"? Không hoàn tác được.')) return;
+  if (!confirm('Xoá profile "' + (p.tenKenh || 'unnamed') + '"?\nTOÀN BỘ kịch bản, cảnh, prompt, ảnh storyboard của profile này sẽ mất. Không hoàn tác được.')) return;
+  // Cleanup IDB images cho profile này
+  const uid = window.currentUser?.uid;
+  if (uid && p.profileId) {
+    try {
+      await IDB.set(uid + '/' + p.profileId + '/characterImages', null);
+      await IDB.set(uid + '/' + p.profileId + '/sceneImages', null);
+      await IDB.set(uid + '/' + p.profileId + '/styleRefImages', null);
+    } catch(e) {}
+  }
   state.profiles.splice(state.currentProfileIdx, 1);
   state.currentProfileIdx = state.profiles.length > 0 ? 0 : -1;
+  if (state.currentProfileIdx >= 0) {
+    const newP = state.profiles[state.currentProfileIdx];
+    loadStateFromProfile(newP);
+    await loadProfileImages(newP.profileId);
+  } else {
+    loadStateFromProfile(null);
+  }
   renderProfileSelect();
   closeProfile();
-  renderProfileStyles();
+  rerenderAllAfterProfileLoad();
   saveState(true);
 }
 
@@ -5153,51 +5331,60 @@ function t7Reset(){
    CLEAR ALL — Xoá toàn bộ data từng tool
 ============================================================ */
 function clearAllT2(){
-  if (!confirm('Xoá HẾT data Tool 2: kịch bản, cảnh, prompt G-Labs, characters, backgrounds, ảnh storyboard?\n\nProfile KHÔNG bị xoá.')) return;
+  if (!confirm('Xoá HẾT data Tool 2 của profile hiện tại: kịch bản, cảnh, prompt G-Labs, characters, backgrounds, ảnh storyboard?\n\nProfile (Style/DNA) KHÔNG bị xoá.')) return;
   state.script = '';
   state.scenes = [];
   state.scenePrompts = {};
   state.charactersV = [];
   state.backgroundsV = [];
   state.sceneImages = {};
+  // UI clear
   const sc = document.getElementById('script'); if (sc) sc.value = '';
   const pv = document.getElementById('scriptPreview'); if (pv) pv.innerHTML = '<div class="empty-state">Paste kịch bản bên trái để xem trước.</div>';
   if (typeof renderAllT2 === 'function') renderAllT2();
   if (typeof updateStats === 'function') updateStats();
   if (typeof renderPromptsV === 'function') renderPromptsV();
+  // Sync vào current profile workData
+  syncStateToCurrentProfile();
   saveState(true);
-  setStatus2('✓ Đã xoá hết data Tool 2.', 'ok');
+  setStatus2('✓ Đã xoá hết data Tool 2 của profile hiện tại.', 'ok');
 }
 
 function clearAllT3(){
-  if (!confirm('Xoá HẾT prompt asset (nhân vật + bối cảnh + style reference)?')) return;
+  if (!confirm('Xoá HẾT prompt asset của profile hiện tại (nhân vật + bối cảnh + style reference + ảnh nhân vật)?')) return;
   state.assetCharPrompts = {};
   state.assetBgPrompts = {};
   state.styleRefPrompt = '';
+  state.characterImages = {};
   if (state.charactersV?.length && typeof renderAssetCharPrompts === 'function') renderAssetCharPrompts(state.charactersV);
   if (state.backgroundsV?.length && typeof renderAssetBgPrompts === 'function') renderAssetBgPrompts(state.backgroundsV);
   const sp = document.getElementById('styleRefPanel'); if (sp) sp.style.display = 'none';
+  if (typeof renderStyleRef === 'function') renderStyleRef();
   if (typeof updateAllAssetPromptsBox === 'function') updateAllAssetPromptsBox();
+  if (typeof renderCharImageGallery === 'function') renderCharImageGallery();
+  syncStateToCurrentProfile();
   saveState(true);
-  setStatus3('✓ Đã xoá hết prompt asset.', 'ok');
+  setStatus3('✓ Đã xoá hết prompt asset + ảnh ref của profile hiện tại.', 'ok');
 }
 
 function clearAllT5(){
-  if (!confirm('Xoá HẾT kết quả tìm media?')) return;
+  if (!confirm('Xoá HẾT kết quả tìm media của profile hiện tại?')) return;
   state.pexelsResults = {};
   document.querySelectorAll('[id^="media-results-"]').forEach(el => el.innerHTML = '');
   const sp = document.getElementById('searchProgress'); if (sp) sp.textContent = '';
+  syncStateToCurrentProfile();
   saveState(true);
-  setStatus5('✓ Đã xoá hết kết quả tìm media.', 'ok');
+  setStatus5('✓ Đã xoá hết kết quả tìm media của profile hiện tại.', 'ok');
 }
 
 function clearAllT6(){
-  if (!confirm('Xoá HẾT prompt Veo 3?')) return;
+  if (!confirm('Xoá HẾT prompt Veo 3 của profile hiện tại?')) return;
   state.veoPrompts = {};
   if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
   if (typeof renderVeoStats === 'function') renderVeoStats();
+  syncStateToCurrentProfile();
   saveState(true);
-  setStatus6('✓ Đã xoá hết prompt Veo 3.', 'ok');
+  setStatus6('✓ Đã xoá hết prompt Veo 3 của profile hiện tại.', 'ok');
 }
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 5 loaded (cloud sync hoàn chỉnh).');
