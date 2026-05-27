@@ -625,6 +625,11 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
   border-radius:8px;
   padding:14px;margin-bottom:12px;
 }
+.prompt-card.editing, .ref-sheet-card.editing{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(194,65,12,.12);
+  background:var(--surface);
+}
 .prompt-card-head{
   display:flex;justify-content:space-between;align-items:center;
   margin-bottom:8px;padding-bottom:8px;
@@ -988,6 +993,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn teal" onclick="doAssign()">◈ Gán Tài Nguyên</button>
         <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
         <button class="btn ghost" onclick="exportVideo()">↓ Xuất Dữ Liệu</button>
+        <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT2()" title="Xoá toàn bộ data Tool 2">🗑 Xoá hết</button>
         <div class="batch-control"><span>Batch:</span><input type="number" id="batchSize" value="5" min="1" max="20"></div>
       </div>
 
@@ -1140,6 +1146,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn violet" onclick="genStyleReference()">🎨 Style Reference</button>
         <button class="btn" onclick="copyAllAssetPrompts()">📋 Sao chép tất cả</button>
         <button class="btn ghost" onclick="exportAssetPrompts()">↓ Xuất JSON</button>
+        <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT3()" title="Xoá toàn bộ prompt asset">🗑 Xoá hết</button>
       </div>
 
       <div class="status-bar" id="status3">Sẵn sàng. Load Assets từ Tool 02 rồi bấm Generate.</div>
@@ -1166,10 +1173,13 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       <div class="panel mb-24" id="styleRefPanel" style="display:none">
         <div class="panel-head">
           <span>🎨 Style Reference Prompt</span>
-          <button class="btn ghost sm" onclick="copyText(state.styleRefPrompt||'')">📋 Sao chép</button>
+          <div style="display:flex;gap:6px">
+            <button class="btn ghost sm" onclick="copyText(state.styleRefPrompt||'')">📋 Sao chép</button>
+            <button class="btn ghost sm" onclick="startEditPrompt('styleRef', null)">✏️ Sửa</button>
+          </div>
         </div>
         <div class="panel-body">
-          <div id="t3StyleRefText" style="white-space:pre-wrap;line-height:1.7;font-size:13px"></div>
+          <div id="t3StyleRefBody"></div>
         </div>
       </div>
 
@@ -1303,6 +1313,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <option value="videos">Chỉ Video</option>
         </select>
         <span style="font-size:12px;color:var(--text-muted)" id="searchProgress"></span>
+        <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT5()" title="Xoá kết quả tìm media">🗑 Xoá hết</button>
       </div>
 
       <div class="status-bar" id="status5">Sẵn sàng. Paste Pexels API key rồi load cảnh từ Tool 02.</div>
@@ -1354,6 +1365,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn primary" onclick="genVeoPrompts()">✨ Sinh Prompt Veo 3</button>
         <button class="btn" onclick="copyAllVeoPrompts()">📋 Sao chép tất cả</button>
         <button class="btn ghost" onclick="exportVeoPrompts()">↓ Xuất JSON</button>
+        <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT6()" title="Xoá toàn bộ prompt Veo 3">🗑 Xoá hết</button>
         <div class="batch-control"><span>Batch:</span><input type="number" id="v6BatchSize" value="5" min="1" max="20"></div>
       </div>
 
@@ -1602,6 +1614,7 @@ const state = {
   sub: 'list',
   cancelRequested: false,
   editingSceneIdx: -1,
+  editingPrompt: null,  // {type, key} — only one prompt edit at a time
   userTier: 'free'  // 'free' | 'pro' — load từ Firestore, admin edit thủ công
 };
 
@@ -2001,6 +2014,108 @@ function cleanPrompt(p){
     if (s === before) break;
   }
   return s;
+}
+
+/* ============================================================
+   INLINE PROMPT EDIT — Tool 2/3/6
+============================================================ */
+function startEditPrompt(type, key){
+  state.editingPrompt = { type, key };
+  rerenderAfterPromptEdit();
+  // Focus textarea after render
+  setTimeout(() => {
+    const ta = document.getElementById('editPromptTA');
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }, 50);
+}
+
+function cancelEditPrompt(){
+  state.editingPrompt = null;
+  rerenderAfterPromptEdit();
+}
+
+function saveEditPrompt(){
+  const ta = document.getElementById('editPromptTA');
+  if (!ta || !state.editingPrompt) return;
+  const val = ta.value.trim();
+  const { type, key } = state.editingPrompt;
+  if (type === 'scene') state.scenePrompts[key] = val;
+  else if (type === 'char') state.assetCharPrompts[key] = val;
+  else if (type === 'bg') state.assetBgPrompts[key] = val;
+  else if (type === 'styleRef') state.styleRefPrompt = val;
+  else if (type === 'veo') {
+    if (!state.veoPrompts[key]) state.veoPrompts[key] = {};
+    state.veoPrompts[key].prompt = val;
+  }
+  state.editingPrompt = null;
+  rerenderAfterPromptEdit();
+  saveState(true);
+}
+
+function rerenderAfterPromptEdit(){
+  if (typeof renderPromptsV === 'function') renderPromptsV();
+  if (state.charactersV?.length && typeof renderAssetCharPrompts === 'function') renderAssetCharPrompts(state.charactersV);
+  if (state.backgroundsV?.length && typeof renderAssetBgPrompts === 'function') renderAssetBgPrompts(state.backgroundsV);
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  if (typeof updateAllAssetPromptsBox === 'function') updateAllAssetPromptsBox();
+  // Style ref render (handle both view + edit mode)
+  renderStyleRef();
+}
+
+function renderStyleRef(){
+  const body = document.getElementById('t3StyleRefBody');
+  if (!body) return;
+  const editing = isEditingPrompt('styleRef', null);
+  if (editing) {
+    body.innerHTML = renderEditPromptUI(state.styleRefPrompt || '');
+    setTimeout(() => {
+      const ta = document.getElementById('editPromptTA');
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }, 50);
+  } else {
+    body.innerHTML = `<div style="white-space:pre-wrap;line-height:1.7;font-size:13px">${escapeHtml(state.styleRefPrompt || '')}</div>`;
+  }
+}
+
+function isEditingPrompt(type, key){
+  return state.editingPrompt && state.editingPrompt.type === type && state.editingPrompt.key === key;
+}
+
+// Render block edit UI inside a card (textarea + Save/Cancel)
+function renderEditPromptUI(currentValue){
+  const safe = String(currentValue || '').replace(/</g, '&lt;');
+  return `<textarea id="editPromptTA" style="width:100%;min-height:120px;font-size:12.5px;line-height:1.6;background:var(--surface);border:2px solid var(--accent);padding:10px;border-radius:6px">${safe}</textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="btn primary sm" onclick="saveEditPrompt()">✓ Lưu</button>
+      <button class="btn ghost sm" onclick="cancelEditPrompt()">✗ Huỷ</button>
+      <span style="font-size:11px;color:var(--text-muted);align-self:center;margin-left:8px">Ctrl+Enter để lưu nhanh</span>
+    </div>`;
+}
+
+// Allow Ctrl+Enter to save
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && state.editingPrompt) {
+    e.preventDefault();
+    saveEditPrompt();
+  } else if (e.key === 'Escape' && state.editingPrompt) {
+    cancelEditPrompt();
+  }
+});
+
+/* ============================================================
+   BROWSER NOTIFICATIONS — long task done
+============================================================ */
+async function notifyDone(title, body){
+  if (!('Notification' in window)) return;
+  if (document.visibilityState === 'visible') return; // tab đang xem, không cần
+  let perm = Notification.permission;
+  if (perm === 'default') {
+    try { perm = await Notification.requestPermission(); } catch(e) { return; }
+  }
+  if (perm !== 'granted') return;
+  try {
+    new Notification(title, { body, icon: '/favicon.ico', tag: 'chukien-media' });
+  } catch(e) {}
 }
 
 function copyText(t){
@@ -3162,17 +3277,24 @@ function renderPromptsV(){
   box.innerHTML = state.scenes.map(s => {
     const p = cleanPrompt(state.scenePrompts[s.id]);
     const promptEsc = p ? p.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
-    return `<div class="prompt-card ${p ? '' : 'empty'}">
+    const editing = isEditingPrompt('scene', s.id);
+    return `<div class="prompt-card ${p ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="prompt-card-head">
         <span class="prompt-card-id">[${s.id}]</span>
         <span class="prompt-card-meta">${escapeHtml(s.character) || '—'} · ${escapeHtml(s.background) || '—'} · ${s.camera} · ${s.duration}s</span>
       </div>
       <div class="prompt-card-vo">"${escapeHtml(s.text)}"</div>
-      <div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt.'}</div>
-      ${p ? `<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button></div>` : ''}
+      ${editing
+        ? renderEditPromptUI(p)
+        : `<div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt.'}</div>
+           ${p ? `<div class="prompt-card-actions">
+             <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
+             <button class="btn ghost sm" onclick="startEditPrompt('scene','${s.id}')">✏️ Sửa</button>
+           </div>` : ''}`
+      }
     </div>`;
   }).join('');
-  // Fill unified textarea — chỉ prompts thuần, không có [id] prefix
+  // Fill unified textarea
   const ta = document.getElementById('allPromptsV');
   if (ta) {
     ta.value = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean).join('\n\n');
@@ -3516,8 +3638,8 @@ Prompt phải:
 - Kết thúc bằng: "Channel style reference sheet for [${p.tenKenh}]"
 - Trả về CHỈ prompt text.`;
     state.styleRefPrompt = await callClaude(prompt, 500);
-    document.getElementById('t3StyleRefText').textContent = state.styleRefPrompt;
     document.getElementById('styleRefPanel').style.display = 'block';
+    renderStyleRef();
     updateAllAssetPromptsBox();
     setStatus3('✓ Đã tạo Style Reference prompt.', 'ok');
     saveState();
@@ -3535,12 +3657,16 @@ function renderAssetCharPrompts(chars){
   box.innerHTML = chars.map(name => {
     const pr = state.assetCharPrompts?.[name];
     const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
-    return `<div class="ref-sheet-card ${pr ? '' : 'empty'}">
+    const editing = isEditingPrompt('char', name);
+    return `<div class="ref-sheet-card ${pr ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="ref-sheet-card-head">
         <span class="ref-sheet-card-name">${escapeHtml(name)}</span>
-        ${pr ? `<button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>` : ''}
+        ${editing ? '' : (pr ? `<div style="display:flex;gap:6px">
+          <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋</button>
+          <button class="btn ghost sm" onclick="startEditPrompt('char','${name.replace(/'/g, "\\'")}')">✏️</button>
+        </div>` : '')}
       </div>
-      <div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>
+      ${editing ? renderEditPromptUI(pr) : `<div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>`}
     </div>`;
   }).join('');
   updateAllAssetPromptsBox();
@@ -3554,12 +3680,16 @@ function renderAssetBgPrompts(bgs){
   box.innerHTML = bgs.map(name => {
     const pr = state.assetBgPrompts?.[name];
     const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
-    return `<div class="ref-sheet-card bg-card ${pr ? '' : 'empty'}">
+    const editing = isEditingPrompt('bg', name);
+    return `<div class="ref-sheet-card bg-card ${pr ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="ref-sheet-card-head">
         <span class="ref-sheet-card-name">${escapeHtml(name)}</span>
-        ${pr ? `<button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>` : ''}
+        ${editing ? '' : (pr ? `<div style="display:flex;gap:6px">
+          <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋</button>
+          <button class="btn ghost sm" onclick="startEditPrompt('bg','${name.replace(/'/g, "\\'")}')">✏️</button>
+        </div>` : '')}
       </div>
-      <div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>
+      ${editing ? renderEditPromptUI(pr) : `<div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>`}
     </div>`;
   }).join('');
   updateAllAssetPromptsBox();
@@ -4113,17 +4243,23 @@ function renderVeoPrompts(){
     const p = cleanPrompt(entry?.prompt);
     const dur = getSceneDuration(s);
     const promptEsc = p ? p.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
-    return `<div class="prompt-card ${p ? '' : 'empty'}">
+    const editing = isEditingPrompt('veo', s.id);
+    return `<div class="prompt-card ${p ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="prompt-card-head">
         <span class="prompt-card-id">[${s.id}]</span>
         <span class="prompt-card-meta">${escapeHtml(s.character) || '—'} · ${escapeHtml(s.background) || '—'} · ${s.camera} · ${dur}s</span>
       </div>
       <div class="prompt-card-vo">VO: "${escapeHtml(s.text)}"</div>
-      <div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt. Bấm Sinh Prompt Veo 3.'}</div>
-      ${p ? `<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button></div>` : ''}
+      ${editing
+        ? renderEditPromptUI(p)
+        : `<div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt. Bấm Sinh Prompt Veo 3.'}</div>
+           ${p ? `<div class="prompt-card-actions">
+             <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
+             <button class="btn ghost sm" onclick="startEditPrompt('veo','${s.id}')">✏️ Sửa</button>
+           </div>` : ''}`
+      }
     </div>`;
   }).join('');
-  // Fill unified textarea — chỉ prompts thuần, không có [id]
   const ta = document.getElementById('allVeoPromptsBox');
   if (ta) {
     ta.value = state.scenes.map(s => cleanPrompt(state.veoPrompts?.[s.id]?.prompt)).filter(Boolean).join('\n\n');
@@ -4431,6 +4567,7 @@ async function t7RenderAll(){
   text.textContent = 'Hoàn tất';
   if (!state.cancelRequested) {
     setStatus7(`✓ Đã render ${t7State.clips.length} clips. Bấm "Tải ZIP clips" để tải.`, 'ok');
+    notifyDone('✓ Render xong!', `${t7State.clips.length} clips đã sẵn sàng. Vào tab Dựng Clip Video để tải.`);
   }
 }
 
@@ -4481,6 +4618,56 @@ function t7Reset(){
   document.getElementById('t7ProgressPct').textContent = '';
   document.getElementById('t7ProgressText').textContent = 'Sẵn sàng';
   setStatus7('Đã xoá kết quả. Sẵn sàng render lại.', 'info');
+}
+
+/* ============================================================
+   CLEAR ALL — Xoá toàn bộ data từng tool
+============================================================ */
+function clearAllT2(){
+  if (!confirm('Xoá HẾT data Tool 2: kịch bản, cảnh, prompt G-Labs, characters, backgrounds?\n\nProfile KHÔNG bị xoá.')) return;
+  state.script = '';
+  state.scenes = [];
+  state.scenePrompts = {};
+  state.charactersV = [];
+  state.backgroundsV = [];
+  const sc = document.getElementById('script'); if (sc) sc.value = '';
+  const pv = document.getElementById('scriptPreview'); if (pv) pv.innerHTML = '<div class="empty-state">Paste kịch bản bên trái để xem trước.</div>';
+  if (typeof renderAllT2 === 'function') renderAllT2();
+  if (typeof updateStats === 'function') updateStats();
+  if (typeof renderPromptsV === 'function') renderPromptsV();
+  saveState(true);
+  setStatus2('✓ Đã xoá hết data Tool 2.', 'ok');
+}
+
+function clearAllT3(){
+  if (!confirm('Xoá HẾT prompt asset (nhân vật + bối cảnh + style reference)?')) return;
+  state.assetCharPrompts = {};
+  state.assetBgPrompts = {};
+  state.styleRefPrompt = '';
+  if (state.charactersV?.length && typeof renderAssetCharPrompts === 'function') renderAssetCharPrompts(state.charactersV);
+  if (state.backgroundsV?.length && typeof renderAssetBgPrompts === 'function') renderAssetBgPrompts(state.backgroundsV);
+  const sp = document.getElementById('styleRefPanel'); if (sp) sp.style.display = 'none';
+  if (typeof updateAllAssetPromptsBox === 'function') updateAllAssetPromptsBox();
+  saveState(true);
+  setStatus3('✓ Đã xoá hết prompt asset.', 'ok');
+}
+
+function clearAllT5(){
+  if (!confirm('Xoá HẾT kết quả tìm media?')) return;
+  state.pexelsResults = {};
+  document.querySelectorAll('[id^="media-results-"]').forEach(el => el.innerHTML = '');
+  const sp = document.getElementById('searchProgress'); if (sp) sp.textContent = '';
+  saveState(true);
+  setStatus5('✓ Đã xoá hết kết quả tìm media.', 'ok');
+}
+
+function clearAllT6(){
+  if (!confirm('Xoá HẾT prompt Veo 3?')) return;
+  state.veoPrompts = {};
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  if (typeof renderVeoStats === 'function') renderVeoStats();
+  saveState(true);
+  setStatus6('✓ Đã xoá hết prompt Veo 3.', 'ok');
 }
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 5 loaded (cloud sync hoàn chỉnh).');
