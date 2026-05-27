@@ -776,14 +776,14 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="nav-item" data-tool="tool3" onclick="switchTool('tool3')">
           <span class="num">3</span><span>Asset Prompts</span>
         </div>
-        <div class="nav-item" data-tool="tool4" onclick="switchTool('tool4')">
-          <span class="num">4</span><span>Đổi Tên Ảnh</span>
+        <div class="nav-item" data-tool="tool6" onclick="switchTool('tool6')">
+          <span class="num">4</span><span>Prompt Veo 3</span>
         </div>
         <div class="nav-item" data-tool="tool5" onclick="switchTool('tool5')">
           <span class="num">5</span><span>Tìm Media</span>
         </div>
-        <div class="nav-item" data-tool="tool6" onclick="switchTool('tool6')">
-          <span class="num">6</span><span>Prompt Veo 3</span>
+        <div class="nav-item" data-tool="tool4" onclick="switchTool('tool4')">
+          <span class="num">6</span><span>Đổi Tên Ảnh</span>
         </div>
       </div>
     </div>
@@ -933,6 +933,10 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <button class="btn primary sm" onclick="copyAllScenePrompts()">📋 Sao chép tất cả prompt</button>
             <span style="color:var(--text-muted);font-size:11px;align-self:center" id="copyAllInfo"></span>
           </div>
+          <div style="padding:14px;border-bottom:1px solid var(--border)">
+            <label class="label">📦 Tất cả prompt G-Labs (gộp — chọn All rồi Copy)</label>
+            <textarea id="allPromptsV" readonly placeholder="Chưa có prompt. Bấm Tạo Prompt G-Labs trước." style="min-height:220px;background:var(--surface-2);font-size:12px;line-height:1.6"></textarea>
+          </div>
           <div class="prompts-list" id="promptsListV">
             <div class="empty-state">Chưa có prompt. Bấm Tạo Prompt G-Labs.</div>
           </div>
@@ -1060,6 +1064,16 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </div>
         <div class="panel-body">
           <div id="t3StyleRefText" style="white-space:pre-wrap;line-height:1.7;font-size:13px"></div>
+        </div>
+      </div>
+
+      <div class="panel mb-24">
+        <div class="panel-head">
+          <span>📦 Tất cả prompt (gộp — chọn All rồi Copy)</span>
+          <button class="btn ghost sm" onclick="copyAllAssetPrompts()">📋 Sao chép</button>
+        </div>
+        <div class="panel-body">
+          <textarea id="allAssetPromptsBox" readonly placeholder="Chưa có prompt. Bấm Generate All Prompts trước." style="min-height:260px;background:var(--surface-2);font-size:12px;line-height:1.6"></textarea>
         </div>
       </div>
 
@@ -1252,6 +1266,16 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </div>
         <div id="v6PromptsList" class="prompts-list" style="max-height:none">
           <div class="empty-state">Chưa có prompt. Bấm Sinh Prompt Veo 3 ở trên.</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-head">
+          <span>📦 Tất cả prompt Veo 3 (gộp — chọn All rồi Copy)</span>
+          <button class="btn ghost sm" onclick="copyAllVeoPrompts()">📋 Sao chép</button>
+        </div>
+        <div class="panel-body">
+          <textarea id="allVeoPromptsBox" readonly placeholder="Chưa có prompt. Bấm Sinh Prompt Veo 3 trước." style="min-height:260px;background:var(--surface-2);font-size:12px;line-height:1.6"></textarea>
         </div>
       </div>
     </div>
@@ -2465,6 +2489,14 @@ function renderPromptsV(){
       ${p ? `<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button></div>` : ''}
     </div>`;
   }).join('');
+  // Fill unified textarea
+  const ta = document.getElementById('allPromptsV');
+  if (ta) {
+    ta.value = state.scenes.map(s => {
+      const p = state.scenePrompts[s.id];
+      return p ? `[${s.id}] ${p}` : '';
+    }).filter(Boolean).join('\n\n');
+  }
 }
 
 function renderStats2(){
@@ -2812,6 +2844,7 @@ Prompt phải:
     state.styleRefPrompt = await callClaude(prompt, 500);
     document.getElementById('t3StyleRefText').textContent = state.styleRefPrompt;
     document.getElementById('styleRefPanel').style.display = 'block';
+    updateAllAssetPromptsBox();
     setStatus3('✓ Đã tạo Style Reference prompt.', 'ok');
     saveState();
   } catch (e) {
@@ -2836,6 +2869,7 @@ function renderAssetCharPrompts(chars){
       <div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>
     </div>`;
   }).join('');
+  updateAllAssetPromptsBox();
 }
 
 function renderAssetBgPrompts(bgs){
@@ -2854,6 +2888,19 @@ function renderAssetBgPrompts(bgs){
       <div class="ref-sheet-card-text">${pr ? escapeHtml(pr) : 'Đang tạo...'}</div>
     </div>`;
   }).join('');
+  updateAllAssetPromptsBox();
+}
+
+function updateAllAssetPromptsBox(){
+  const ta = document.getElementById('allAssetPromptsBox');
+  if (!ta) return;
+  const parts = [];
+  const cp = state.assetCharPrompts || {};
+  const bp = state.assetBgPrompts || {};
+  for (const [name, prompt] of Object.entries(cp)) if (prompt) parts.push(`[CHARACTER: ${name}]\n${prompt}`);
+  for (const [name, prompt] of Object.entries(bp)) if (prompt) parts.push(`[BACKGROUND: ${name}]\n${prompt}`);
+  if (state.styleRefPrompt) parts.push(`[STYLE REFERENCE]\n${state.styleRefPrompt}`);
+  ta.value = parts.join('\n\n');
 }
 
 function copyAllAssetPrompts(){
@@ -3378,6 +3425,8 @@ function renderVeoPrompts(){
   if (!box) return;
   if (state.scenes.length === 0) {
     box.innerHTML = '<div class="empty-state">Chưa có cảnh. Load từ Tool 02 trước.</div>';
+    const ta1 = document.getElementById('allVeoPromptsBox');
+    if (ta1) ta1.value = '';
     return;
   }
   box.innerHTML = state.scenes.map(s => {
@@ -3395,6 +3444,14 @@ function renderVeoPrompts(){
       ${p ? `<div class="prompt-card-actions"><button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button></div>` : ''}
     </div>`;
   }).join('');
+  // Fill unified textarea
+  const ta = document.getElementById('allVeoPromptsBox');
+  if (ta) {
+    ta.value = state.scenes.map(s => {
+      const entry = state.veoPrompts?.[s.id];
+      return entry?.prompt ? `[${s.id}] ${entry.prompt}` : '';
+    }).filter(Boolean).join('\n\n');
+  }
 }
 
 function copyAllVeoPrompts(){
