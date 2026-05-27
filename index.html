@@ -1468,7 +1468,16 @@ async function callOpenAI(messages, model, key, maxTokens){
     return { role: m.role, content: parts };
   });
 
-  const body = JSON.stringify({ model, max_tokens: maxTokens, messages: oaMessages });
+  // GPT-5, o1, o3, o4 và các reasoning models dùng `max_completion_tokens` thay vì `max_tokens`
+  const isNewModel = /^(gpt-5|o1|o3|o4)/i.test(model);
+  const payload = { model, messages: oaMessages };
+  if (isNewModel) {
+    payload.max_completion_tokens = maxTokens;
+  } else {
+    payload.max_tokens = maxTokens;
+  }
+  const body = JSON.stringify(payload);
+
   // Try Vercel proxy first
   try {
     const r = await fetch('/api/openai', {
