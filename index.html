@@ -73,6 +73,67 @@ onAuthStateChanged(auth, (user) => {
   --sidebar-w: 280px;
 }
 
+html.dark {
+  --bg: #0f0f12;
+  --surface: #18181b;
+  --surface-2: #212126;
+  --surface-3: #2a2a30;
+  --border: #2f2f36;
+  --border-bright: #44444c;
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-dim: #71717a;
+  --accent: #f97316;
+  --accent-2: #fb923c;
+  --accent-soft: #2a1810;
+  --teal: #2dd4bf;
+  --violet: #a78bfa;
+  --rose: #fb7185;
+  --green: #4ade80;
+  --red: #f87171;
+  --blue: #60a5fa;
+  --amber: #fbbf24;
+}
+
+/* Dark mode tweaks for elements that use hardcoded colors */
+html.dark .info-box {
+  background: rgba(249, 115, 22, 0.08);
+  border-color: rgba(249, 115, 22, 0.3);
+}
+html.dark .prescan {
+  background: rgba(124, 58, 237, 0.08);
+  border-left-color: var(--violet);
+}
+html.dark .status-bar.ok { background: rgba(74, 222, 128, 0.1); color: var(--green); }
+html.dark .status-bar.error { background: rgba(248, 113, 113, 0.1); color: var(--red); }
+html.dark .status-bar.working { background: rgba(167, 139, 250, 0.1); color: var(--violet); }
+html.dark .btn.primary { color: #fff; }
+html.dark img { opacity: 0.92; }
+html.dark .user-avatar img { opacity: 1; }
+html.dark input, html.dark select, html.dark textarea {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+html.dark input[type="password"]::placeholder,
+html.dark input[type="text"]::placeholder,
+html.dark textarea::placeholder { color: var(--text-dim); }
+
+/* Theme toggle button */
+.theme-toggle {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 32px; height: 32px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.theme-toggle:hover { background: var(--surface-3); }
+
+* { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
+
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{
   background:var(--bg);
@@ -731,9 +792,12 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
   <aside class="sidebar">
 
     <!-- Brand -->
-    <div class="brand">
-      <div class="brand-logo">Chu Kiên Media</div>
-      <div class="brand-sub">Pipeline Builder</div>
+    <div class="brand" style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="brand-logo">Chu Kiên Media</div>
+        <div class="brand-sub">Pipeline Builder</div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Đổi giao diện sáng/tối" id="themeToggle">🌙</button>
     </div>
 
     <!-- API Settings -->
@@ -925,9 +989,12 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div id="sub-list">
           <div class="empty-state" id="emptyList">Chưa có cảnh nào.</div>
           <table class="scene-table" id="sceneTable" style="display:none">
-            <thead><tr><th>#</th><th>Cấp</th><th>Lời thoại</th><th>Nhân vật</th><th>Bối cảnh</th><th>Camera</th><th>Dài</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Cấp</th><th>Lời thoại</th><th>Nhân vật</th><th>Bối cảnh</th><th>Camera</th><th>Dài</th><th style="text-align:center">Hành động</th></tr></thead>
             <tbody id="sceneBody"></tbody>
           </table>
+          <div id="addSceneRow" style="display:none;padding:14px;border-top:1px solid var(--border);text-align:center">
+            <button class="btn ghost sm" onclick="addSceneAtEnd()">+ Thêm cảnh thủ công</button>
+          </div>
         </div>
         <div id="sub-prompts" style="display:none">
           <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px">
@@ -1311,7 +1378,8 @@ const state = {
   backgroundsV: [],
   tool: 'tool1',
   sub: 'list',
-  cancelRequested: false
+  cancelRequested: false,
+  editingSceneIdx: -1
 };
 
 /* ============================================================
@@ -1342,6 +1410,32 @@ function onProviderChange(){
 /* ============================================================
    API SETTINGS — load/save/test
 ============================================================ */
+/* ============================================================
+   THEME (Dark / Light Mode)
+============================================================ */
+function applyTheme(isDark){
+  document.documentElement.classList.toggle('dark', isDark);
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const isDark = !document.documentElement.classList.contains('dark');
+  applyTheme(isDark);
+  localStorage.setItem('darkMode', isDark ? '1' : '0');
+}
+// Apply saved theme as early as possible (before render)
+(function initTheme(){
+  try {
+    const saved = localStorage.getItem('darkMode');
+    if (saved === '1') document.documentElement.classList.add('dark');
+    // Update button text once DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('themeToggle');
+      if (btn) btn.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+    });
+  } catch (e) {}
+})();
+
 function loadApiSettings(){
   const provider = localStorage.getItem('api_provider') || 'anthropic';
   const model = localStorage.getItem('api_model') || '';
@@ -2532,13 +2626,184 @@ function renderTable(){
   const tbl = document.getElementById('sceneTable');
   const body = document.getElementById('sceneBody');
   const empty = document.getElementById('emptyList');
+  const addRow = document.getElementById('addSceneRow');
   if (!tbl) return;
   document.getElementById('badge-list').textContent = state.scenes.length;
-  if (state.scenes.length === 0) { tbl.style.display = 'none'; empty.style.display = 'block'; return; }
+  if (state.scenes.length === 0) {
+    tbl.style.display = 'none';
+    empty.style.display = 'block';
+    if (addRow) addRow.style.display = 'block';
+    return;
+  }
   tbl.style.display = 'table'; empty.style.display = 'none';
-  body.innerHTML = state.scenes.map((s, i) =>
-    `<tr><td class="id">${s.id}</td><td class="level"><span class="level-tag">${s.level}</span></td><td class="vo">${escapeHtml(s.text)}</td><td class="${s.character ? '' : 'pending'}">${escapeHtml(s.character) || 'chờ...'}</td><td class="${s.background ? '' : 'pending'}">${escapeHtml(s.background) || 'chờ...'}</td><td class="cam">${s.camera}</td><td class="dur">${s.duration}s</td><td class="actions"><button onclick="splitAt(${i})" title="Chia">✂</button><button class="del" onclick="delScene(${i})" title="Xoá">×</button></td></tr>`
-  ).join('');
+  if (addRow) addRow.style.display = 'block';
+
+  body.innerHTML = state.scenes.map((s, i) => {
+    const isEditing = state.editingSceneIdx === i;
+    if (isEditing) {
+      return `<tr class="editing-row">
+        <td class="id">${s.id}</td>
+        <td colspan="6" style="padding:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;margin-bottom:6px">
+            <input type="text" id="edt_char_${i}" placeholder="Nhân vật" value="${escapeHtml(s.character || '')}" style="padding:5px 8px;font-size:12px">
+            <input type="text" id="edt_bg_${i}" placeholder="Bối cảnh" value="${escapeHtml(s.background || '')}" style="padding:5px 8px;font-size:12px">
+            <input type="text" id="edt_cam_${i}" placeholder="Camera" value="${escapeHtml(s.camera || 'medium')}" style="padding:5px 8px;font-size:12px">
+            <input type="number" id="edt_dur_${i}" placeholder="Sec" value="${s.duration || 3}" min="1" max="60" style="padding:5px 8px;font-size:12px">
+          </div>
+          <textarea id="edt_text_${i}" placeholder="Lời thoại VO" style="min-height:50px;font-size:12px;padding:6px 8px">${escapeHtml(s.text || '')}</textarea>
+        </td>
+        <td class="actions" style="vertical-align:top;padding-top:8px">
+          <button onclick="saveEditScene(${i})" title="Lưu" style="color:var(--green)">✓</button>
+          <button onclick="cancelEditScene()" title="Huỷ" class="del">×</button>
+        </td>
+      </tr>`;
+    }
+    const isLast = i === state.scenes.length - 1;
+    return `<tr>
+      <td class="id">${s.id}</td>
+      <td class="level"><span class="level-tag">${s.level || ''}</span></td>
+      <td class="vo">${escapeHtml(s.text)}</td>
+      <td class="${s.character ? '' : 'pending'}">${escapeHtml(s.character) || 'chờ...'}</td>
+      <td class="${s.background ? '' : 'pending'}">${escapeHtml(s.background) || 'chờ...'}</td>
+      <td class="cam">${s.camera || ''}</td>
+      <td class="dur">${s.duration || 0}s</td>
+      <td class="actions" style="white-space:nowrap">
+        <button onclick="moveSceneUp(${i})" title="Lên" ${i === 0 ? 'disabled style="opacity:.3"' : ''}>↑</button>
+        <button onclick="moveSceneDown(${i})" title="Xuống" ${isLast ? 'disabled style="opacity:.3"' : ''}>↓</button>
+        <button onclick="editScene(${i})" title="Sửa">✏️</button>
+        <button onclick="mergeSceneWithNext(${i})" title="Gộp với cảnh sau" ${isLast ? 'disabled style="opacity:.3"' : ''}>⊕</button>
+        <button onclick="addSceneAfter(${i})" title="Thêm cảnh sau">+</button>
+        <button class="del" onclick="delScene(${i})" title="Xoá">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ----------------- SCENE MANAGEMENT ----------------- */
+
+function renumberScenes(){
+  // Re-id scenes thành 001, 002, ... theo array order, remap prompts
+  const oldToNew = {};
+  state.scenes.forEach((s, i) => {
+    const newId = String(i + 1).padStart(3, '0');
+    if (s.id !== newId) oldToNew[s.id] = newId;
+    s.id = newId;
+  });
+  if (Object.keys(oldToNew).length === 0) return;
+  // Remap scenePrompts
+  if (state.scenePrompts) {
+    const newSP = {};
+    for (const s of state.scenes) {
+      const oldId = Object.keys(oldToNew).find(k => oldToNew[k] === s.id);
+      const sourceId = oldId || s.id;
+      if (state.scenePrompts[sourceId]) newSP[s.id] = state.scenePrompts[sourceId];
+    }
+    // Fallback: also keep unchanged IDs
+    for (const [k, v] of Object.entries(state.scenePrompts)) {
+      if (state.scenes.find(s => s.id === k) && !newSP[k]) newSP[k] = v;
+    }
+    state.scenePrompts = newSP;
+  }
+  // Remap veoPrompts
+  if (state.veoPrompts) {
+    const newVP = {};
+    for (const s of state.scenes) {
+      const oldId = Object.keys(oldToNew).find(k => oldToNew[k] === s.id);
+      const sourceId = oldId || s.id;
+      if (state.veoPrompts[sourceId]) newVP[s.id] = state.veoPrompts[sourceId];
+    }
+    for (const [k, v] of Object.entries(state.veoPrompts)) {
+      if (state.scenes.find(s => s.id === k) && !newVP[k]) newVP[k] = v;
+    }
+    state.veoPrompts = newVP;
+  }
+}
+
+function moveSceneUp(idx){
+  if (idx <= 0 || idx >= state.scenes.length) return;
+  [state.scenes[idx-1], state.scenes[idx]] = [state.scenes[idx], state.scenes[idx-1]];
+  renumberScenes();
+  renderTable(); renderPreview(); renderPromptsV();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  updateStats(); saveState(true);
+}
+
+function moveSceneDown(idx){
+  if (idx < 0 || idx >= state.scenes.length - 1) return;
+  [state.scenes[idx], state.scenes[idx+1]] = [state.scenes[idx+1], state.scenes[idx]];
+  renumberScenes();
+  renderTable(); renderPreview(); renderPromptsV();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  updateStats(); saveState(true);
+}
+
+function editScene(idx){
+  state.editingSceneIdx = idx;
+  renderTable();
+  // Focus text input
+  setTimeout(() => { const t = document.getElementById('edt_text_' + idx); if (t) t.focus(); }, 50);
+}
+
+function cancelEditScene(){
+  state.editingSceneIdx = -1;
+  renderTable();
+}
+
+function saveEditScene(idx){
+  const s = state.scenes[idx];
+  if (!s) return;
+  s.text = document.getElementById('edt_text_' + idx).value.trim();
+  s.character = document.getElementById('edt_char_' + idx).value.trim();
+  s.background = document.getElementById('edt_bg_' + idx).value.trim();
+  s.camera = document.getElementById('edt_cam_' + idx).value.trim() || 'medium';
+  s.duration = parseInt(document.getElementById('edt_dur_' + idx).value) || 3;
+  state.editingSceneIdx = -1;
+  renderTable(); renderPreview(); renderPromptsV();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  updateStats(); saveState(true);
+  setStatus2(`✓ Đã sửa cảnh ${s.id}.`, 'ok');
+}
+
+function mergeSceneWithNext(idx){
+  if (idx < 0 || idx >= state.scenes.length - 1) return;
+  const cur = state.scenes[idx];
+  const next = state.scenes[idx+1];
+  if (!confirm(`Gộp cảnh ${cur.id} với ${next.id}?\nLời thoại sẽ ghép nối, thời lượng cộng dồn.`)) return;
+  // Xoá prompts của cảnh sau (cảnh trước có thể vẫn dùng được nhưng có khả năng phải re-gen)
+  if (state.scenePrompts) delete state.scenePrompts[next.id];
+  if (state.veoPrompts) delete state.veoPrompts[next.id];
+  cur.text = (cur.text || '') + ' ' + (next.text || '');
+  cur.duration = (cur.duration || 0) + (next.duration || 0);
+  // Char/bg/camera: giữ của cảnh trước (không ghi đè bằng cảnh sau)
+  state.scenes.splice(idx + 1, 1);
+  renumberScenes();
+  renderTable(); renderPreview(); renderPromptsV();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  updateStats(); saveState(true);
+  setStatus2(`✓ Đã gộp cảnh.`, 'ok');
+}
+
+function addSceneAfter(idx){
+  const newScene = {
+    id: 'tmp',
+    text: '',
+    duration: 3,
+    character: '',
+    background: '',
+    camera: 'medium',
+    level: 'normal'
+  };
+  state.scenes.splice(idx + 1, 0, newScene);
+  renumberScenes();
+  renderTable();
+  // Mở edit mode cho cảnh vừa thêm
+  state.editingSceneIdx = idx + 1;
+  renderTable();
+  setTimeout(() => { const t = document.getElementById('edt_text_' + (idx+1)); if (t) t.focus(); }, 50);
+}
+
+function addSceneAtEnd(){
+  addSceneAfter(state.scenes.length - 1);
 }
 
 function renderPromptsV(){
@@ -2586,10 +2851,12 @@ function fmtDur(s){ if (s < 60) return s + 's'; return Math.floor(s / 60) + 'p' 
 function delScene(i){
   if (!confirm('Xoá cảnh này?')) return;
   const r = state.scenes.splice(i, 1)[0];
-  delete state.scenePrompts[r.id];
-  reindex();
+  if (state.scenePrompts) delete state.scenePrompts[r.id];
+  if (state.veoPrompts) delete state.veoPrompts[r.id];
+  renumberScenes();
   renderAllT2();
-  saveState();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  saveState(true);
 }
 
 function splitAt(i){
@@ -2601,9 +2868,10 @@ function splitAt(i){
   s.text = w.slice(0, mid).join(' ');
   s.duration = calcDur(s.text);
   state.scenes.splice(i + 1, 0, ns);
-  reindex();
+  renumberScenes();
   renderAllT2();
-  saveState();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  saveState(true);
 }
 
 function reindex(){
