@@ -16,7 +16,7 @@
 <!-- Firebase v10 modular CDN -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc }
   from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
@@ -34,11 +34,37 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
+
+// Sau khi redirect quay về, xử lý result (silently — onAuthStateChanged sẽ fire sau)
+getRedirectResult(auth).catch(e => {
+  console.warn('Redirect result error:', e);
+});
 
 // Expose to window for non-module code
 window.firebaseAuth = auth;
 window.firebaseDb = db;
-window.firebaseSignIn = () => signInWithPopup(auth, provider).catch(e => alert('Lỗi đăng nhập: '+e.message));
+// Hybrid sign-in: popup trước, fallback redirect nếu popup fail
+window.firebaseSignIn = async () => {
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    console.warn('Popup sign-in failed:', e.code, '— falling back to redirect');
+    // Popup bị block/đóng/COOP chặn → redirect cả trang
+    if (e.code === 'auth/popup-closed-by-user' ||
+        e.code === 'auth/popup-blocked' ||
+        e.code === 'auth/cancelled-popup-request' ||
+        e.code === 'auth/internal-error') {
+      try {
+        await signInWithRedirect(auth, provider);
+      } catch (e2) {
+        alert('Lỗi đăng nhập: ' + e2.message);
+      }
+    } else {
+      alert('Lỗi đăng nhập: ' + e.message);
+    }
+  }
+};
 window.firebaseSignOut = () => signOut(auth);
 window.firebaseSaveDoc = (uid, data) => setDoc(doc(db, 'users', uid), data, { merge: true });
 window.firebaseLoadDoc = async (uid) => { const s = await getDoc(doc(db, 'users', uid)); return s.exists() ? s.data() : null; };
