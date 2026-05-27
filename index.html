@@ -875,8 +875,11 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="nav-item" data-tool="tool5" onclick="switchTool('tool5')">
           <span class="num">5</span><span>Tìm Media</span>
         </div>
+        <div class="nav-item" data-tool="tool7" onclick="switchTool('tool7')">
+          <span class="num">6</span><span>Dựng Clip Video</span>
+        </div>
         <div class="nav-item" data-tool="tool4" onclick="switchTool('tool4')">
-          <span class="num">6</span><span>Đổi Tên Ảnh</span>
+          <span class="num">7</span><span>Đổi Tên Ảnh</span>
         </div>
       </div>
     </div>
@@ -1383,6 +1386,113 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       </div>
     </div>
 
+    <!-- TOOL 7: DỰNG CLIP VIDEO (Canvas + MediaRecorder) -->
+    <div class="tool" id="tool-tool7">
+      <div class="tool-head">
+        <div class="tool-title">Dựng Clip Video</div>
+        <div class="tool-subtitle">Ghép ảnh + audio thành video clips trong browser. Dùng Canvas API + MediaRecorder — không cần FFmpeg, không cần cài gì.</div>
+      </div>
+
+      <div class="info-box">
+        <span class="lbl">💡 Quy trình:</span> Upload ảnh (đã đánh số 001.png, 002.png...) + file audio VO → Load timing từ Tool 02 → bấm Render → tải ZIP clips MP4/WebM. <strong>Mỗi clip render real-time</strong> (5s clip = mất 5s render). Browser khuyên dùng: Chrome, Edge.
+      </div>
+
+      <div class="grid-2 mb-24">
+        <div class="panel">
+          <div class="panel-head">
+            <span>📷 Ảnh các cảnh (đã đánh số)</span>
+            <span class="count" id="t7ImgCount">0 ảnh</span>
+          </div>
+          <div class="panel-body">
+            <label for="t7ImgInput" class="dropzone" style="min-height:120px;padding:18px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+              <div style="font-size:24px;margin-bottom:6px">📁</div>
+              <div style="font-size:13px;color:var(--text)">Chọn ảnh 001.png, 002.png...</div>
+              <div class="hint" style="font-size:11.5px;color:var(--text-muted);margin-top:4px">Tự sắp xếp theo tên. Hoặc kéo thả vào đây.</div>
+            </label>
+            <input type="file" id="t7ImgInput" multiple accept="image/*" style="display:none" onchange="t7HandleImages(this.files)">
+            <div id="t7ImgList" style="margin-top:8px;font-size:11px;color:var(--text-muted);max-height:120px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>🎙 Audio Voiceover (MP3)</span></div>
+          <div class="panel-body">
+            <input type="file" id="t7AudioInput" accept="audio/*" style="margin-bottom:10px;width:100%" onchange="t7HandleAudio(this.files[0])">
+            <div id="t7AudioInfo" style="font-size:11.5px;color:var(--text-muted)">Chưa có file audio.</div>
+            <audio id="t7AudioPlayer" controls style="width:100%;margin-top:8px;display:none"></audio>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel mb-24">
+        <div class="panel-head">
+          <span>⏱ Timing các cảnh (giây)</span>
+          <button class="btn ghost sm" onclick="t7LoadFromTool2()">Load từ Tool 02</button>
+        </div>
+        <div class="panel-body">
+          <textarea id="t7Timing" style="min-height:90px;background:var(--surface-2);font-size:12px;font-family:monospace" placeholder="Mỗi dòng 1 số (giây). VD:&#10;3&#10;5&#10;4&#10;2"></textarea>
+          <div style="margin-top:6px;font-size:11.5px;color:var(--text-muted)" id="t7TimingInfo">0 cảnh, 0s tổng</div>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-24" style="grid-template-columns:1fr 1fr 1fr 1fr">
+        <div>
+          <label class="label">KÍCH THƯỚC</label>
+          <select id="t7Resolution">
+            <option value="1280x720">720p (1280×720)</option>
+            <option value="1920x1080" selected>1080p (1920×1080)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">TỶ LỆ</label>
+          <select id="t7Aspect">
+            <option value="16:9" selected>16:9 (ngang)</option>
+            <option value="9:16">9:16 (dọc)</option>
+            <option value="1:1">1:1 (vuông)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">FPS</label>
+          <select id="t7Fps">
+            <option value="24">24</option>
+            <option value="30" selected>30</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">ĐỊNH DẠNG</label>
+          <select id="t7Format">
+            <option value="webm" selected>WebM (chuẩn web)</option>
+            <option value="mp4">MP4 (Chrome 130+)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions mb-24">
+        <button class="btn primary" onclick="t7RenderAll()">🎬 Render tất cả clips</button>
+        <button class="btn" onclick="t7DownloadZip()">↓ Tải ZIP clips</button>
+        <button class="btn ghost" onclick="t7Reset()">🗑 Xoá kết quả</button>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:11.5px;color:var(--text-muted)" id="t7ProgressText">Sẵn sàng</span>
+          <span style="font-size:11.5px;color:var(--accent);font-weight:600" id="t7ProgressPct"></span>
+        </div>
+        <div style="background:var(--surface-2);border-radius:4px;height:8px;overflow:hidden">
+          <div id="t7ProgressBar" style="background:var(--accent);height:100%;width:0%;transition:width .3s"></div>
+        </div>
+      </div>
+
+      <div class="status-bar" id="status7">Sẵn sàng. Upload ảnh + audio, load timing rồi bấm Render.</div>
+
+      <div class="panel" id="t7ClipsPanel" style="display:none">
+        <div class="panel-head"><span>📹 Clips đã tạo</span><span class="count" id="t7ClipCount">0</span></div>
+        <div id="t7ClipsList" style="padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;max-height:600px;overflow-y:auto"></div>
+      </div>
+
+      <!-- Hidden canvas for rendering -->
+      <canvas id="t7RenderCanvas" style="display:none"></canvas>
+    </div>
+
   </main>
 </div>
 
@@ -1510,7 +1620,7 @@ const TIER_CONFIG = {
     name: 'Pro',
     maxProfiles: Infinity,
     maxScenes: Infinity,
-    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6'],
+    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7'],
     badge: { text: 'PRO ✨', bg: 'linear-gradient(135deg,#f97316,#c2410c)', color: '#fff' }
   }
 };
@@ -4059,6 +4169,311 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }, 200);
 });
+
+/* ============================================================
+   TOOL 07 — DỰNG CLIP VIDEO (Canvas + MediaRecorder)
+============================================================ */
+const setStatus7 = (m, t) => setStatusBar('status7', m, t);
+
+const t7State = {
+  images: [],      // [{name, file, img: HTMLImageElement}]
+  audioBuffer: null,
+  audioFile: null,
+  clips: []        // [{sceneIdx, blob, url, name}]
+};
+
+function t7HandleImages(files){
+  const arr = Array.from(files);
+  if (arr.length === 0) return;
+  // Natural sort by filename
+  arr.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  t7State.images = [];
+  let loaded = 0;
+  setStatus7('Đang load ảnh...', 'working');
+  arr.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        t7State.images.push({ name: f.name, file: f, img });
+        loaded++;
+        if (loaded === arr.length) {
+          t7State.images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+          renderT7ImgList();
+          setStatus7(`✓ Đã load ${t7State.images.length} ảnh.`, 'ok');
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+function renderT7ImgList(){
+  document.getElementById('t7ImgCount').textContent = t7State.images.length + ' ảnh';
+  const list = document.getElementById('t7ImgList');
+  if (t7State.images.length === 0) { list.innerHTML = ''; return; }
+  list.innerHTML = t7State.images.map((x, i) => `<div>${i + 1}. ${escapeHtml(x.name)}</div>`).join('');
+}
+
+async function t7HandleAudio(file){
+  if (!file) return;
+  t7State.audioFile = file;
+  document.getElementById('t7AudioInfo').textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+  const player = document.getElementById('t7AudioPlayer');
+  player.src = URL.createObjectURL(file);
+  player.style.display = 'block';
+  // Decode audio for slicing
+  setStatus7('Đang decode audio...', 'working');
+  try {
+    const buf = await file.arrayBuffer();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    t7State.audioBuffer = await ctx.decodeAudioData(buf);
+    setStatus7(`✓ Audio: ${t7State.audioBuffer.duration.toFixed(1)}s @ ${t7State.audioBuffer.sampleRate}Hz, ${t7State.audioBuffer.numberOfChannels}ch`, 'ok');
+  } catch (e) {
+    setStatus7('Lỗi decode audio: ' + e.message, 'error');
+  }
+}
+
+function t7LoadFromTool2(){
+  if (!state.scenes || state.scenes.length === 0) {
+    return setStatus7('Tool 2 chưa có cảnh. Chia cảnh trước.', 'error');
+  }
+  const timings = state.scenes.map(s => s.duration || 3);
+  document.getElementById('t7Timing').value = timings.join('\n');
+  updateT7TimingInfo();
+  setStatus7(`✓ Đã load ${timings.length} cảnh từ Tool 02.`, 'ok');
+}
+
+function parseT7Timings(){
+  const text = document.getElementById('t7Timing').value;
+  return text.split('\n').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0);
+}
+
+function updateT7TimingInfo(){
+  const tims = parseT7Timings();
+  const total = tims.reduce((a, b) => a + b, 0);
+  document.getElementById('t7TimingInfo').textContent = `${tims.length} cảnh, ${total.toFixed(1)}s tổng (~${Math.round(total / 60)}p)`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    const ta = document.getElementById('t7Timing');
+    if (ta) ta.addEventListener('input', updateT7TimingInfo);
+    // Drag-drop ảnh vào dropzone
+    const drop = document.querySelector('#tool-tool7 .dropzone');
+    if (drop) {
+      drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.background = 'var(--accent-soft)'; });
+      drop.addEventListener('dragleave', () => { drop.style.background = ''; });
+      drop.addEventListener('drop', e => {
+        e.preventDefault();
+        drop.style.background = '';
+        t7HandleImages(e.dataTransfer.files);
+      });
+    }
+  }, 300);
+});
+
+// Slice 1 đoạn audio từ AudioBuffer dùng OfflineAudioContext (fast)
+async function t7SliceAudio(buffer, startSec, durSec){
+  const sampleRate = buffer.sampleRate;
+  const offCtx = new OfflineAudioContext(buffer.numberOfChannels, Math.floor(durSec * sampleRate), sampleRate);
+  const src = offCtx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(offCtx.destination);
+  src.start(0, startSec, durSec);
+  return await offCtx.startRendering();
+}
+
+// Render 1 clip: vẽ ảnh tĩnh lên canvas + audio đoạn → MediaRecorder
+async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
+  const [w, h] = document.getElementById('t7Resolution').value.split('x').map(Number);
+  const aspect = document.getElementById('t7Aspect').value;
+  const fps = parseInt(document.getElementById('t7Fps').value);
+  const format = document.getElementById('t7Format').value;
+
+  // Adjust canvas size based on aspect
+  let cw = w, ch = h;
+  if (aspect === '9:16') { cw = h; ch = w; }
+  else if (aspect === '1:1') { cw = Math.min(w, h); ch = cw; }
+
+  const canvas = document.getElementById('t7RenderCanvas');
+  canvas.width = cw; canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+
+  // Black background + cover fit ảnh
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, cw, ch);
+  const scale = Math.max(cw / image.width, ch / image.height);
+  const dw = image.width * scale, dh = image.height * scale;
+  ctx.drawImage(image, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+
+  // Video stream từ canvas
+  const videoStream = canvas.captureStream(fps);
+
+  // Audio stream từ AudioBuffer
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = audioCtx.createBufferSource();
+  src.buffer = audioSlice;
+  const dest = audioCtx.createMediaStreamDestination();
+  src.connect(dest);
+
+  // Combine
+  const combined = new MediaStream([
+    ...videoStream.getVideoTracks(),
+    ...dest.stream.getAudioTracks()
+  ]);
+
+  // Pick mime type
+  const mimeMP4 = 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
+  const mimeWebM = 'video/webm;codecs=vp9,opus';
+  let mimeType = mimeWebM;
+  if (format === 'mp4' && MediaRecorder.isTypeSupported(mimeMP4)) {
+    mimeType = mimeMP4;
+  }
+
+  const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 4_000_000 });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+  return new Promise((resolve, reject) => {
+    recorder.onstop = () => {
+      audioCtx.close();
+      const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(chunks, { type: mimeType });
+      resolve({ blob, ext, mimeType });
+    };
+    recorder.onerror = e => reject(e);
+    recorder.start();
+    src.start(0);
+    // Re-draw frame periodically để captureStream luôn có data
+    const interval = setInterval(() => ctx.drawImage(image, (cw - dw) / 2, (ch - dh) / 2, dw, dh), 1000 / fps);
+    setTimeout(() => {
+      clearInterval(interval);
+      recorder.stop();
+    }, durSec * 1000 + 100);
+  });
+}
+
+async function t7RenderAll(){
+  if (t7State.images.length === 0) return setStatus7('Cần upload ảnh trước.', 'error');
+  if (!t7State.audioBuffer) return setStatus7('Cần upload audio trước.', 'error');
+  const timings = parseT7Timings();
+  if (timings.length === 0) return setStatus7('Cần điền timing.', 'error');
+  const sceneCount = Math.min(t7State.images.length, timings.length);
+  if (sceneCount === 0) return setStatus7('Số ảnh hoặc timing = 0.', 'error');
+
+  // Test MediaRecorder support
+  if (typeof MediaRecorder === 'undefined') {
+    return setStatus7('Trình duyệt này không hỗ trợ MediaRecorder. Dùng Chrome/Edge mới nhất.', 'error');
+  }
+
+  t7State.clips = [];
+  document.getElementById('t7ClipsList').innerHTML = '';
+  document.getElementById('t7ClipsPanel').style.display = 'none';
+  clearCancel();
+
+  const totalDur = timings.slice(0, sceneCount).reduce((a, b) => a + b, 0);
+  const audioDur = t7State.audioBuffer.duration;
+  if (totalDur > audioDur + 0.5) {
+    setStatus7(`⚠️ Tổng timing (${totalDur.toFixed(1)}s) > audio (${audioDur.toFixed(1)}s). Vẫn render nhưng cảnh cuối bị cắt.`, 'info');
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  let audioCursor = 0;
+  const bar = document.getElementById('t7ProgressBar');
+  const text = document.getElementById('t7ProgressText');
+  const pct = document.getElementById('t7ProgressPct');
+
+  for (let i = 0; i < sceneCount; i++) {
+    if (state.cancelRequested) {
+      clearCancel();
+      setStatus7(`⏸ Đã dừng tại cảnh ${i + 1}/${sceneCount}. Clips đã render được giữ lại.`, 'info');
+      break;
+    }
+    const dur = Math.min(timings[i], audioDur - audioCursor);
+    if (dur <= 0) {
+      setStatus7(`Cảnh ${i + 1}: hết audio, bỏ qua.`, 'info');
+      audioCursor += timings[i];
+      continue;
+    }
+    setStatus7(`Đang render cảnh ${i + 1}/${sceneCount} (${dur.toFixed(1)}s)...`, 'working');
+    text.textContent = `Cảnh ${i + 1}/${sceneCount}`;
+    const progress = Math.round((i / sceneCount) * 100);
+    bar.style.width = progress + '%';
+    pct.textContent = progress + '%';
+
+    try {
+      const audioSlice = await t7SliceAudio(t7State.audioBuffer, audioCursor, dur);
+      const { blob, ext } = await t7RenderClip(t7State.images[i].img, audioSlice, dur, i);
+      const name = `clip-${String(i + 1).padStart(3, '0')}.${ext}`;
+      const url = URL.createObjectURL(blob);
+      t7State.clips.push({ sceneIdx: i, blob, url, name, duration: dur });
+      renderT7Clips();
+    } catch (e) {
+      console.error(e);
+      setStatus7(`Lỗi cảnh ${i + 1}: ${e.message}`, 'error');
+      break;
+    }
+    audioCursor += dur;
+  }
+
+  bar.style.width = '100%';
+  pct.textContent = '100%';
+  text.textContent = 'Hoàn tất';
+  if (!state.cancelRequested) {
+    setStatus7(`✓ Đã render ${t7State.clips.length} clips. Bấm "Tải ZIP clips" để tải.`, 'ok');
+  }
+}
+
+function renderT7Clips(){
+  const panel = document.getElementById('t7ClipsPanel');
+  const list = document.getElementById('t7ClipsList');
+  const count = document.getElementById('t7ClipCount');
+  if (t7State.clips.length === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  count.textContent = t7State.clips.length;
+  list.innerHTML = t7State.clips.map(c => `
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px">
+      <video src="${c.url}" controls style="width:100%;border-radius:4px;background:#000"></video>
+      <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--text-muted)">${c.name} · ${c.duration.toFixed(1)}s</span>
+        <a href="${c.url}" download="${c.name}" class="btn ghost sm" style="font-size:11px;padding:2px 8px;text-decoration:none">↓</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function t7DownloadZip(){
+  if (t7State.clips.length === 0) return setStatus7('Chưa có clip nào.', 'error');
+  setStatus7('Đang nén ZIP...', 'working');
+  try {
+    const zip = new JSZip();
+    for (const c of t7State.clips) {
+      zip.file(c.name, await c.blob.arrayBuffer());
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'clips-' + Date.now() + '.zip'; a.click();
+    URL.revokeObjectURL(url);
+    setStatus7(`✓ Đã tải ZIP ${t7State.clips.length} clips.`, 'ok');
+  } catch (e) {
+    setStatus7('Lỗi nén ZIP: ' + e.message, 'error');
+  }
+}
+
+function t7Reset(){
+  if (t7State.clips.length > 0 && !confirm('Xoá hết clips đã render?')) return;
+  for (const c of t7State.clips) URL.revokeObjectURL(c.url);
+  t7State.clips = [];
+  document.getElementById('t7ClipsList').innerHTML = '';
+  document.getElementById('t7ClipsPanel').style.display = 'none';
+  document.getElementById('t7ProgressBar').style.width = '0%';
+  document.getElementById('t7ProgressPct').textContent = '';
+  document.getElementById('t7ProgressText').textContent = 'Sẵn sàng';
+  setStatus7('Đã xoá kết quả. Sẵn sàng render lại.', 'info');
+}
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 5 loaded (cloud sync hoàn chỉnh).');
 </script>
