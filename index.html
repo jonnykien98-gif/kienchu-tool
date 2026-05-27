@@ -797,7 +797,8 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <div class="user-email" id="userEmail">—</div>
         </div>
       </div>
-      <button class="btn sm block ghost" style="margin-top:10px" onclick="window.firebaseSignOut()">
+      <div id="syncStatus" style="margin-top:8px;font-size:11px;color:var(--text-dim);text-align:center;min-height:14px">—</div>
+      <button class="btn sm block ghost" style="margin-top:8px" onclick="window.firebaseSignOut()">
         Đăng xuất
       </button>
     </div>
@@ -1594,7 +1595,7 @@ function downloadJSON(obj, name){
 /* ============================================================
    AUTH FLOW
 ============================================================ */
-window.onAuthChange = function(user){
+window.onAuthChange = async function(user){
   const gate = document.getElementById('authGate');
   const appRoot = document.getElementById('appRoot');
   if (user) {
@@ -1609,15 +1610,33 @@ window.onAuthChange = function(user){
     } else {
       avatar.textContent = (user.displayName || user.email || '?')[0].toUpperCase();
     }
-    // Load API settings + cloud state
+    // Load API settings (instant, from localStorage)
     loadApiSettings();
-    loadCloudState();
+    // Load cloud state — AWAIT! Quan trọng để restoreUI có data đầy đủ
+    setSyncStatus('☁️ Đang tải dữ liệu...', 'working');
+    try {
+      await loadCloudState();
+      setSyncStatus('✓ Đã đồng bộ', 'ok');
+    } catch (e) {
+      console.error('Cloud load error:', e);
+      setSyncStatus('⚠️ Lỗi: ' + e.message.slice(0, 40), 'err');
+    }
+    // Restore UI sau khi state đã load xong
+    if (typeof restoreUI === 'function') restoreUI();
   } else {
     // Not logged in
     gate.style.display = 'flex';
     appRoot.style.display = 'none';
   }
 };
+
+function setSyncStatus(msg, type){
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  const colors = { ok: 'var(--green)', err: 'var(--red)', working: 'var(--violet)', info: 'var(--text-dim)' };
+  el.textContent = msg;
+  el.style.color = colors[type] || colors.info;
+}
 
 /* ============================================================
    INDEXEDDB — Lưu ảnh base64 (tách khỏi Firestore 1MB limit)
@@ -1687,11 +1706,12 @@ async function loadCloudState(){
 }
 
 let _saveTimer;
-async function saveCloudState(){
+async function saveCloudState(immediate = false){
   if (!window.currentUser || !window.firebaseSaveDoc) return;
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(async () => {
+  const doSave = async () => {
     const uid = window.currentUser.uid;
+    setSyncStatus('💾 Đang lưu...', 'working');
     try {
       // Tách ảnh ra khỏi state — Firestore giới hạn 1MB/doc
       const { styleRefImages, characterImages, ...lightState } = state;
@@ -1707,19 +1727,34 @@ async function saveCloudState(){
       } catch (e) {
         console.warn('IDB save failed:', e);
       }
+      setSyncStatus('✓ Đã đồng bộ', 'ok');
     } catch (e) {
       console.warn('Cloud save failed:', e);
-      // Nếu lỗi quá lớn → thử xoá những trường nặng khác
+      setSyncStatus('⚠️ Lỗi lưu: ' + e.message.slice(0, 30), 'err');
       if (e.code === 'invalid-argument' || /too large/i.test(e.message || '')) {
         console.warn('State quá lớn — xem xét xoá scenes/scenePrompts');
       }
     }
-  }, 1500);
+  };
+  if (immediate) {
+    await doSave();
+  } else {
+    _saveTimer = setTimeout(doSave, 600);
+  }
 }
 
-// Legacy alias
-async function saveState(){ saveCloudState(); }
+// Legacy alias — saveState(true) for immediate save (critical actions)
+async function saveState(immediate){ return saveCloudState(immediate); }
 async function loadState(){ /* handled by loadCloudState in auth flow */ }
+
+// Flush pending save on tab close (best-effort, synchronous)
+window.addEventListener('beforeunload', () => {
+  if (_saveTimer) {
+    clearTimeout(_saveTimer);
+    // Can't await async in beforeunload, but trigger save anyway
+    saveCloudState(true);
+  }
+});
 
 /* ============================================================
    INIT
@@ -1774,7 +1809,7 @@ function newProfile(){
   state.currentProfileIdx = state.profiles.length - 1;
   renderProfileSelect();
   openProfile();
-  saveState();
+  saveState(true);
 }
 
 function deleteProfile(){
@@ -1786,7 +1821,7 @@ function deleteProfile(){
   renderProfileSelect();
   closeProfile();
   renderProfileStyles();
-  saveState();
+  saveState(true);
 }
 
 function openProfile(){
@@ -1839,7 +1874,7 @@ function saveProfile(){
   syncTool2FromProfile();
   renderProfileStyles();
   closeProfile();
-  saveState();
+  saveState(true);
   setStatus1('✓ Đã lưu Profile: ' + p.tenKenh, 'ok');
 }
 
@@ -1851,7 +1886,7 @@ function renameProfile(){
   document.getElementById('pTenKenh').value = name;
   document.getElementById('modalProfileTitle').textContent = 'Sửa: ' + name;
   renderProfileSelect();
-  saveState();
+  saveState(true);
 }
 
 function exportProfile(){
@@ -1870,7 +1905,7 @@ function importProfile(event){
       renderProfileSelect();
       renderProfileStyles();
       openProfile();
-      saveState();
+      saveState(true);
     } catch (err) {
       alert('Lỗi import: ' + err.message);
     }
@@ -2651,15 +2686,6 @@ document.addEventListener('DOMContentLoaded', () => {
     el.addEventListener('change', h);
   });
 });
-
-// Hook into auth: when user logs in, restore UI after cloud load
-const _origOnAuthChange = window.onAuthChange;
-window.onAuthChange = async function(user){
-  await _origOnAuthChange(user);
-  if (user) {
-    setTimeout(restoreUI, 200);
-  }
-};
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 2 loaded (Profile + Phân Cảnh).');
 
