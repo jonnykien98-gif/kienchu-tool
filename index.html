@@ -1478,6 +1478,49 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </div>
       </div>
 
+      <div class="grid-2 mb-24" style="grid-template-columns:1fr 1fr 1fr 1fr;padding:14px;background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(194,65,12,.04));border:1px solid var(--border);border-radius:10px">
+        <div>
+          <label class="label">🎬 HIỆU ỨNG</label>
+          <select id="t7Effect">
+            <option value="none">Tĩnh (mặc định)</option>
+            <option value="zoom-in" selected>Zoom In (zoom vào)</option>
+            <option value="zoom-out">Zoom Out (zoom ra)</option>
+            <option value="pan-left">Pan trái → phải</option>
+            <option value="pan-right">Pan phải → trái</option>
+            <option value="pan-up">Pan dưới → trên</option>
+            <option value="pan-down">Pan trên → dưới</option>
+            <option value="random">Ngẫu nhiên ★ (mỗi cảnh khác)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">📐 CƯỜNG ĐỘ</label>
+          <select id="t7Intensity">
+            <option value="10">Nhẹ (10%)</option>
+            <option value="15" selected>Trung bình (15%)</option>
+            <option value="20">Mạnh (20%)</option>
+            <option value="30">Rất mạnh (30%)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">🌅 FADE IN/OUT</label>
+          <select id="t7Fade">
+            <option value="0">Không fade</option>
+            <option value="0.3" selected>Nhanh (0.3s)</option>
+            <option value="0.5">Trung bình (0.5s)</option>
+            <option value="1">Chậm (1s)</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">🎯 EASING</label>
+          <select id="t7Easing">
+            <option value="linear">Linear (đều)</option>
+            <option value="ease-out" selected>Ease-out (chậm dần) ★</option>
+            <option value="ease-in">Ease-in (nhanh dần)</option>
+            <option value="ease-in-out">Ease-in-out (mượt 2 đầu)</option>
+          </select>
+        </div>
+      </div>
+
       <div class="actions mb-24">
         <button class="btn primary" onclick="t7RenderAll()">🎬 Render tất cả clips</button>
         <button class="btn" onclick="t7DownloadZip()">↓ Tải ZIP clips</button>
@@ -4422,11 +4465,90 @@ async function t7SliceAudio(buffer, startSec, durSec){
 }
 
 // Render 1 clip: vẽ ảnh tĩnh lên canvas + audio đoạn → MediaRecorder
+// Easing functions
+function t7Easing(t, type){
+  if (type === 'ease-out') return 1 - Math.pow(1 - t, 2);
+  if (type === 'ease-in') return t * t;
+  if (type === 'ease-in-out') return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  return t; // linear
+}
+
+// Vẽ 1 frame với Ken Burns + Fade
+function t7DrawFrame(ctx, image, cw, ch, dw, dh, baseX, baseY, mode, intensity, easingType, progress, fadeDuration, durSec){
+  // Clear background đen
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Apply easing curve to progress for smoother motion
+  const easedProgress = t7Easing(progress, easingType);
+
+  // Tính scale + offset theo Ken Burns mode
+  let scale = 1.0;
+  let offsetX = 0, offsetY = 0;
+
+  if (mode === 'zoom-in') {
+    scale = 1 + intensity * easedProgress;
+  } else if (mode === 'zoom-out') {
+    scale = 1 + intensity * (1 - easedProgress);
+  } else if (mode === 'pan-left') {
+    // Image pan from left side to right side
+    scale = 1 + intensity * 0.6;
+    const extra = dw * intensity * 0.6;
+    offsetX = extra * (0.5 - easedProgress);
+  } else if (mode === 'pan-right') {
+    scale = 1 + intensity * 0.6;
+    const extra = dw * intensity * 0.6;
+    offsetX = -extra * (0.5 - easedProgress);
+  } else if (mode === 'pan-up') {
+    scale = 1 + intensity * 0.6;
+    const extra = dh * intensity * 0.6;
+    offsetY = extra * (0.5 - easedProgress);
+  } else if (mode === 'pan-down') {
+    scale = 1 + intensity * 0.6;
+    const extra = dh * intensity * 0.6;
+    offsetY = -extra * (0.5 - easedProgress);
+  }
+
+  // Draw image với transform
+  const finalDw = dw * scale;
+  const finalDh = dh * scale;
+  const finalX = baseX - (finalDw - dw) / 2 + offsetX;
+  const finalY = baseY - (finalDh - dh) / 2 + offsetY;
+  ctx.drawImage(image, finalX, finalY, finalDw, finalDh);
+
+  // Fade overlay (black với alpha)
+  if (fadeDuration > 0 && durSec > fadeDuration * 2.1) {
+    const currentTime = progress * durSec;
+    let alpha = 1;
+    if (currentTime < fadeDuration) {
+      alpha = currentTime / fadeDuration;
+    } else if (currentTime > durSec - fadeDuration) {
+      alpha = (durSec - currentTime) / fadeDuration;
+    }
+    if (alpha < 1) {
+      ctx.fillStyle = `rgba(0,0,0,${(1 - alpha).toFixed(3)})`;
+      ctx.fillRect(0, 0, cw, ch);
+    }
+  }
+}
+
+// Resolve 'random' to specific mode
+function t7ResolveEffect(mode){
+  if (mode !== 'random') return mode;
+  const options = ['none', 'zoom-in', 'zoom-out', 'zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down'];
+  // Bias zoom (60%) > pan (40%), tránh 'none' nhiều
+  return options[Math.floor(Math.random() * options.length)];
+}
+
 async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
   const [w, h] = document.getElementById('t7Resolution').value.split('x').map(Number);
   const aspect = document.getElementById('t7Aspect').value;
   const fps = parseInt(document.getElementById('t7Fps').value);
   const format = document.getElementById('t7Format').value;
+  const effectMode = document.getElementById('t7Effect').value;
+  const intensity = parseFloat(document.getElementById('t7Intensity').value) / 100;
+  const fadeDuration = parseFloat(document.getElementById('t7Fade').value);
+  const easingType = document.getElementById('t7Easing').value;
 
   // Adjust canvas size based on aspect
   let cw = w, ch = h;
@@ -4437,12 +4559,18 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
   canvas.width = cw; canvas.height = ch;
   const ctx = canvas.getContext('2d');
 
-  // Black background + cover fit ảnh
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, cw, ch);
+  // Cover-fit base image dimensions
   const scale = Math.max(cw / image.width, ch / image.height);
-  const dw = image.width * scale, dh = image.height * scale;
-  ctx.drawImage(image, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+  const dw = image.width * scale;
+  const dh = image.height * scale;
+  const baseX = (cw - dw) / 2;
+  const baseY = (ch - dh) / 2;
+
+  // Resolve random effect
+  const mode = t7ResolveEffect(effectMode);
+
+  // Initial frame draw (progress=0) — đảm bảo captureStream có frame đầu
+  t7DrawFrame(ctx, image, cw, ch, dw, dh, baseX, baseY, mode, intensity, easingType, 0, fadeDuration, durSec);
 
   // Video stream từ canvas
   const videoStream = canvas.captureStream(fps);
@@ -4454,7 +4582,6 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
   const dest = audioCtx.createMediaStreamDestination();
   src.connect(dest);
 
-  // Combine
   const combined = new MediaStream([
     ...videoStream.getVideoTracks(),
     ...dest.stream.getAudioTracks()
@@ -4474,28 +4601,31 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
 
   return new Promise((resolve, reject) => {
     let interval = null;
+    let startTime = 0;
     recorder.onstop = () => {
       if (interval) clearInterval(interval);
       audioCtx.close();
       const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
       const blob = new Blob(chunks, { type: mimeType });
-      resolve({ blob, ext, mimeType });
+      resolve({ blob, ext, mimeType, effectMode: mode });
     };
     recorder.onerror = e => reject(e);
-    // Stop recorder ngay khi audio kết thúc — chính xác hơn setTimeout
     src.onended = () => {
       if (interval) { clearInterval(interval); interval = null; }
-      // Disconnect ngay để stream ngừng frame, giảm dư còn ~1 frame
       try { src.disconnect(); dest.disconnect(); } catch (e) {}
-      // Stop recorder trong microtask kế tiếp để flush chunk cuối
       Promise.resolve().then(() => {
         if (recorder.state === 'recording') recorder.stop();
       });
     };
     recorder.start();
     src.start(0);
-    // Re-draw frame để captureStream luôn có data tươi
-    interval = setInterval(() => ctx.drawImage(image, (cw - dw) / 2, (ch - dh) / 2, dw, dh), 1000 / fps);
+    startTime = performance.now();
+    // Animation loop — vẽ từng frame với Ken Burns + Fade
+    interval = setInterval(() => {
+      const elapsed = (performance.now() - startTime) / 1000;
+      const progress = Math.min(elapsed / durSec, 1);
+      t7DrawFrame(ctx, image, cw, ch, dw, dh, baseX, baseY, mode, intensity, easingType, progress, fadeDuration, durSec);
+    }, 1000 / fps);
   });
 }
 
@@ -4549,10 +4679,10 @@ async function t7RenderAll(){
 
     try {
       const audioSlice = await t7SliceAudio(t7State.audioBuffer, audioCursor, dur);
-      const { blob, ext } = await t7RenderClip(t7State.images[i].img, audioSlice, dur, i);
+      const { blob, ext, effectMode } = await t7RenderClip(t7State.images[i].img, audioSlice, dur, i);
       const name = `clip-${String(i + 1).padStart(3, '0')}.${ext}`;
       const url = URL.createObjectURL(blob);
-      t7State.clips.push({ sceneIdx: i, blob, url, name, duration: dur });
+      t7State.clips.push({ sceneIdx: i, blob, url, name, duration: dur, effectMode });
       renderT7Clips();
     } catch (e) {
       console.error(e);
@@ -4578,15 +4708,25 @@ function renderT7Clips(){
   if (t7State.clips.length === 0) { panel.style.display = 'none'; return; }
   panel.style.display = 'block';
   count.textContent = t7State.clips.length;
-  list.innerHTML = t7State.clips.map(c => `
-    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px">
+  const effectLabels = {
+    'none': '· Tĩnh',
+    'zoom-in': '· Zoom In',
+    'zoom-out': '· Zoom Out',
+    'pan-left': '· Pan →',
+    'pan-right': '· Pan ←',
+    'pan-up': '· Pan ↑',
+    'pan-down': '· Pan ↓'
+  };
+  list.innerHTML = t7State.clips.map(c => {
+    const fxLabel = c.effectMode ? (effectLabels[c.effectMode] || '') : '';
+    return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px">
       <video src="${c.url}" controls style="width:100%;border-radius:4px;background:#000"></video>
       <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:11px;color:var(--text-muted)">${c.name} · ${c.duration.toFixed(1)}s</span>
+        <span style="font-size:11px;color:var(--text-muted)">${c.name} · ${c.duration.toFixed(1)}s ${fxLabel}</span>
         <a href="${c.url}" download="${c.name}" class="btn ghost sm" style="font-size:11px;padding:2px 8px;text-decoration:none">↓</a>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 async function t7DownloadZip(){
