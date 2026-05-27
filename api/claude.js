@@ -1,28 +1,31 @@
-// api/claude.js — Vercel serverless function
-// Proxy frontend requests to Anthropic API, keeping API key secret on server
+// Vercel serverless function — proxy cho Anthropic API
+// Tránh CORS khi gọi trực tiếp từ browser
+// Client gửi: POST /api/claude với header X-Api-Key và body Anthropic format
+
+export const config = {
+  maxDuration: 60,
+};
 
 export default async function handler(req, res) {
-  // CORS headers (only needed if frontend is on different domain)
+  // CORS — cho phép browser gọi
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: { message: 'POST only' } });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = req.headers['x-api-key'];
   if (!apiKey) {
-    return res.status(500).json({
-      error: 'ANTHROPIC_API_KEY env variable not set on server'
+    return res.status(401).json({
+      error: { message: 'Thiếu X-Api-Key header. Cấu hình API key trong sidebar.' }
     });
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -32,19 +35,12 @@ export default async function handler(req, res) {
       body: JSON.stringify(req.body)
     });
 
-    const data = await response.json();
-    return res.status(response.status).json(data);
-  } catch (err) {
-    console.error('Proxy error:', err);
-    return res.status(500).json({ error: err.message });
+    const data = await upstream.json();
+    return res.status(upstream.status).json(data);
+  } catch (e) {
+    console.error('Claude proxy error:', e);
+    return res.status(500).json({
+      error: { message: 'Proxy error: ' + (e.message || 'unknown') }
+    });
   }
 }
-
-// Allow larger payloads (for long scripts)
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '4mb',
-    },
-  },
-};
