@@ -1433,16 +1433,17 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
 
       <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:14px">💳 THANH TOÁN</div>
 
-      <div style="display:grid;gap:10px;font-size:13px">
-        <div style="background:var(--surface);padding:10px 12px;border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">🏦 Chuyển khoản ngân hàng</div>
-          <div><strong id="payBankName">Vietcombank</strong> • <span id="payBankNum">0123456789</span></div>
-          <div style="font-size:12px;color:var(--text-muted)" id="payBankOwner">CHU VAN KIEN</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:14px;font-size:13px;align-items:start">
+        <div style="background:var(--surface);padding:12px 14px;border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">🏦 Chuyển khoản ngân hàng</div>
+          <div style="font-size:13px;margin-bottom:2px"><strong id="payBankName">Vietcombank</strong></div>
+          <div style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:.5px;color:var(--accent);margin-bottom:2px" id="payBankNum">1034579759</div>
+          <div style="font-size:12px;color:var(--text-muted)" id="payBankOwner">CHU KHẮC KIÊN</div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--text-dim)">Nội dung CK: <strong style="color:var(--text-muted)">UID Google của bạn</strong></div>
         </div>
-        <div style="background:var(--surface);padding:10px 12px;border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">📱 MoMo</div>
-          <div><strong id="payMomoPhone">0901234567</strong></div>
-          <div style="font-size:12px;color:var(--text-muted)" id="payMomoOwner">CHU VAN KIEN</div>
+        <div style="text-align:center">
+          <img src="data:image/png;base64,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" alt="QR thanh toán" style="width:140px;height:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;display:block">
+          <div style="font-size:10.5px;color:var(--text-muted);margin-top:4px">Quét QR bằng app ngân hàng</div>
         </div>
       </div>
 
@@ -1521,17 +1522,13 @@ const PRICING = {
 // ⚠️ SỬA INFO CHUYỂN KHOẢN CỦA BẠN VÀO ĐÂY
 const PAYMENT_INFO = {
   bank: {
-    name: 'Vietcombank',                // ← Tên ngân hàng
-    accountNumber: '0123456789',         // ← Số tài khoản
-    owner: 'CHU VAN KIEN'                // ← Tên chủ tài khoản
-  },
-  momo: {
-    phone: '0901234567',                 // ← Số MoMo
-    owner: 'CHU VAN KIEN'                // ← Tên chủ MoMo
+    name: 'Vietcombank',
+    accountNumber: '1034579759',
+    owner: 'CHU KHẮC KIÊN'
   },
   contact: {
-    zalo: '0901234567',                  // ← Zalo bạn
-    email: 'chukienmedia@gmail.com'      // ← Email bạn
+    zalo: '0373382451',
+    email: 'jonnykien98@gmail.com'
   }
 };
 
@@ -1581,8 +1578,6 @@ function showUpgradeModal(reason){
   document.getElementById('payBankName').textContent = PAYMENT_INFO.bank.name;
   document.getElementById('payBankNum').textContent = PAYMENT_INFO.bank.accountNumber;
   document.getElementById('payBankOwner').textContent = PAYMENT_INFO.bank.owner;
-  document.getElementById('payMomoPhone').textContent = PAYMENT_INFO.momo.phone;
-  document.getElementById('payMomoOwner').textContent = PAYMENT_INFO.momo.owner;
   document.getElementById('payZalo').textContent = PAYMENT_INFO.contact.zalo;
   document.getElementById('payEmail').textContent = PAYMENT_INFO.contact.email;
   document.getElementById('payUserUid').textContent = window.currentUser?.uid || '—';
