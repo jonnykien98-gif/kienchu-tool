@@ -6726,25 +6726,28 @@ CRITICAL RULES:
 async function t10CallOpenAI(prompt, model, key){
   const images = t10State.refs.map(r => ({ b64: r.base64, mime: r.mime }));
   const body = JSON.stringify({ model, prompt, size: '1536x1024', n: 1, images });
-  let data;
+  let r;
   try {
-    const r = await fetch('/api/openai-image', {
+    r = await fetch('/api/openai-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
       body
     });
-    const ct = r.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      data = await r.json();
-      if (!r.ok) throw new Error(data.error?.message || `HTTP ${r.status}`);
-    }
   } catch (e) {
-    if (data) throw e;  // lỗi thật từ API
+    throw new Error('Không kết nối được /api/openai-image (lỗi mạng?). ' + e.message);
   }
-  if (!data) throw new Error('Không gọi được /api/openai-image. Đã upload file api/openai-image.js lên chưa?');
-
+  if (r.status === 404) throw new Error('Chưa thấy /api/openai-image (404). Upload api/openai-image.js lên GitHub + đợi Vercel deploy "Ready" + hard reload.');
+  const ct = r.headers.get('content-type') || '';
+  let data = null, rawText = '';
+  if (ct.includes('application/json')) { data = await r.json(); }
+  else { rawText = await r.text(); }
+  if (!r.ok) {
+    const msg = data?.error?.message || rawText.slice(0, 250) || `HTTP ${r.status}`;
+    throw new Error(`OpenAI lỗi (HTTP ${r.status}): ${msg}`);
+  }
+  if (!data) throw new Error('Proxy trả về không phải JSON — kiểm tra nội dung file openai-image.js.');
   const item = data.data?.[0];
-  if (!item?.b64_json) throw new Error('Không có ảnh trong response. Kiểm tra key/credit/verify org.');
+  if (!item?.b64_json) throw new Error('Không có ảnh trong response. Kiểm tra key/credit/verify org OpenAI.');
   return { b64: item.b64_json, mime: 'image/png' };
 }
 
