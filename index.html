@@ -1699,6 +1699,10 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <input type="file" id="t8AudioInput" accept="audio/*" style="margin-bottom:10px;width:100%" onchange="t8HandleAudio(this.files[0])">
             <div id="t8AudioInfo" style="font-size:11.5px;color:var(--text-muted)">Chưa có audio. Upload file VO của cả kịch bản (1 file).</div>
             <audio id="t8AudioPlayer" controls style="width:100%;margin-top:8px;display:none"></audio>
+            <div style="border-top:1px dashed var(--border);margin:14px 0 10px"></div>
+            <div style="font-size:11.5px;font-weight:600;color:var(--text-muted);margin-bottom:6px">📄 HOẶC căn theo file SRT (không cần Groq)</div>
+            <input type="file" id="t8SrtInput" accept=".srt,.vtt,text/*" style="width:100%" onchange="t8HandleSrt(this.files[0])">
+            <div id="t8SrtInfo" style="font-size:11px;color:var(--text-muted);margin-top:6px">Upload SRT (từ CapCut, YouTube...) → bấm "Căn theo SRT". Nên sửa caption khớp kịch bản trước cho chuẩn.</div>
           </div>
         </div>
         <div class="panel">
@@ -1714,6 +1718,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
 
       <div class="actions mb-24">
         <button class="btn primary" onclick="t8WhisperAlign()">🎯 Whisper Align (căn timing)</button>
+        <button class="btn" style="background:#0d9488;border-color:#0d9488;color:#fff" onclick="t8AlignBySRT()">📄 Căn theo SRT</button>
         <button class="btn" onclick="t8ApplyTimings()">✓ Áp dụng timing vào cảnh</button>
         <button class="btn ghost" onclick="t8ExportSRT()">↓ Xuất SRT</button>
         <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t8Reset()">🗑 Xoá kết quả</button>
@@ -1862,6 +1867,15 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <option value="ease-in-out">Ease-in-out (mượt 2 đầu)</option>
           </select>
         </div>
+      </div>
+
+      <div class="mb-24" style="padding:14px;background:rgba(13,148,136,.07);border:1px solid #0d9488;border-radius:10px">
+        <label class="label" style="color:#0d9488">🔊 ÂM THANH</label>
+        <select id="t7AudioMode" onchange="t7OnAudioModeChange()" style="max-width:420px">
+          <option value="voice" selected>Có giọng đọc (nhúng vào từng clip)</option>
+          <option value="silent">Chỉ ảnh động — KHÔNG tiếng (ghép giọng ở CapCut sau) ★</option>
+        </select>
+        <div id="t7AudioModeHint" style="font-size:11.5px;color:var(--text-muted);margin-top:6px"></div>
       </div>
 
       <div class="actions mb-24">
@@ -2405,6 +2419,7 @@ function switchTool(name){
   );
   // Tool-specific init
   if (name === 'tool8' && typeof t8Init === 'function') t8Init();
+  if (name === 'tool7' && typeof t7OnAudioModeChange === 'function') t7OnAudioModeChange();
   if (name === 'tool9' && typeof t9Init === 'function') t9Init();
   if (name === 'tool10' && typeof t10Init === 'function') t10Init();
 }
@@ -5371,6 +5386,18 @@ function renderT7ImgList(){
   list.innerHTML = t7State.images.map((x, i) => `<div>${i + 1}. ${escapeHtml(x.name)}</div>`).join('');
 }
 
+function t7OnAudioModeChange(){
+  const silent = document.getElementById('t7AudioMode')?.value === 'silent';
+  const hint = document.getElementById('t7AudioModeHint');
+  const audioPanel = document.getElementById('t7AudioInput')?.closest('.panel');
+  if (hint) {
+    hint.innerHTML = silent
+      ? '✓ Clip <strong>không tiếng</strong> — không cần upload audio. Render xong → tải ZIP → vào CapCut xếp clip + thêm 1 file giọng đọc full lên track riêng. Vì timing clip = thời gian đọc thật nên sẽ khớp.'
+      : 'Mỗi clip nhúng đoạn giọng tương ứng (cần upload audio). Khi vào CapCut âm thanh sẽ bị chia theo từng clip.';
+  }
+  if (audioPanel) audioPanel.style.opacity = silent ? '.45' : '1';
+}
+
 async function t7HandleAudio(file){
   if (!file) return;
   t7State.audioFile = file;
@@ -5594,21 +5621,26 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
   // Video stream từ canvas
   const videoStream = canvas.captureStream(fps);
 
-  // Audio stream từ AudioBuffer
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const src = audioCtx.createBufferSource();
-  src.buffer = audioSlice;
-  const dest = audioCtx.createMediaStreamDestination();
-  src.connect(dest);
-
-  const combined = new MediaStream([
-    ...videoStream.getVideoTracks(),
-    ...dest.stream.getAudioTracks()
-  ]);
+  const silent = !audioSlice;  // chế độ chỉ ảnh, không tiếng
+  let audioCtx = null, src = null, dest = null, combined;
+  if (silent) {
+    combined = new MediaStream([...videoStream.getVideoTracks()]);
+  } else {
+    // Audio stream từ AudioBuffer
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    src = audioCtx.createBufferSource();
+    src.buffer = audioSlice;
+    dest = audioCtx.createMediaStreamDestination();
+    src.connect(dest);
+    combined = new MediaStream([
+      ...videoStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
+    ]);
+  }
 
   // Pick mime type
-  const mimeMP4 = 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
-  const mimeWebM = 'video/webm;codecs=vp9,opus';
+  const mimeMP4 = silent ? 'video/mp4;codecs=avc1.42E01E' : 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
+  const mimeWebM = silent ? 'video/webm;codecs=vp9' : 'video/webm;codecs=vp9,opus';
   let mimeType = mimeWebM;
   if (format === 'mp4' && MediaRecorder.isTypeSupported(mimeMP4)) {
     mimeType = mimeMP4;
@@ -5623,22 +5655,25 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
     let startTime = 0;
     recorder.onstop = () => {
       if (interval) clearInterval(interval);
-      audioCtx.close();
+      if (audioCtx) audioCtx.close();
       const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
       const blob = new Blob(chunks, { type: mimeType });
       resolve({ blob, ext, mimeType, effectMode: mode });
     };
     recorder.onerror = e => reject(e);
-    src.onended = () => {
+    const stopRec = () => {
       if (interval) { clearInterval(interval); interval = null; }
-      try { src.disconnect(); dest.disconnect(); } catch (e) {}
+      try { if (src) src.disconnect(); if (dest) dest.disconnect(); } catch (e) {}
       Promise.resolve().then(() => {
         if (recorder.state === 'recording') recorder.stop();
       });
     };
+    if (!silent) src.onended = stopRec;
     recorder.start();
-    src.start(0);
+    if (!silent) src.start(0);
     startTime = performance.now();
+    // Chế độ silent: dừng theo timer (không có audio để onended)
+    if (silent) setTimeout(stopRec, durSec * 1000 + 60);
     // Animation loop — vẽ từng frame với Ken Burns + Fade
     interval = setInterval(() => {
       const elapsed = (performance.now() - startTime) / 1000;
@@ -5650,7 +5685,8 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
 
 async function t7RenderAll(){
   if (t7State.images.length === 0) return setStatus7('Cần upload ảnh trước.', 'error');
-  if (!t7State.audioBuffer) return setStatus7('Cần upload audio trước.', 'error');
+  const silent = document.getElementById('t7AudioMode')?.value === 'silent';
+  if (!silent && !t7State.audioBuffer) return setStatus7('Cần upload audio trước (hoặc chọn "Chỉ ảnh — không tiếng").', 'error');
   const timings = parseT7Timings();
   if (timings.length === 0) return setStatus7('Cần điền timing.', 'error');
   const sceneCount = Math.min(t7State.images.length, timings.length);
@@ -5667,8 +5703,8 @@ async function t7RenderAll(){
   clearCancel();
 
   const totalDur = timings.slice(0, sceneCount).reduce((a, b) => a + b, 0);
-  const audioDur = t7State.audioBuffer.duration;
-  if (totalDur > audioDur + 0.5) {
+  const audioDur = silent ? Infinity : t7State.audioBuffer.duration;
+  if (!silent && totalDur > audioDur + 0.5) {
     setStatus7(`⚠️ Tổng timing (${totalDur.toFixed(1)}s) > audio (${audioDur.toFixed(1)}s). Vẫn render nhưng cảnh cuối bị cắt.`, 'info');
     await new Promise(r => setTimeout(r, 1500));
   }
@@ -5684,20 +5720,20 @@ async function t7RenderAll(){
       setStatus7(`⏸ Đã dừng tại cảnh ${i + 1}/${sceneCount}. Clips đã render được giữ lại.`, 'info');
       break;
     }
-    const dur = Math.min(timings[i], audioDur - audioCursor);
+    const dur = silent ? timings[i] : Math.min(timings[i], audioDur - audioCursor);
     if (dur <= 0) {
       setStatus7(`Cảnh ${i + 1}: hết audio, bỏ qua.`, 'info');
       audioCursor += timings[i];
       continue;
     }
-    setStatus7(`Đang render cảnh ${i + 1}/${sceneCount} (${dur.toFixed(1)}s)...`, 'working');
+    setStatus7(`Đang render cảnh ${i + 1}/${sceneCount} (${dur.toFixed(1)}s)${silent ? ' — không tiếng' : ''}...`, 'working');
     text.textContent = `Cảnh ${i + 1}/${sceneCount}`;
     const progress = Math.round((i / sceneCount) * 100);
     bar.style.width = progress + '%';
     pct.textContent = progress + '%';
 
     try {
-      const audioSlice = await t7SliceAudio(t7State.audioBuffer, audioCursor, dur);
+      const audioSlice = silent ? null : await t7SliceAudio(t7State.audioBuffer, audioCursor, dur);
       const { blob, ext, effectMode } = await t7RenderClip(t7State.images[i].img, audioSlice, dur, i);
       const name = `clip-${String(i + 1).padStart(3, '0')}.${ext}`;
       const url = URL.createObjectURL(blob);
@@ -5715,8 +5751,8 @@ async function t7RenderAll(){
   pct.textContent = '100%';
   text.textContent = 'Hoàn tất';
   if (!state.cancelRequested) {
-    setStatus7(`✓ Đã render ${t7State.clips.length} clips. Bấm "Tải ZIP clips" để tải.`, 'ok');
-    notifyDone('✓ Render xong!', `${t7State.clips.length} clips đã sẵn sàng. Vào tab Dựng Clip Video để tải.`);
+    setStatus7(`✓ Đã render ${t7State.clips.length} clips${silent ? ' (không tiếng — ghép giọng ở CapCut)' : ''}. Bấm "Tải ZIP clips".`, 'ok');
+    notifyDone('✓ Render xong!', `${t7State.clips.length} clips đã sẵn sàng.`);
   }
 }
 
@@ -6020,6 +6056,72 @@ function t8AlignScenesToWords(scenes, words){
     cursor = endIdx + 1;
   }
   return results;
+}
+
+// ---- Căn theo file SRT ----
+let t8SrtText = null;
+function t8HandleSrt(file){
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    t8SrtText = e.target.result;
+    const cues = parseSRT(t8SrtText);
+    document.getElementById('t8SrtInfo').innerHTML = cues.length
+      ? `✓ Đã đọc <strong>${file.name}</strong> — ${cues.length} dòng phụ đề. Bấm "📄 Căn theo SRT".`
+      : `⚠️ Không đọc được mốc thời gian trong file. Kiểm tra định dạng SRT.`;
+  };
+  reader.readAsText(file);
+}
+
+// Parse SRT/VTT → [{start, end, text}] (giây)
+function parseSRT(text){
+  const cues = [];
+  const t2s = t => {
+    // 00:01:23,456 hoặc 00:01:23.456 hoặc 01:23.456
+    const m = t.trim().match(/(?:(\d+):)?(\d+):(\d+)[,.](\d+)/);
+    if (!m) return null;
+    const h = +(m[1] || 0), mi = +m[2], s = +m[3], ms = +m[4];
+    return h * 3600 + mi * 60 + s + ms / 1000;
+  };
+  const blocks = text.replace(/\r/g, '').split(/\n\s*\n/);
+  for (const b of blocks) {
+    const line = b.match(/(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}|\d{1,2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}|\d{1,2}:\d{2}[,.]\d{1,3})/);
+    if (!line) continue;
+    const start = t2s(line[1]), end = t2s(line[2]);
+    if (start == null || end == null) continue;
+    // text = các dòng sau dòng timestamp (bỏ số thứ tự + dòng time)
+    const lines = b.split('\n');
+    const tIdx = lines.findIndex(l => l.includes('-->'));
+    const txt = lines.slice(tIdx + 1).join(' ').replace(/<[^>]+>/g, '').trim();
+    cues.push({ start, end, text: txt });
+  }
+  return cues;
+}
+
+// SRT cues → word timeline (nội suy đều trong mỗi cue) → dùng chung t8AlignScenesToWords
+function t8SrtToWords(cues){
+  const words = [];
+  for (const c of cues) {
+    const ws = (c.text || '').trim().split(/\s+/).filter(Boolean);
+    if (!ws.length) continue;
+    const dur = Math.max(0, c.end - c.start);
+    const per = dur / ws.length;
+    ws.forEach((w, i) => words.push({ word: w, start: c.start + i * per, end: c.start + (i + 1) * per }));
+  }
+  return words;
+}
+
+function t8AlignBySRT(){
+  if (!state.scenes || state.scenes.length === 0) return setStatus8('Tool 02 chưa có cảnh. Chia cảnh trước.', 'error');
+  if (!t8SrtText) return setStatus8('Chưa upload file SRT. Chọn file SRT ở khung bên trái.', 'error');
+  const cues = parseSRT(t8SrtText);
+  if (!cues.length) return setStatus8('File SRT không có mốc thời gian hợp lệ.', 'error');
+  const words = t8SrtToWords(cues);
+  if (!words.length) return setStatus8('SRT không có nội dung text để căn.', 'error');
+  t8State.alignResults = t8AlignScenesToWords(state.scenes, words);
+  t8RenderResults();
+  const matched = t8State.alignResults.filter(r => r.newDur != null).length;
+  setStatus8(`✓ Đã căn ${matched}/${state.scenes.length} cảnh theo SRT (${cues.length} dòng). Xem bảng → bấm "Áp dụng timing".`, 'ok');
 }
 
 async function t8WhisperAlign(){
