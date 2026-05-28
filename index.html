@@ -883,11 +883,14 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="nav-item" data-tool="tool5" onclick="switchTool('tool5')">
           <span class="num">5</span><span>Tìm Media</span>
         </div>
+        <div class="nav-item" data-tool="tool8" onclick="switchTool('tool8')">
+          <span class="num">6</span><span>Căn Timing</span>
+        </div>
         <div class="nav-item" data-tool="tool7" onclick="switchTool('tool7')">
-          <span class="num">6</span><span>Dựng Clip Video</span>
+          <span class="num">7</span><span>Dựng Clip Video</span>
         </div>
         <div class="nav-item" data-tool="tool4" onclick="switchTool('tool4')">
-          <span class="num">7</span><span>Đổi Tên Ảnh</span>
+          <span class="num">8</span><span>Đổi Tên Ảnh</span>
         </div>
       </div>
       <div style="margin-top:14px;padding:0 4px">
@@ -1411,6 +1414,95 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       </div>
     </div>
 
+    <!-- TOOL 8: CĂN TIMING & PHỤ ĐỀ (Whisper) -->
+    <div class="tool" id="tool-tool8">
+      <div class="tool-head">
+        <div class="tool-title">Căn Timing & Phụ Đề</div>
+        <div class="tool-subtitle">Khớp duration mỗi cảnh với giọng đọc THẬT bằng Whisper. Fix lỗi giọng nhanh/chậm lệch ảnh. Xuất SRT chuẩn luôn.</div>
+      </div>
+
+      <div class="info-box">
+        <span class="lbl">💡 Quy trình:</span> Upload file VO audio (đã thu/gen) → Whisper transcribe → tự map mỗi cảnh vào timeline thật → cập nhật duration khớp 100%. Cần có cảnh ở Tool 02 trước.
+      </div>
+
+      <!-- TRANSCRIPTION SETTINGS PANEL -->
+      <div class="panel mb-24" style="border:1.5px solid var(--accent);border-radius:12px">
+        <div class="panel-head" style="background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(194,65,12,.04))">
+          <span>🔑 Cài đặt Transcribe API <span style="font-size:11px;color:var(--text-muted);font-weight:400">(riêng cho căn timing, KHÔNG dùng key Claude)</span></span>
+        </div>
+        <div class="panel-body">
+          <div class="grid-2 mb-16" style="grid-template-columns:240px 1fr auto;gap:12px;align-items:end">
+            <div>
+              <label class="label">PROVIDER</label>
+              <select id="t8Provider" onchange="t8OnProviderChange()">
+                <option value="groq" selected>Groq (MIỄN PHÍ ★)</option>
+                <option value="openai">OpenAI Whisper (trả phí)</option>
+                <option value="local">Local Browser (free, chậm)</option>
+              </select>
+            </div>
+            <div id="t8KeyWrap">
+              <label class="label">API KEY</label>
+              <input type="password" id="t8ApiKey" placeholder="Paste Groq API key (gsk_...)" autocomplete="off">
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn ghost" onclick="t8TestKey()">Test</button>
+              <button class="btn" onclick="t8SaveKey()">💾 Lưu</button>
+            </div>
+          </div>
+          <div id="t8ProviderHint" style="font-size:11.5px;color:var(--text-muted);line-height:1.6">
+            <strong>Groq</strong> (miễn phí): đăng ký tại <span style="color:var(--accent)">console.groq.com</span> → tạo key (không cần thẻ). Free tier 2.000 lượt/ngày, model whisper-large-v3, file tối đa 25MB.
+          </div>
+          <div id="t8KeyStatus" style="font-size:12px;margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- UPLOAD + ACTION -->
+      <div class="grid-2 mb-24">
+        <div class="panel">
+          <div class="panel-head"><span>🎙 Audio Voiceover (cả kịch bản)</span></div>
+          <div class="panel-body">
+            <input type="file" id="t8AudioInput" accept="audio/*" style="margin-bottom:10px;width:100%" onchange="t8HandleAudio(this.files[0])">
+            <div id="t8AudioInfo" style="font-size:11.5px;color:var(--text-muted)">Chưa có audio. Upload file VO của cả kịch bản (1 file).</div>
+            <audio id="t8AudioPlayer" controls style="width:100%;margin-top:8px;display:none"></audio>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>📊 Thông tin</span></div>
+          <div class="panel-body" style="font-size:12.5px;line-height:1.9">
+            <div>Số cảnh (Tool 02): <strong id="t8SceneCount">0</strong></div>
+            <div>Tổng duration ước tính: <strong id="t8EstTotal">0s</strong></div>
+            <div>Độ dài audio: <strong id="t8AudioDur">—</strong></div>
+            <div id="t8DurWarn" style="color:var(--red);font-size:11.5px;margin-top:4px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions mb-24">
+        <button class="btn primary" onclick="t8WhisperAlign()">🎯 Whisper Align (căn timing)</button>
+        <button class="btn" onclick="t8ApplyTimings()">✓ Áp dụng timing vào cảnh</button>
+        <button class="btn ghost" onclick="t8ExportSRT()">↓ Xuất SRT</button>
+        <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t8Reset()">🗑 Xoá kết quả</button>
+      </div>
+
+      <div class="status-bar" id="status8">Sẵn sàng. Cài key Groq → upload audio → bấm Whisper Align.</div>
+
+      <!-- COMPARISON TABLE -->
+      <div class="panel" id="t8ResultPanel" style="display:none">
+        <div class="panel-head">
+          <span>📋 So sánh timing: ước tính → thật</span>
+          <span class="count" id="t8MatchCount">0 cảnh</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="scene-table">
+            <thead><tr><th>#</th><th>Lời thoại</th><th style="text-align:right">Cũ (ước tính)</th><th style="text-align:right">Mới (thật)</th><th style="text-align:right">Chênh</th></tr></thead>
+            <tbody id="t8ResultBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <textarea id="t8SrtOutput" style="display:none"></textarea>
+    </div>
+
     <!-- TOOL 7: DỰNG CLIP VIDEO (Canvas + MediaRecorder) -->
     <div class="tool" id="tool-tool7">
       <div class="tool-head">
@@ -1711,7 +1803,7 @@ const TIER_CONFIG = {
     name: 'Pro',
     maxProfiles: Infinity,
     maxScenes: Infinity,
-    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7'],
+    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7', 'tool8'],
     badge: { text: 'PRO ✨', bg: 'linear-gradient(135deg,#f97316,#c2410c)', color: '#fff' }
   }
 };
@@ -2063,6 +2155,8 @@ function switchTool(name){
   document.querySelectorAll('.tool').forEach(t =>
     t.classList.toggle('active', t.id === 'tool-' + name)
   );
+  // Tool-specific init
+  if (name === 'tool8' && typeof t8Init === 'function') t8Init();
 }
 
 /* ============================================================
@@ -5399,6 +5493,335 @@ function clearAllT6(){
   syncStateToCurrentProfile();
   saveState(true);
   setStatus6('✓ Đã xoá hết prompt Veo 3 của profile hiện tại.', 'ok');
+}
+
+/* ============================================================
+   TOOL 08 — CĂN TIMING & PHỤ ĐỀ (Whisper: Groq / OpenAI / Local)
+============================================================ */
+const setStatus8 = (m, t) => setStatusBar('status8', m, t);
+
+const t8State = {
+  audioFile: null,
+  audioDuration: 0,
+  alignResults: null  // [{id, text, oldDur, newStart, newEnd, newDur}]
+};
+
+const T8_PROVIDERS = {
+  groq: {
+    name: 'Groq',
+    url: 'https://api.groq.com/openai/v1/audio/transcriptions',
+    model: 'whisper-large-v3',
+    keyPrefix: 'gsk_',
+    hint: '<strong>Groq</strong> (miễn phí): đăng ký tại <span style="color:var(--accent)">console.groq.com</span> → tạo key (không cần thẻ). Free tier 2.000 lượt/ngày, whisper-large-v3, file ≤25MB.',
+    placeholder: 'Paste Groq API key (gsk_...)'
+  },
+  openai: {
+    name: 'OpenAI',
+    url: 'https://api.openai.com/v1/audio/transcriptions',
+    model: 'whisper-1',
+    keyPrefix: 'sk-',
+    hint: '<strong>OpenAI Whisper</strong>: $0.006/phút. Key tại platform.openai.com. Cần nạp credit.',
+    placeholder: 'Paste OpenAI API key (sk-...)'
+  },
+  local: {
+    name: 'Local Browser',
+    hint: '<strong>Local Browser</strong>: chạy Whisper ngay trên máy bằng transformers.js. Miễn phí, không cần key. Tải model ~150MB lần đầu. Chậm hơn (đặc biệt máy không GPU). Model base → kém chính xác hơn large-v3.',
+    placeholder: 'Không cần key cho Local'
+  }
+};
+
+function t8GetProvider(){ return localStorage.getItem('t8_provider') || 'groq'; }
+function t8GetKey(provider){ return localStorage.getItem('t8_key_' + (provider || t8GetProvider())) || ''; }
+
+function t8OnProviderChange(){
+  const prov = document.getElementById('t8Provider').value;
+  const cfg = T8_PROVIDERS[prov];
+  document.getElementById('t8ProviderHint').innerHTML = cfg.hint;
+  const keyWrap = document.getElementById('t8KeyWrap');
+  const keyInput = document.getElementById('t8ApiKey');
+  if (prov === 'local') {
+    keyWrap.style.opacity = '.4';
+    keyInput.disabled = true;
+    keyInput.placeholder = cfg.placeholder;
+    keyInput.value = '';
+  } else {
+    keyWrap.style.opacity = '1';
+    keyInput.disabled = false;
+    keyInput.placeholder = cfg.placeholder;
+    keyInput.value = t8GetKey(prov);
+  }
+}
+
+function t8SaveKey(){
+  const prov = document.getElementById('t8Provider').value;
+  localStorage.setItem('t8_provider', prov);
+  if (prov !== 'local') {
+    const key = document.getElementById('t8ApiKey').value.trim();
+    localStorage.setItem('t8_key_' + prov, key);
+  }
+  document.getElementById('t8KeyStatus').innerHTML = '<span style="color:var(--green)">✓ Đã lưu cài đặt transcribe.</span>';
+  setTimeout(() => { const e = document.getElementById('t8KeyStatus'); if (e) e.innerHTML = ''; }, 3000);
+}
+
+async function t8TestKey(){
+  const prov = document.getElementById('t8Provider').value;
+  const statusEl = document.getElementById('t8KeyStatus');
+  if (prov === 'local') {
+    statusEl.innerHTML = '<span style="color:var(--text-muted)">Local không cần test key. Bấm Whisper Align để tải model + chạy.</span>';
+    return;
+  }
+  const key = document.getElementById('t8ApiKey').value.trim();
+  if (!key) { statusEl.innerHTML = '<span style="color:var(--red)">Chưa nhập key.</span>'; return; }
+  const cfg = T8_PROVIDERS[prov];
+  if (!key.startsWith(cfg.keyPrefix)) {
+    statusEl.innerHTML = `<span style="color:var(--red)">Key ${cfg.name} thường bắt đầu bằng "${cfg.keyPrefix}". Kiểm tra lại.</span>`;
+    return;
+  }
+  statusEl.innerHTML = '<span style="color:var(--text-muted)">Đang test...</span>';
+  // Test bằng cách gọi models endpoint (nhẹ)
+  try {
+    const testUrl = prov === 'groq' ? 'https://api.groq.com/openai/v1/models' : 'https://api.openai.com/v1/models';
+    const r = await fetch(testUrl, { headers: { 'Authorization': 'Bearer ' + key } });
+    if (r.ok) {
+      statusEl.innerHTML = `<span style="color:var(--green)">✓ Key ${cfg.name} hợp lệ! Đã sẵn sàng.</span>`;
+    } else {
+      statusEl.innerHTML = `<span style="color:var(--red)">Key không hợp lệ (HTTP ${r.status}).</span>`;
+    }
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">Lỗi kết nối: ${e.message}</span>`;
+  }
+}
+
+function t8HandleAudio(file){
+  if (!file) return;
+  t8State.audioFile = file;
+  document.getElementById('t8AudioInfo').textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+  const player = document.getElementById('t8AudioPlayer');
+  player.src = URL.createObjectURL(file);
+  player.style.display = 'block';
+  // Decode để lấy duration
+  player.onloadedmetadata = () => {
+    t8State.audioDuration = player.duration;
+    document.getElementById('t8AudioDur').textContent = player.duration.toFixed(1) + 's';
+    t8UpdateInfo();
+  };
+  // Cảnh báo size cho Groq free (25MB)
+  const prov = t8GetProvider();
+  if (prov === 'groq' && file.size > 25 * 1024 * 1024) {
+    setStatus8('⚠️ File > 25MB — vượt giới hạn Groq free tier. Nén audio xuống hoặc dùng OpenAI.', 'error');
+  } else {
+    setStatus8(`✓ Đã load audio. Bấm Whisper Align.`, 'ok');
+  }
+}
+
+function t8UpdateInfo(){
+  const sc = state.scenes?.length || 0;
+  document.getElementById('t8SceneCount').textContent = sc;
+  const estTotal = (state.scenes || []).reduce((a, s) => a + (s.duration || 0), 0);
+  document.getElementById('t8EstTotal').textContent = estTotal + 's';
+  const warn = document.getElementById('t8DurWarn');
+  if (t8State.audioDuration && estTotal) {
+    const diff = Math.abs(t8State.audioDuration - estTotal);
+    warn.textContent = diff > 5 ? `Lệch ${diff.toFixed(0)}s giữa ước tính và audio — căn timing sẽ fix.` : '';
+  }
+}
+
+// Greedy sequential alignment: map scenes vào word timeline
+function t8AlignScenesToWords(scenes, words){
+  let cursor = 0;
+  const results = [];
+  for (const scene of scenes) {
+    const sceneWords = (scene.text || '').trim().split(/\s+/).filter(Boolean);
+    const wc = sceneWords.length || 1;
+    if (cursor >= words.length) {
+      results.push({ id: scene.id, text: scene.text, oldDur: scene.duration || 0, newStart: null, newEnd: null, newDur: null });
+      continue;
+    }
+    const startIdx = cursor;
+    const endIdx = Math.min(cursor + wc - 1, words.length - 1);
+    const start = words[startIdx].start;
+    const end = words[endIdx].end;
+    const newDur = Math.max(0.3, Math.round((end - start) * 10) / 10);
+    results.push({ id: scene.id, text: scene.text, oldDur: scene.duration || 0, newStart: start, newEnd: end, newDur });
+    cursor = endIdx + 1;
+  }
+  return results;
+}
+
+async function t8WhisperAlign(){
+  if (!state.scenes || state.scenes.length === 0) return setStatus8('Tool 02 chưa có cảnh. Chia cảnh trước.', 'error');
+  if (!t8State.audioFile) return setStatus8('Cần upload audio VO trước.', 'error');
+  const prov = document.getElementById('t8Provider').value;
+
+  let words = null;
+  try {
+    if (prov === 'local') {
+      words = await t8TranscribeLocal(t8State.audioFile);
+    } else {
+      words = await t8TranscribeAPI(prov, t8State.audioFile);
+    }
+  } catch (e) {
+    console.error(e);
+    return setStatus8('Lỗi transcribe: ' + e.message, 'error');
+  }
+
+  if (!words || words.length === 0) {
+    return setStatus8('Whisper không trả về word timestamps. Thử lại hoặc đổi provider.', 'error');
+  }
+
+  setStatus8(`✓ Transcribe xong (${words.length} từ). Đang căn timing...`, 'working');
+  t8State.alignResults = t8AlignScenesToWords(state.scenes, words);
+  t8RenderResults();
+  const matched = t8State.alignResults.filter(r => r.newDur != null).length;
+  setStatus8(`✓ Đã căn ${matched}/${state.scenes.length} cảnh. Xem bảng so sánh → bấm "Áp dụng timing".`, 'ok');
+  notifyDone('✓ Căn timing xong!', `${matched} cảnh đã khớp audio.`);
+}
+
+async function t8TranscribeAPI(prov, file){
+  const cfg = T8_PROVIDERS[prov];
+  const key = t8GetKey(prov) || document.getElementById('t8ApiKey').value.trim();
+  if (!key) throw new Error(`Chưa có ${cfg.name} key. Nhập + Lưu key trước.`);
+  setStatus8(`Đang gửi audio lên ${cfg.name} Whisper...`, 'working');
+  const form = new FormData();
+  form.append('file', file);
+  form.append('model', cfg.model);
+  form.append('response_format', 'verbose_json');
+  form.append('timestamp_granularities[]', 'word');
+  const r = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key },
+    body: form
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`${cfg.name} HTTP ${r.status}: ${txt.slice(0, 200)}`);
+  }
+  const data = await r.json();
+  // verbose_json có data.words = [{word, start, end}]
+  if (data.words && data.words.length) {
+    return data.words.map(w => ({ word: w.word, start: w.start, end: w.end }));
+  }
+  // Fallback: segments → ước lượng word time đều trong segment
+  if (data.segments && data.segments.length) {
+    const words = [];
+    for (const seg of data.segments) {
+      const segWords = (seg.text || '').trim().split(/\s+/).filter(Boolean);
+      const segDur = seg.end - seg.start;
+      const perWord = segDur / (segWords.length || 1);
+      segWords.forEach((w, i) => {
+        words.push({ word: w, start: seg.start + i * perWord, end: seg.start + (i + 1) * perWord });
+      });
+    }
+    return words;
+  }
+  throw new Error('Không có word/segment timestamps trong response.');
+}
+
+// Local Whisper qua transformers.js (best-effort)
+async function t8TranscribeLocal(file){
+  setStatus8('Đang tải Whisper model (lần đầu ~150MB)...', 'working');
+  let transformers;
+  try {
+    transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+  } catch (e) {
+    throw new Error('Không tải được transformers.js. Cần mạng + browser hỗ trợ ES module. Thử Groq thay thế.');
+  }
+  const { pipeline } = transformers;
+  const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
+  setStatus8('Đang xử lý audio local (có thể mất 1-3 phút)...', 'working');
+  // Decode audio → Float32Array 16kHz mono
+  const arrayBuf = await file.arrayBuffer();
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  const decoded = await audioCtx.decodeAudioData(arrayBuf);
+  const raw = decoded.getChannelData(0);
+  const output = await transcriber(raw, { return_timestamps: 'word', chunk_length_s: 30, stride_length_s: 5 });
+  audioCtx.close();
+  if (output.chunks && output.chunks.length) {
+    return output.chunks.map(c => ({ word: c.text, start: c.timestamp[0], end: c.timestamp[1] }));
+  }
+  throw new Error('Local Whisper không trả timestamps. Dùng Groq cho chính xác hơn.');
+}
+
+function t8RenderResults(){
+  const panel = document.getElementById('t8ResultPanel');
+  const body = document.getElementById('t8ResultBody');
+  if (!t8State.alignResults) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const matched = t8State.alignResults.filter(r => r.newDur != null).length;
+  document.getElementById('t8MatchCount').textContent = matched + ' cảnh';
+  body.innerHTML = t8State.alignResults.map(r => {
+    const diff = r.newDur != null ? (r.newDur - r.oldDur) : null;
+    const diffStr = diff == null ? '—' : (diff > 0 ? '+' : '') + diff.toFixed(1) + 's';
+    const diffColor = diff == null ? 'var(--text-muted)' : (Math.abs(diff) > 1.5 ? 'var(--red)' : 'var(--text-muted)');
+    return `<tr>
+      <td class="id">${r.id}</td>
+      <td class="vo">${escapeHtml((r.text || '').slice(0, 80))}${(r.text||'').length>80?'...':''}</td>
+      <td style="text-align:right;color:var(--text-muted)">${r.oldDur}s</td>
+      <td style="text-align:right;font-weight:600;color:${r.newDur!=null?'var(--accent)':'var(--text-muted)'}">${r.newDur != null ? r.newDur + 's' : 'thiếu audio'}</td>
+      <td style="text-align:right;color:${diffColor}">${diffStr}</td>
+    </tr>`;
+  }).join('');
+}
+
+function t8ApplyTimings(){
+  if (!t8State.alignResults) return setStatus8('Chưa có kết quả. Bấm Whisper Align trước.', 'error');
+  let applied = 0;
+  for (const r of t8State.alignResults) {
+    if (r.newDur == null) continue;
+    const scene = state.scenes.find(s => s.id === r.id);
+    if (scene) { scene.duration = r.newDur; applied++; }
+  }
+  // Re-render Tool 2 + sync profile
+  if (typeof renderTable === 'function') renderTable();
+  if (typeof updateStats === 'function') updateStats();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  syncStateToCurrentProfile();
+  saveState(true);
+  setStatus8(`✓ Đã áp dụng timing thật cho ${applied} cảnh. Qua Tool 02 / Dựng Clip để kiểm tra.`, 'ok');
+}
+
+function t8ExportSRT(){
+  if (!t8State.alignResults) return setStatus8('Chưa có kết quả. Bấm Whisper Align trước.', 'error');
+  const fmt = sec => {
+    if (sec == null) sec = 0;
+    const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+    const s = String(Math.floor(sec % 60)).padStart(2, '0');
+    const ms = String(Math.floor((sec % 1) * 1000)).padStart(3, '0');
+    return `${h}:${m}:${s},${ms}`;
+  };
+  let srt = '';
+  let idx = 1;
+  let cursor = 0;
+  for (const r of t8State.alignResults) {
+    const start = r.newStart != null ? r.newStart : cursor;
+    const end = r.newEnd != null ? r.newEnd : start + (r.oldDur || 2);
+    srt += `${idx}\n${fmt(start)} --> ${fmt(end)}\n${r.text || ''}\n\n`;
+    idx++;
+    cursor = end;
+  }
+  const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'subtitle-' + Date.now() + '.srt'; a.click();
+  URL.revokeObjectURL(url);
+  setStatus8('✓ Đã tải file SRT. Import vào CapCut/Premiere hoặc upload YouTube.', 'ok');
+}
+
+function t8Reset(){
+  t8State.alignResults = null;
+  document.getElementById('t8ResultPanel').style.display = 'none';
+  setStatus8('Đã xoá kết quả. Sẵn sàng align lại.', 'info');
+}
+
+// Init Tool 8 khi vào tab
+function t8Init(){
+  const provSel = document.getElementById('t8Provider');
+  if (provSel) {
+    provSel.value = t8GetProvider();
+    t8OnProviderChange();
+  }
+  t8UpdateInfo();
 }
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 5 loaded (cloud sync hoàn chỉnh).');
