@@ -899,6 +899,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="nav-item" data-tool="tool9" onclick="switchTool('tool9')">
           <span class="num">9</span><span>YouTube SEO</span>
         </div>
+        <div class="nav-item" data-tool="tool10" onclick="switchTool('tool10')">
+          <span class="num">10</span><span>Thumbnail AI</span>
+        </div>
       </div>
       <div style="margin-top:14px;padding:0 4px">
         <button class="btn ghost" onclick="openAssetLibrary()" style="width:100%;display:flex;align-items:center;gap:8px;font-size:13px;justify-content:flex-start;padding:9px 12px" title="Thư viện nhân vật & bối cảnh dùng chung">
@@ -1400,6 +1403,107 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <div class="panel-body">
             <input type="text" id="t9Hash" style="font-size:13px">
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOOL 10: THUMBNAIL AI (Nano Banana — gen ảnh theo style mẫu) -->
+    <div class="tool" id="tool-tool10">
+      <div class="tool-head">
+        <div class="tool-title">Thumbnail AI</div>
+        <div class="tool-subtitle">Upload ảnh mẫu → AI phân tích style → gen ảnh thumbnail mới theo chủ đề + style đó, KHÔNG chữ. Bạn thêm chữ trên Canva.</div>
+      </div>
+
+      <div class="info-box">
+        <span class="lbl">💡 Cách dùng:</span> Gen ảnh nền theo đúng style kênh mẫu (không chữ để tránh AI viết lỗi). Dùng Nano Banana (Gemini) — <strong>free 500 ảnh/ngày</strong> qua Google AI Studio. Xong tải về → Canva thêm chữ tay.
+      </div>
+
+      <!-- API SETTINGS -->
+      <div class="panel mb-24" style="border:1.5px solid var(--accent);border-radius:12px">
+        <div class="panel-head" style="background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(194,65,12,.04))">
+          <span>🔑 Cài đặt Gemini Image API <span style="font-size:11px;color:var(--text-muted);font-weight:400">(riêng cho gen ảnh, KHÔNG dùng key Claude)</span></span>
+        </div>
+        <div class="panel-body">
+          <div class="grid-2 mb-12" style="grid-template-columns:260px 1fr auto;gap:12px;align-items:end">
+            <div>
+              <label class="label">MODEL</label>
+              <select id="t10Model" onchange="t10SaveSettings()">
+                <option value="gemini-2.5-flash-image" selected>Nano Banana (free 500/ngày ★)</option>
+                <option value="gemini-3-pro-image-preview">Nano Banana Pro (đẹp hơn, ~$0.13/ảnh)</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">GEMINI API KEY</label>
+              <input type="password" id="t10ApiKey" placeholder="Paste Google AI Studio key (AIza...)" autocomplete="off">
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn" onclick="t10SaveSettings(true)">💾 Lưu</button>
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:var(--text-muted);line-height:1.6">
+            Lấy key miễn phí tại <span style="color:var(--accent)">aistudio.google.com</span> → "Get API key" → tạo key (AIza...). Free tier ~500 ảnh/ngày, không cần thẻ.
+          </div>
+          <div id="t10KeyStatus" style="font-size:12px;margin-top:8px"></div>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-16" style="grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+        <!-- REFERENCE IMAGES -->
+        <div class="panel">
+          <div class="panel-head"><span>🖼 Ảnh mẫu (style tham chiếu, 1-3 ảnh)</span></div>
+          <div class="panel-body">
+            <input type="file" id="t10RefInput" accept="image/*" multiple style="width:100%;margin-bottom:10px" onchange="t10HandleRefs(this.files)">
+            <div id="t10RefPreview" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Upload 1-3 thumbnail mẫu của kênh bạn thích → AI bắt chước style (nét vẽ, màu, nhân vật).</div>
+          </div>
+        </div>
+
+        <!-- TOPIC -->
+        <div class="panel">
+          <div class="panel-head">
+            <span>🎯 Chủ đề thumbnail</span>
+            <button class="btn ghost sm" onclick="t10PullFromTool9()">📥 Lấy title từ Tool 9</button>
+          </div>
+          <div class="panel-body">
+            <label class="label">TIÊU ĐỀ / CHỦ ĐỀ VIDEO</label>
+            <input type="text" id="t10Title" placeholder="vd: What Happens During Severe Sleep Deprivation" style="margin-bottom:10px">
+            <label class="label">MÔ TẢ HÌNH MUỐN VẼ <span style="font-weight:400;color:var(--text-muted);font-size:11px">(nhân vật/cảnh/cảm xúc)</span></label>
+            <textarea id="t10Subject" rows="3" placeholder="vd: a exhausted man with dark eye bags, slumped, dramatic tired expression"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- STYLE ANALYSIS -->
+      <div class="panel mb-16">
+        <div class="panel-head">
+          <span>🎨 Mô tả style</span>
+          <button class="btn ghost sm" onclick="t10AnalyzeStyle()">🔍 Phân tích style từ ảnh mẫu (Claude)</button>
+        </div>
+        <div class="panel-body">
+          <textarea id="t10StyleNotes" rows="4" placeholder="Bấm 'Phân tích style' để Claude tự mô tả style ảnh mẫu (nét vẽ, màu, shading...), hoặc tự gõ. Để trống cũng được — Nano Banana tự nhìn ảnh mẫu."></textarea>
+        </div>
+      </div>
+
+      <div class="actions mb-24">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label class="label" style="margin:0">Số ảnh:</label>
+          <select id="t10Count" style="width:70px">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </div>
+        <button class="btn primary" onclick="t10Generate()">✨ Gen Thumbnail</button>
+        <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t10Reset()">🗑 Xoá</button>
+      </div>
+
+      <div class="status-bar" id="status10">Sẵn sàng. Cài key Gemini → upload ảnh mẫu → nhập chủ đề → Gen.</div>
+
+      <div class="panel" id="t10ResultPanel" style="display:none">
+        <div class="panel-head"><span>🖼 Ảnh đã tạo (không chữ — tải về Canva thêm chữ)</span></div>
+        <div class="panel-body">
+          <div id="t10Results" style="display:flex;gap:14px;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -1929,7 +2033,7 @@ const TIER_CONFIG = {
     name: 'Pro',
     maxProfiles: Infinity,
     maxScenes: Infinity,
-    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7', 'tool8', 'tool9'],
+    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7', 'tool8', 'tool9', 'tool10'],
     badge: { text: 'PRO ✨', bg: 'linear-gradient(135deg,#f97316,#c2410c)', color: '#fff' }
   }
 };
@@ -2284,6 +2388,7 @@ function switchTool(name){
   // Tool-specific init
   if (name === 'tool8' && typeof t8Init === 'function') t8Init();
   if (name === 'tool9' && typeof t9Init === 'function') t9Init();
+  if (name === 'tool10' && typeof t10Init === 'function') t10Init();
 }
 
 /* ============================================================
@@ -6169,6 +6274,225 @@ function t9Init(){
   const t8lang = localStorage.getItem('t8_language');
   const sel = document.getElementById('t9Language');
   if (t8lang && sel && [...sel.options].some(o => o.value === t8lang)) sel.value = t8lang;
+}
+
+/* ============================================================
+   TOOL 10 — THUMBNAIL AI (Nano Banana / Gemini image gen)
+============================================================ */
+const setStatus10 = (m, t) => setStatusBar('status10', m, t);
+const t10State = { refs: [], results: [] };  // refs: [{base64, mime, name}]
+
+function t10GetKey(){ return localStorage.getItem('t10_key') || ''; }
+function t10GetModel(){ return localStorage.getItem('t10_model') || 'gemini-2.5-flash-image'; }
+
+function t10SaveSettings(showStatus){
+  const model = document.getElementById('t10Model').value;
+  const key = document.getElementById('t10ApiKey').value.trim();
+  localStorage.setItem('t10_model', model);
+  if (key) localStorage.setItem('t10_key', key);
+  if (showStatus) {
+    document.getElementById('t10KeyStatus').innerHTML = '<span style="color:var(--green)">✓ Đã lưu cài đặt.</span>';
+    setTimeout(() => { const e = document.getElementById('t10KeyStatus'); if (e) e.innerHTML = ''; }, 3000);
+  }
+}
+
+// Đọc file ảnh → base64 (bỏ prefix data:)
+function t10FileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function t10HandleRefs(files){
+  const arr = Array.from(files).slice(0, 3);
+  t10State.refs = [];
+  for (const f of arr) {
+    const base64 = await t10FileToBase64(f);
+    t10State.refs.push({ base64, mime: f.type || 'image/jpeg', name: f.name });
+  }
+  t10RenderRefs();
+  setStatus10(`✓ Đã nạp ${t10State.refs.length} ảnh mẫu.`, 'ok');
+}
+
+function t10RenderRefs(){
+  document.getElementById('t10RefPreview').innerHTML = t10State.refs.map((r, i) =>
+    `<div style="position:relative">
+      <img src="data:${r.mime};base64,${r.base64}" style="width:90px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">
+      <button onclick="t10RemoveRef(${i})" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:1">×</button>
+    </div>`
+  ).join('');
+}
+
+function t10RemoveRef(i){
+  t10State.refs.splice(i, 1);
+  t10RenderRefs();
+}
+
+function t10PullFromTool9(){
+  const t = document.getElementById('t9Title')?.value.trim()
+    || (t9State.result?.titles?.[0]) || '';
+  if (t) {
+    document.getElementById('t10Title').value = t;
+    setStatus10('✓ Đã lấy title từ Tool 9.', 'ok');
+  } else {
+    setStatus10('Tool 9 chưa có title. Tạo SEO Pack trước hoặc gõ tay.', 'error');
+  }
+}
+
+// Claude vision phân tích style ảnh mẫu
+async function t10AnalyzeStyle(){
+  if (!t10State.refs.length) return setStatus10('Upload ảnh mẫu trước khi phân tích.', 'error');
+  setStatus10('Claude đang phân tích style ảnh mẫu...', 'working');
+  const prompt = `Analyze the ART STYLE of this YouTube thumbnail image (ignore any text/words in it). Describe ONLY the visual style in a concise English paragraph an image generator can follow: line work, outline thickness, coloring/shading technique, color palette, character design and proportions, facial expression style, background treatment, overall vibe. Do NOT describe the specific subject matter — only the reusable style. 3-5 sentences.`;
+  try {
+    const r = t10State.refs[0];
+    const desc = await callClaudeWithImage(prompt, r.base64, r.mime, 600);
+    document.getElementById('t10StyleNotes').value = desc.trim();
+    setStatus10('✓ Đã phân tích style. Có thể chỉnh sửa rồi Gen.', 'ok');
+  } catch (e) {
+    setStatus10('Lỗi phân tích: ' + e.message, 'error');
+  }
+}
+
+async function t10Generate(){
+  const key = t10GetKey() || document.getElementById('t10ApiKey').value.trim();
+  if (!key) return setStatus10('Chưa có Gemini key. Cài + Lưu key trước.', 'error');
+  const title = document.getElementById('t10Title').value.trim();
+  const subject = document.getElementById('t10Subject').value.trim();
+  if (!title && !subject) return setStatus10('Cần tiêu đề hoặc mô tả hình muốn vẽ.', 'error');
+
+  const styleNotes = document.getElementById('t10StyleNotes').value.trim();
+  const count = parseInt(document.getElementById('t10Count').value) || 1;
+  const model = t10GetModel();
+
+  const subjectLine = subject || `an eye-catching illustration representing the topic: "${title}"`;
+  const prompt = `Create a YouTube thumbnail illustration in 16:9 landscape format.
+
+SUBJECT TO DEPICT: ${subjectLine}
+${title ? `VIDEO TOPIC (for context): "${title}"` : ''}
+
+ART STYLE: ${t10State.refs.length ? 'Match the EXACT art style of the reference image(s) provided — same line work, outline style, coloring, shading, character design, proportions, and overall aesthetic.' : 'Bold cartoon/illustration style suitable for a viral YouTube thumbnail.'}
+${styleNotes ? `STYLE DETAILS: ${styleNotes}` : ''}
+
+CRITICAL RULES:
+- Do NOT include ANY text, words, letters, numbers, captions, or logos in the image. The image must be completely text-free so text can be added later in an editor.
+- Leave clean negative space (e.g. one side) where a title could be placed later.
+- Single clear focal subject with strong, expressive emotion.
+- High contrast, vivid, attention-grabbing — optimized to stand out as a thumbnail.`;
+
+  t10State.results = [];
+  document.getElementById('t10Results').innerHTML = '';
+  document.getElementById('t10ResultPanel').style.display = 'block';
+  clearCancel();
+
+  for (let i = 0; i < count; i++) {
+    if (state.cancelRequested) { setStatus10('Đã dừng.', 'info'); break; }
+    setStatus10(`Đang gen ảnh ${i + 1}/${count} (${model})...`, 'working');
+    try {
+      const img = await t10CallGemini(prompt, model, key);
+      t10State.results.push(img);
+      t10RenderResults();
+    } catch (e) {
+      setStatus10(`Lỗi ảnh ${i + 1}: ${e.message}`, 'error');
+      return;
+    }
+  }
+  if (t10State.results.length) {
+    setStatus10(`✓ Xong ${t10State.results.length} ảnh. Tải về → Canva thêm chữ.`, 'ok');
+    notifyDone('✓ Thumbnail xong!', `${t10State.results.length} ảnh đã tạo.`);
+  }
+}
+
+async function t10CallGemini(prompt, model, key){
+  // Build parts: prompt + reference images
+  const parts = [{ text: prompt }];
+  for (const r of t10State.refs) {
+    parts.push({ inline_data: { mime_type: r.mime, data: r.base64 } });
+  }
+  const body = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: { responseModalities: ['IMAGE'] }
+  });
+
+  // Thử proxy Vercel trước (tránh CORS), fallback gọi trực tiếp
+  let data;
+  try {
+    const r = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': key, 'X-Model': model },
+      body
+    });
+    const ct = r.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || `HTTP ${r.status}`);
+    }
+  } catch (e) {
+    if (e.message && !e.message.includes('Failed to fetch') && !e.message.includes('NetworkError')) {
+      // lỗi thật từ API → ném ra
+      if (data) throw e;
+    }
+  }
+  // Fallback trực tiếp
+  if (!data) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    data = await r.json();
+    if (!r.ok) throw new Error(data.error?.message || `HTTP ${r.status}`);
+  }
+
+  // Parse ảnh từ response
+  const respParts = data.candidates?.[0]?.content?.parts || [];
+  const imgPart = respParts.find(p => p.inlineData || p.inline_data);
+  if (!imgPart) {
+    const textPart = respParts.find(p => p.text);
+    throw new Error(textPart ? ('Model trả text thay vì ảnh: ' + textPart.text.slice(0, 120)) : 'Không có ảnh trong response. Kiểm tra key/model.');
+  }
+  const b64 = imgPart.inlineData?.data || imgPart.inline_data?.data;
+  const mime = imgPart.inlineData?.mimeType || imgPart.inline_data?.mime_type || 'image/png';
+  return { b64, mime };
+}
+
+function t10RenderResults(){
+  document.getElementById('t10Results').innerHTML = t10State.results.map((img, i) =>
+    `<div style="display:flex;flex-direction:column;gap:6px">
+      <img src="data:${img.mime};base64,${img.b64}" style="width:320px;max-width:100%;border-radius:8px;border:1px solid var(--border)">
+      <button class="btn ghost sm" onclick="t10Download(${i})">↓ Tải ảnh ${i + 1}</button>
+    </div>`
+  ).join('');
+}
+
+function t10Download(i){
+  const img = t10State.results[i];
+  if (!img) return;
+  const ext = (img.mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+  const a = document.createElement('a');
+  a.href = `data:${img.mime};base64,${img.b64}`;
+  a.download = `thumbnail-${Date.now()}-${i + 1}.${ext}`;
+  a.click();
+}
+
+function t10Reset(){
+  t10State.results = [];
+  document.getElementById('t10Results').innerHTML = '';
+  document.getElementById('t10ResultPanel').style.display = 'none';
+  setStatus10('Đã xoá kết quả. Sẵn sàng gen lại.', 'info');
+}
+
+function t10Init(){
+  const modelSel = document.getElementById('t10Model');
+  if (modelSel) modelSel.value = t10GetModel();
+  const keyInput = document.getElementById('t10ApiKey');
+  if (keyInput && !keyInput.value) keyInput.value = t10GetKey();
+  // Auto lấy title từ Tool 9 nếu có
+  const t10title = document.getElementById('t10Title');
+  if (t10title && !t10title.value) {
+    const t = document.getElementById('t9Title')?.value.trim() || (t9State.result?.titles?.[0]) || '';
+    if (t) t10title.value = t;
+  }
 }
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 5 loaded (cloud sync hoàn chỉnh).');
