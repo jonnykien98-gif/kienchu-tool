@@ -1332,9 +1332,14 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           </select>
         </div>
         <div>
-          <label class="label">🎯 KEYWORD MỤC TIÊU <span style="font-weight:400;color:var(--text-muted);font-size:11px">(tuỳ chọn — keyword chính muốn lên top)</span></label>
-          <input type="text" id="t9Keyword" placeholder="vd: morning routine, weight loss tips...">
+          <label class="label">🎯 KEYWORD MỤC TIÊU <span style="font-weight:400;color:var(--text-muted);font-size:11px">(tuỳ chọn — từ khoá ngắn muốn lên top, vd: "sleep deprivation")</span></label>
+          <input type="text" id="t9Keyword" placeholder="vd: sleep deprivation, morning routine...">
         </div>
+      </div>
+
+      <div class="mb-16">
+        <label class="label">📌 TIÊU ĐỀ CÓ SẴN <span style="font-weight:400;color:var(--text-muted);font-size:11px">(tuỳ chọn — nếu bạn ĐÃ nghĩ ra title rồi, paste vào đây; tool giữ nguyên + gợi ý biến thể + tối ưu mô tả quanh nó)</span></label>
+        <input type="text" id="t9Title" placeholder="vd: What Happens to Your Body During Severe Sleep Deprivation">
       </div>
 
       <div class="panel mb-16">
@@ -6041,6 +6046,7 @@ async function t9Generate(){
   const langCode = document.getElementById('t9Language').value;
   const langName = langMap[langCode] || 'English';
   const keyword = document.getElementById('t9Keyword').value.trim();
+  const existingTitle = document.getElementById('t9Title').value.trim();
   const timeline = t9BuildSceneTimeline();
 
   let timelineBlock = '';
@@ -6049,16 +6055,25 @@ async function t9Generate(){
       + timeline.map(t => `[${t.start}] ${t.text}`).join('\n');
   }
 
+  // Nếu đã có title: giữ nguyên làm #1, gợi ý biến thể, tối ưu phần còn lại quanh nó
+  const titleInstruction = existingTitle
+    ? `The creator ALREADY HAS this title and wants to keep it: "${existingTitle}". 
+- Put this EXACT title as titles[0] (do not change it).
+- For titles[1] to titles[9]: generate 9 ALTERNATIVE / IMPROVED variations on the same topic and angle, so the creator can compare and optionally pick a better one. Keep them under 60 characters, keyword front-loaded.
+- Derive the main keyword from this title and optimize the description hook, chapters, tags, and hashtags to MATCH this title.`
+    : `Generate 10 title strings, each under 60 characters, primary keyword in first 5-7 words, mix of angles: curiosity gap, number/listicle, how-to, emotional, question, bold claim.`;
+
   const prompt = `You are a YouTube SEO expert. Based on the video content below, generate a complete SEO package in ${langName}.
 
 VIDEO CONTENT:
 ${script.slice(0, 6000)}
 ${keyword ? `\nTARGET KEYWORD (must appear in title + early in description): "${keyword}"` : ''}
+${existingTitle ? `\nEXISTING TITLE (keep as-is, see instructions): "${existingTitle}"` : ''}
 ${timelineBlock}
 
 Generate and return ONLY valid JSON (no markdown, no backticks, no preamble) with this exact structure:
 {
-  "titles": [10 title strings, each under 60 characters, primary keyword in first 5-7 words, mix of angles: curiosity gap, number/listicle, how-to, emotional, question, bold claim],
+  "titles": [10 title strings. ${existingTitle ? 'titles[0] = the existing title EXACTLY; titles[1-9] = alternatives' : 'all 10 freshly generated'}],
   "hook": "first 1-2 sentences of description — the most compelling part, shown before 'show more', includes keyword naturally",
   "summary": "2-3 sentence paragraph summarizing the video value, keyword-rich but natural",
   "chapters": [${timeline.length ? 'array of {"time":"M:SS","label":"short chapter title"} using the REAL timestamps from the scene timeline above, first must be 0:00, 5-8 chapters, each >=10s apart' : 'empty array []'}],
@@ -6066,6 +6081,8 @@ Generate and return ONLY valid JSON (no markdown, no backticks, no preamble) wit
   "tags": [15-20 relevant tag strings, mix of short and long-tail keywords],
   "hashtags": [5 hashtag strings WITH the # symbol, most relevant first]
 }
+
+TITLE INSTRUCTIONS: ${titleInstruction}
 
 All text must be in ${langName}. Return JSON only.`;
 
@@ -6101,13 +6118,17 @@ function t9RenderResults(data){
 
   // Titles — mỗi cái 1 dòng + nút copy + đếm ký tự
   const titles = data.titles || [];
+  const hasOwnTitle = !!document.getElementById('t9Title').value.trim();
   document.getElementById('t9Titles').innerHTML = titles.map((t, i) => {
     const len = t.length;
     const lenColor = len > 60 ? 'var(--red)' : (len > 50 ? '#d97706' : 'var(--green)');
     const safe = escapeHtml(t).replace(/'/g, "\\'");
+    const ownBadge = (hasOwnTitle && i === 0)
+      ? '<span style="font-size:9.5px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:4px;margin-left:4px">CỦA BẠN</span>'
+      : '';
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="color:var(--text-muted);font-size:12px;min-width:20px">${i + 1}.</span>
-      <span style="flex:1;font-size:13.5px">${escapeHtml(t)}</span>
+      <span style="flex:1;font-size:13.5px">${escapeHtml(t)}${ownBadge}</span>
       <span style="font-size:11px;color:${lenColor};min-width:42px;text-align:right">${len} ký</span>
       <button class="btn ghost sm" style="padding:3px 9px;font-size:11px" onclick="copyText('${safe}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1200)">📋</button>
     </div>`;
