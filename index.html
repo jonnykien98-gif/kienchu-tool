@@ -1013,6 +1013,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn violet" onclick="doPrescan()">⚡ Quét Trước (AI)</button>
         <button class="btn teal" onclick="doAssign()">◈ Gán Tài Nguyên</button>
         <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
+        <button class="btn ghost" id="t2FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="doGenerateScenePrompts()" title="Chỉ tạo các cảnh chưa có prompt">🔧 Tạo nốt cảnh thiếu <span id="t2MissingCount"></span></button>
         <button class="btn ghost" onclick="exportVideo()">↓ Xuất Dữ Liệu</button>
         <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT2()" title="Xoá toàn bộ data Tool 2">🗑 Xoá hết</button>
         <div class="batch-control"><span>Batch:</span><input type="number" id="batchSize" value="5" min="1" max="20"></div>
@@ -1591,6 +1592,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       <div class="actions">
         <button class="btn teal" onclick="loadDataForVeo()">📥 Load từ Tool 02</button>
         <button class="btn primary" onclick="genVeoPrompts()">✨ Sinh Prompt Veo 3</button>
+        <button class="btn ghost" id="v6FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="genVeoPrompts()" title="Chỉ tạo các cảnh chưa có prompt Veo">🔧 Tạo nốt cảnh thiếu <span id="v6MissingCount"></span></button>
         <button class="btn" onclick="copyAllVeoPrompts()">📋 Sao chép tất cả</button>
         <button class="btn ghost" onclick="exportVeoPrompts()">↓ Xuất JSON</button>
         <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT6()" title="Xoá toàn bộ prompt Veo 3">🗑 Xoá hết</button>
@@ -3817,19 +3819,29 @@ async function doGenerateScenePrompts(){
   const p = getProfile();
   if (!p) return setStatus2('Cần Profile trước.', 'error');
 
-  setStatus2('AI đang sinh prompt G-Labs...', 'working');
+  // Chỉ tạo cảnh CHƯA có prompt → bấm lại sau khi Dừng sẽ chạy tiếp, không làm lại từ đầu
+  const todo = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim());
+  const already = state.scenes.length - todo.length;
+  if (todo.length === 0) {
+    return setStatus2(`Tất cả ${state.scenes.length} cảnh đã có prompt. Muốn tạo lại từ đầu? Bấm "🗑 Xoá hết" rồi tạo lại.`, 'info');
+  }
+
+  setStatus2(already > 0
+    ? `Chạy tiếp: đã có ${already} prompt, còn ${todo.length} cảnh...`
+    : 'AI đang sinh prompt G-Labs...', 'working');
   clearCancel();
   const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}`;
 
   try {
-    for (let i = 0; i < state.scenes.length; i += bs) {
+    for (let i = 0; i < todo.length; i += bs) {
       if (state.cancelRequested) {
         clearCancel();
-        setStatus2(`⏸ Đã dừng tại ${i}/${state.scenes.length}. Prompts đã tạo được giữ lại.`, 'info');
+        const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
+        setStatus2(`⏸ Đã dừng. Đã tạo ${done}/${state.scenes.length}. Bấm "Tạo Prompt G-Labs" để chạy TIẾP từ chỗ dừng.`, 'info');
         saveState();
         return;
       }
-      const batch = state.scenes.slice(i, i + bs);
+      const batch = todo.slice(i, i + bs);
       const charCtx = state.charactersV.map(c => '- ' + c).join('\n');
       const bgCtx = state.backgroundsV.map(b => '- ' + b).join('\n');
       const prompt = `Bạn là prompt engineer G-Labs (Imagen / Nano Banana). Tạo prompt cảnh cho mỗi cảnh bên dưới.
@@ -3894,12 +3906,22 @@ Trả về CHỈ JSON array:
 
 CÁC CẢNH:
 ${batch.map(s => `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | ${s.duration}s`).join('\n')}`;
-      const reply = await callClaude(prompt, 4000);
-      for (const x of parseJSON(reply)) state.scenePrompts[x.id] = cleanPrompt(x.prompt);
+      let reply = await callClaude(prompt, 4000);
+      let parsed = parseJSON(reply);
+      // Retry 1 lần nếu batch trả về rỗng (parse lỗi) → tránh để lỗ hổng giữa chừng
+      if (!parsed.length) {
+        reply = await callClaude(prompt, 4000);
+        parsed = parseJSON(reply);
+      }
+      for (const x of parsed) {
+        const id = String(x.id).padStart(3, '0');
+        if (state.scenes.some(s => s.id === id)) state.scenePrompts[id] = cleanPrompt(x.prompt);
+      }
       renderPromptsV();
-      setStatus2(`Tạo prompt... ${Math.min(i + bs, state.scenes.length)}/${state.scenes.length}`, 'working');
+      const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
+      setStatus2(`Tạo prompt... ${done}/${state.scenes.length}`, 'working');
     }
-    setStatus2(`✓ Đã sinh ${state.scenes.length} prompt G-Labs.`, 'ok');
+    setStatus2(`✓ Đã sinh đủ ${state.scenes.length} prompt G-Labs.`, 'ok');
     saveState();
   } catch (e) {
     console.error(e);
@@ -4187,6 +4209,18 @@ function renderPromptsV(){
   if (ta) {
     ta.value = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean).join('\n\n');
   }
+  // Nút "Tạo nốt cảnh thiếu" — hiện khi có cảnh chưa có prompt
+  const missing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
+  const fillBtn = document.getElementById('t2FillBtn');
+  const missEl = document.getElementById('t2MissingCount');
+  if (fillBtn && missEl) {
+    if (missing > 0 && cnt > 0) {
+      fillBtn.style.display = '';
+      missEl.textContent = '(' + missing + ')';
+    } else {
+      fillBtn.style.display = 'none';
+    }
+  }
 }
 
 function renderStats2(){
@@ -4255,11 +4289,15 @@ function exportVideo(){
 }
 
 function copyAllScenePrompts(){
-  const all = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean).join('\n\n');
-  if (!all) return setStatus2('Chưa có prompt nào.', 'error');
-  navigator.clipboard.writeText(all);
-  document.getElementById('copyAllInfo').textContent = `✓ Đã sao chép ${state.scenes.length} prompts`;
-  setStatus2('✓ Đã sao chép tất cả prompt.', 'ok');
+  const prompts = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean);
+  if (!prompts.length) return setStatus2('Chưa có prompt nào.', 'error');
+  navigator.clipboard.writeText(prompts.join('\n\n'));
+  const missing = state.scenes.length - prompts.length;
+  document.getElementById('copyAllInfo').textContent =
+    `✓ Đã sao chép ${prompts.length} prompts` + (missing > 0 ? ` ⚠️ thiếu ${missing} cảnh` : '');
+  setStatus2(missing > 0
+    ? `✓ Copy ${prompts.length}/${state.scenes.length} prompt. ⚠️ ${missing} cảnh CHƯA có prompt — bấm "✨ Tạo Prompt G-Labs" để tạo nốt (sẽ chỉ làm ${missing} cảnh thiếu).`
+    : `✓ Đã sao chép đủ ${prompts.length} prompt.`, missing > 0 ? 'info' : 'ok');
 }
 
 /* --- SRT --- */
@@ -4417,8 +4455,8 @@ async function genAllAssetPrompts(){
   if (!charStyle && !bgStyle) return setStatus3('Cần có Style Prompts trong Profile.', 'error');
 
   setStatus3('AI đang tạo prompt reference sheets...', 'working');
-  state.assetCharPrompts = {};
-  state.assetBgPrompts = {};
+  if (!state.assetCharPrompts) state.assetCharPrompts = {};
+  if (!state.assetBgPrompts) state.assetBgPrompts = {};
   clearCancel();
 
   try {
@@ -4427,10 +4465,12 @@ async function genAllAssetPrompts(){
     for (const name of chars) {
       if (state.cancelRequested) {
         clearCancel();
-        setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật.`, 'info');
+        setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật. Bấm lại để chạy tiếp.`, 'info');
         saveState();
         return;
       }
+      // Đã có prompt rồi → bỏ qua (chạy tiếp sau khi Dừng, không làm lại)
+      if (state.assetCharPrompts[name] && state.assetCharPrompts[name].trim()) continue;
       // 📚 LIBRARY CHECK — nếu nhân vật đã có trong Library thì pull, skip AI gen
       const libEntry = checkLibraryFor('char', name);
       if (libEntry) {
@@ -4499,10 +4539,12 @@ Yêu cầu:
     for (const name of bgs) {
       if (state.cancelRequested) {
         clearCancel();
-        setStatus3(`⏸ Đã dừng. ${chars.length} prompt nhân vật + ${Object.keys(state.assetBgPrompts).length}/${bgs.length} prompt bối cảnh đã tạo.`, 'info');
+        setStatus3(`⏸ Đã dừng. ${Object.keys(state.assetCharPrompts).length} prompt nhân vật + ${Object.keys(state.assetBgPrompts).length}/${bgs.length} prompt bối cảnh. Bấm lại để chạy tiếp.`, 'info');
         saveState();
         return;
       }
+      // Đã có prompt rồi → bỏ qua
+      if (state.assetBgPrompts[name] && state.assetBgPrompts[name].trim()) continue;
       // 📚 LIBRARY CHECK
       const libEntry = checkLibraryFor('bg', name);
       if (libEntry) {
@@ -5081,16 +5123,24 @@ async function genVeoPrompts(){
 
   const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nVisual Style: ${p.visualStyle}\nPOV: ${p.povStyle}\nScene Aesthetic: ${p.sceneStyle || PRESET.sceneStyle}\nRules: ${p.promptRules || ''}`;
 
+  // Chỉ tạo cảnh CHƯA có prompt Veo → bấm lại sau khi Dừng sẽ chạy tiếp
+  const todo = state.scenes.filter(s => !state.veoPrompts[s.id] || !state.veoPrompts[s.id].prompt);
+  const already = state.scenes.length - todo.length;
+  if (todo.length === 0) {
+    return setStatus6(`Tất cả ${state.scenes.length} cảnh đã có prompt Veo. Muốn tạo lại? Bấm "🗑 Xoá hết" trước.`, 'info');
+  }
+  if (already > 0) setStatus6(`Chạy tiếp: đã có ${already}, còn ${todo.length} cảnh...`, 'working');
+
   try {
-    for (let i = 0; i < state.scenes.length; i += bs) {
+    for (let i = 0; i < todo.length; i += bs) {
       if (state.cancelRequested) {
         clearCancel();
         const done = Object.keys(state.veoPrompts).length;
-        setStatus6(`⏸ Đã dừng tại ${i}/${state.scenes.length}. ${done} prompt đã sinh được giữ lại.`, 'info');
+        setStatus6(`⏸ Đã dừng. Đã sinh ${done}/${state.scenes.length}. Bấm "Sinh Prompt Veo 3" để chạy TIẾP từ chỗ dừng.`, 'info');
         saveState();
         return;
       }
-      const batch = state.scenes.slice(i, i + bs);
+      const batch = todo.slice(i, i + bs);
       const charCtx = state.charactersV.length ? state.charactersV.map(c => '- ' + c).join('\n') : '(không có)';
       const bgCtx = state.backgroundsV.length ? state.backgroundsV.map(b => '- ' + b).join('\n') : '(không có)';
 
@@ -5140,15 +5190,22 @@ ${batch.map(s => {
   return `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | duration: ${dur}s${gLabsPrompt}`;
 }).join('\n\n')}`;
 
-      const reply = await callClaude(prompt, 4000);
-      for (const x of parseJSON(reply)) {
-        state.veoPrompts[x.id] = { prompt: cleanPrompt(x.prompt) };
+      let reply = await callClaude(prompt, 4000);
+      let parsed = parseJSON(reply);
+      if (!parsed.length) {
+        reply = await callClaude(prompt, 4000);
+        parsed = parseJSON(reply);
+      }
+      for (const x of parsed) {
+        const id = String(x.id).padStart(3, '0');
+        if (state.scenes.some(s => s.id === id)) state.veoPrompts[id] = { prompt: cleanPrompt(x.prompt) };
       }
       renderVeoPrompts();
       renderVeoStats();
-      setStatus6(`Tạo prompt Veo 3... ${Math.min(i + bs, state.scenes.length)}/${state.scenes.length}`, 'working');
+      const done = Object.keys(state.veoPrompts).length;
+      setStatus6(`Tạo prompt Veo 3... ${done}/${state.scenes.length}`, 'working');
     }
-    setStatus6(`✓ Đã sinh ${state.scenes.length} prompt Veo 3.`, 'ok');
+    setStatus6(`✓ Đã sinh đủ ${state.scenes.length} prompt Veo 3.`, 'ok');
     saveState();
   } catch (e) {
     console.error(e);
@@ -5191,13 +5248,29 @@ function renderVeoPrompts(){
   if (ta) {
     ta.value = state.scenes.map(s => cleanPrompt(state.veoPrompts?.[s.id]?.prompt)).filter(Boolean).join('\n\n');
   }
+  // Nút "Tạo nốt cảnh thiếu" cho Veo
+  const vMissing = state.scenes.filter(s => !state.veoPrompts?.[s.id]?.prompt).length;
+  const vHas = state.scenes.length - vMissing;
+  const vFillBtn = document.getElementById('v6FillBtn');
+  const vMissEl = document.getElementById('v6MissingCount');
+  if (vFillBtn && vMissEl) {
+    if (vMissing > 0 && vHas > 0) {
+      vFillBtn.style.display = '';
+      vMissEl.textContent = '(' + vMissing + ')';
+    } else {
+      vFillBtn.style.display = 'none';
+    }
+  }
 }
 
 function copyAllVeoPrompts(){
-  const all = state.scenes.map(s => cleanPrompt(state.veoPrompts?.[s.id]?.prompt)).filter(Boolean).join('\n\n');
-  if (!all) return setStatus6('Chưa có prompt nào.', 'error');
-  navigator.clipboard.writeText(all);
-  setStatus6(`✓ Đã sao chép ${Object.keys(state.veoPrompts).length} prompt Veo 3.`, 'ok');
+  const prompts = state.scenes.map(s => cleanPrompt(state.veoPrompts?.[s.id]?.prompt)).filter(Boolean);
+  if (!prompts.length) return setStatus6('Chưa có prompt nào.', 'error');
+  navigator.clipboard.writeText(prompts.join('\n\n'));
+  const missing = state.scenes.length - prompts.length;
+  setStatus6(missing > 0
+    ? `✓ Copy ${prompts.length}/${state.scenes.length} prompt Veo. ⚠️ ${missing} cảnh chưa có — bấm "Sinh Prompt Veo 3" để tạo nốt.`
+    : `✓ Đã sao chép đủ ${prompts.length} prompt Veo 3.`, missing > 0 ? 'info' : 'ok');
 }
 
 function exportVeoPrompts(){
