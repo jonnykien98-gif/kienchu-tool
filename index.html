@@ -2384,6 +2384,11 @@ function parseJSON(text){
   return JSON.parse(c.slice(s, e + 1));
 }
 
+// Parse không ném lỗi — batch hỏng trả [] thay vì làm dừng cả run
+function safeParseJSON(text){
+  try { return parseJSON(text); } catch(e){ return []; }
+}
+
 /* ============================================================
    TOOL NAV
 ============================================================ */
@@ -3907,21 +3912,29 @@ Trả về CHỈ JSON array:
 CÁC CẢNH:
 ${batch.map(s => `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | ${s.duration}s`).join('\n')}`;
       let reply = await callClaude(prompt, 4000);
-      let parsed = parseJSON(reply);
-      // Retry 1 lần nếu batch trả về rỗng (parse lỗi) → tránh để lỗ hổng giữa chừng
+      let parsed = safeParseJSON(reply);
+      // Retry 1 lần nếu batch trả về rỗng (parse lỗi)
       if (!parsed.length) {
         reply = await callClaude(prompt, 4000);
-        parsed = parseJSON(reply);
+        parsed = safeParseJSON(reply);
       }
-      for (const x of parsed) {
-        const id = String(x.id).padStart(3, '0');
-        if (state.scenes.some(s => s.id === id)) state.scenePrompts[id] = cleanPrompt(x.prompt);
-      }
+      // Map prompt → cảnh: ưu tiên khớp ID trong batch; nếu AI trả ID sai (001,002...) → dùng VỊ TRÍ.
+      // CHỈ gán cho cảnh thuộc batch này → không bao giờ đè nhầm cảnh khác.
+      const batchIds = batch.map(s => s.id);
+      const batchIdSet = new Set(batchIds);
+      parsed.forEach((x, idx) => {
+        let id = String(x.id || '').padStart(3, '0');
+        if (!batchIdSet.has(id)) id = batchIds[idx];   // AI trả ID sai → khớp theo vị trí
+        if (id && batchIdSet.has(id) && x.prompt) state.scenePrompts[id] = cleanPrompt(x.prompt);
+      });
       renderPromptsV();
       const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
       setStatus2(`Tạo prompt... ${done}/${state.scenes.length}`, 'working');
     }
-    setStatus2(`✓ Đã sinh đủ ${state.scenes.length} prompt G-Labs.`, 'ok');
+    const finalMissing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
+    setStatus2(finalMissing > 0
+      ? `⚠️ Xong nhưng còn ${finalMissing} cảnh AI tạo lỗi. Bấm "🔧 Tạo nốt cảnh thiếu" lại, hoặc giảm Batch xuống 2-3 cho chắc.`
+      : `✓ Đã sinh đủ ${state.scenes.length} prompt G-Labs.`, finalMissing > 0 ? 'info' : 'ok');
     saveState();
   } catch (e) {
     console.error(e);
@@ -5191,21 +5204,27 @@ ${batch.map(s => {
 }).join('\n\n')}`;
 
       let reply = await callClaude(prompt, 4000);
-      let parsed = parseJSON(reply);
+      let parsed = safeParseJSON(reply);
       if (!parsed.length) {
         reply = await callClaude(prompt, 4000);
-        parsed = parseJSON(reply);
+        parsed = safeParseJSON(reply);
       }
-      for (const x of parsed) {
-        const id = String(x.id).padStart(3, '0');
-        if (state.scenes.some(s => s.id === id)) state.veoPrompts[id] = { prompt: cleanPrompt(x.prompt) };
-      }
+      const batchIds = batch.map(s => s.id);
+      const batchIdSet = new Set(batchIds);
+      parsed.forEach((x, idx) => {
+        let id = String(x.id || '').padStart(3, '0');
+        if (!batchIdSet.has(id)) id = batchIds[idx];
+        if (id && batchIdSet.has(id) && x.prompt) state.veoPrompts[id] = { prompt: cleanPrompt(x.prompt) };
+      });
       renderVeoPrompts();
       renderVeoStats();
       const done = Object.keys(state.veoPrompts).length;
       setStatus6(`Tạo prompt Veo 3... ${done}/${state.scenes.length}`, 'working');
     }
-    setStatus6(`✓ Đã sinh đủ ${state.scenes.length} prompt Veo 3.`, 'ok');
+    const veoMissing = state.scenes.filter(s => !state.veoPrompts?.[s.id]?.prompt).length;
+    setStatus6(veoMissing > 0
+      ? `⚠️ Xong nhưng còn ${veoMissing} cảnh AI tạo lỗi. Bấm "🔧 Tạo nốt cảnh thiếu" lại, hoặc giảm Batch.`
+      : `✓ Đã sinh đủ ${state.scenes.length} prompt Veo 3.`, veoMissing > 0 ? 'info' : 'ok');
     saveState();
   } catch (e) {
     console.error(e);
