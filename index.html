@@ -998,7 +998,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       <div class="grid-3 mb-24">
         <div><label class="label">VISUAL STYLE (từ Profile)</label><input type="text" id="visualStyle2" readonly style="opacity:.7"></div>
         <div><label class="label">MIN KÝ TỰ / CẢNH</label><input type="number" id="minChars" value="30" min="5" max="500"></div>
-        <div><label class="label">MAX KÝ TỰ / CẢNH</label><input type="number" id="maxChars" value="100" min="20" max="1000"></div>
+        <div><label class="label">MAX KÝ TỰ / CẢNH</label><input type="number" id="maxChars" value="150" min="20" max="1000"></div>
       </div>
 
       <div class="grid-2 mb-24">
@@ -1027,6 +1027,11 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
         <button class="btn violet" onclick="doPrescan()">⚡ Quét Trước (AI)</button>
         <button class="btn teal" onclick="doAssign()">◈ Gán Tài Nguyên</button>
+        <select id="t2DescMode" onchange="t2OnDescModeChange()" style="width:auto;padding:8px 12px" title="Cách mô tả nhân vật/bối cảnh trong prompt">
+          <option value="tag">🎭 Tag tham chiếu (reference sheet)</option>
+          <option value="inline">📝 Tả inline tự do</option>
+          <option value="inline_bible">📋 Tả inline + hồ sơ (nhất quán)</option>
+        </select>
         <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
         <button class="btn ghost" id="t2FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="doGenerateScenePrompts()" title="Chỉ tạo các cảnh chưa có prompt">🔧 Tạo nốt cảnh thiếu <span id="t2MissingCount"></span></button>
         <button class="btn ghost" onclick="exportVideo()">↓ Xuất Dữ Liệu</button>
@@ -2047,10 +2052,13 @@ const state = {
   script: '',
   voLang: 'Tiếng Việt',
   minChars: 30,
-  maxChars: 100,
+  maxChars: 150,
   splitMode: 'smart',
   charactersV: [],
   backgroundsV: [],
+  descMode: 'tag',
+  charBible: {},
+  bgBible: {},
   tool: 'tool1',
   sub: 'list',
   cancelRequested: false,
@@ -3097,7 +3105,10 @@ function createEmptyWorkData(){
     assetBgPrompts: {},
     styleRefPrompt: '',
     veoPrompts: {},
-    pexelsResults: {}
+    pexelsResults: {},
+    descMode: 'tag',
+    charBible: {},
+    bgBible: {}
   };
 }
 
@@ -3116,6 +3127,9 @@ function syncStateToCurrentProfile(){
   p.workData.styleRefPrompt = state.styleRefPrompt || '';
   p.workData.veoPrompts = state.veoPrompts || {};
   p.workData.pexelsResults = state.pexelsResults || {};
+  p.workData.descMode = state.descMode || 'tag';
+  p.workData.charBible = state.charBible || {};
+  p.workData.bgBible = state.bgBible || {};
 }
 
 // Pull profile's workData → state.{script,scenes,...} (gọi sau khi switch / load)
@@ -3131,6 +3145,11 @@ function loadStateFromProfile(p){
   state.styleRefPrompt = wd.styleRefPrompt || '';
   state.veoPrompts = wd.veoPrompts || {};
   state.pexelsResults = wd.pexelsResults || {};
+  state.descMode = wd.descMode || 'tag';
+  state.charBible = wd.charBible || {};
+  state.bgBible = wd.bgBible || {};
+  const dm = document.getElementById('t2DescMode');
+  if (dm) dm.value = state.descMode;
   // Images sẽ load từ IDB theo profileId — clear trước
   state.characterImages = {};
   state.sceneImages = {};
@@ -3722,7 +3741,8 @@ function splitScenesFast(text, min, max){
   function flush(){ if (buf.trim()) { scenes.push(buf.trim()); buf = ''; } }
   for (const s of sents) {
     if (s === '__PARA__') { flush(); continue; }
-    const units = s.length > max ? splitLong(s, max) : [s];
+    // Giữ NGUYÊN cả câu — chỉ chặt nếu câu dài bất thường (>2.5x max), tránh vỡ câu có nghĩa
+    const units = s.length > max * 2.5 ? splitLong(s, max) : [s];
     for (const u of units) {
       const c = buf ? buf + ' ' + u : u;
       if (c.length <= max) buf = c;
@@ -3751,14 +3771,18 @@ async function splitScenesSmart(text, min, max){
       return all;
     }
     setStatus2(`AI đang chia cảnh... (phần ${bi + 1}/${batches.length})`, 'working');
-    const prompt = `Bạn là biên tập video. Chia đoạn kịch bản sau thành các cảnh riêng biệt cho sản xuất video ảnh.
+    const prompt = `Bạn là biên tập video. Chia đoạn kịch bản sau thành các cảnh cho sản xuất video ảnh.
 
-Quy tắc:
-- Mỗi cảnh = MỘT ý hình ảnh mạch lạc (một shot)
-- Mục tiêu ${min}-${max} ký tự/cảnh, nhưng ƯU TIÊN ranh giới có nghĩa hơn đếm ký tự
-- GIỮ NGUYÊN lời gốc — chỉ quyết định chỗ cắt
-- Câu ngắn ấn tượng (như "Ồ.", "Chờ đã.") có thể là 1 cảnh riêng
-- Không cắt giữa chừng mệnh đề
+QUY TẮC QUAN TRỌNG NHẤT — KHÔNG ĐƯỢC VI PHẠM:
+- ĐƠN VỊ NHỎ NHẤT LÀ 1 CÂU HOÀN CHỈNH (kết thúc bằng . ! ? …).
+- TUYỆT ĐỐI KHÔNG cắt 1 câu thành 2 cảnh — kể cả câu dài, kể cả có dấu phẩy "," hay gạch ngang "—" / ":" giữa câu.
+- Việc của bạn là GỘP các câu thành cảnh, KHÔNG phải CẮT câu.
+
+Quy tắc gộp:
+- 1 câu dài → để NGUYÊN cả câu trong 1 cảnh (dù vượt ${max} ký tự — vẫn giữ nguyên).
+- Nhiều câu ngắn cùng 1 ý hình ảnh → có thể gộp vào 1 cảnh (mục tiêu ${min}-${max} ký tự, nhưng ranh giới câu quan trọng hơn đếm ký tự).
+- Câu ngắn ấn tượng (như "Ồ.", "Chờ đã.") có thể đứng riêng 1 cảnh.
+- GIỮ NGUYÊN lời gốc 100% — chỉ quyết định chỗ gộp, không sửa chữ.
 
 Trả về CHỈ JSON array các chuỗi (các cảnh theo thứ tự):
 ["cảnh 1", "cảnh 2", ...]
@@ -3826,9 +3850,25 @@ async function doPrescan(){
   if (!p) return setStatus2('Cần tạo Profile trước.', 'error');
 
   setStatus2('AI đang quét nhân vật & bối cảnh...', 'working');
+  const bibleMode = (state.descMode === 'inline_bible');
   try {
     const allText = state.scenes.map(s => s.text).join(' ');
-    const prompt = `Đọc toàn bộ kịch bản và liệt kê NHÂN VẬT (người) + BỐI CẢNH (location) sẽ xuất hiện.
+    const prompt = bibleMode
+      ? `Đọc toàn bộ kịch bản và liệt kê NHÂN VẬT (người) + BỐI CẢNH (location) sẽ xuất hiện, KÈM mô tả ngoại hình cố định để giữ nhất quán.
+
+Quy tắc:
+- Tên: kebab-case tiếng Anh (vd: protagonist-young, hospital-room).
+- "desc": MÔ TẢ NGOẠI HÌNH cố định bằng TIẾNG ANH (nhân vật: tuổi, giới, trang phục+màu, tóc, đặc điểm; bối cảnh: loại nơi, đồ vật, ánh sáng, tông màu). 15-30 từ. Đây sẽ được chèn vào MỌI cảnh dùng nhân vật/bối cảnh đó nên phải đủ chi tiết + nhất quán.
+- CHỈ liệt kê người. Tối đa 6 nhân vật, 8 bối cảnh.
+
+Kịch bản:
+"""
+${allText.slice(0, 8000)}
+"""
+
+Trả về CHỈ JSON:
+{"characters":[{"name":"...","desc":"..."}],"backgrounds":[{"name":"...","desc":"..."}]}`
+      : `Đọc toàn bộ kịch bản và liệt kê NHÂN VẬT (người) + BỐI CẢNH (location) sẽ xuất hiện.
 
 Quy tắc đặt tên:
 - Nhân vật: kebab-case tiếng Anh, mô tả ngắn vai trò + đặc điểm (vd: protagonist-young, narrator, agent-male, victim-female)
@@ -3843,19 +3883,49 @@ ${allText.slice(0, 8000)}
 
 Trả về CHỈ JSON:
 {"characters": ["name1", "name2"], "backgrounds": ["bg1", "bg2"]}`;
-    const reply = await callClaude(prompt, 800);
+    const reply = await callClaude(prompt, bibleMode ? 1500 : 800);
     const data = parseJSON(reply);
-    state.charactersV = data.characters || [];
-    state.backgroundsV = data.backgrounds || [];
+    if (bibleMode) {
+      state.charBible = {}; state.bgBible = {};
+      state.charactersV = (data.characters || []).map(c => {
+        const name = typeof c === 'string' ? c : c.name;
+        if (c.desc) state.charBible[name] = c.desc;
+        return name;
+      });
+      state.backgroundsV = (data.backgrounds || []).map(b => {
+        const name = typeof b === 'string' ? b : b.name;
+        if (b.desc) state.bgBible[name] = b.desc;
+        return name;
+      });
+    } else {
+      state.charactersV = (data.characters || []).map(c => typeof c === 'string' ? c : c.name);
+      state.backgroundsV = (data.backgrounds || []).map(b => typeof b === 'string' ? b : b.name);
+    }
     document.getElementById('charsInputV').value = state.charactersV.join('\n');
     document.getElementById('bgInputV').value = state.backgroundsV.join('\n');
     renderStats2();
-    setStatus2(`✓ Tìm thấy ${state.charactersV.length} nhân vật + ${state.backgroundsV.length} bối cảnh.`, 'ok');
+    setStatus2(`✓ Tìm thấy ${state.charactersV.length} nhân vật + ${state.backgroundsV.length} bối cảnh.` + (bibleMode ? ' Đã tạo hồ sơ mô tả.' : ''), 'ok');
     saveState();
   } catch (e) {
     console.error(e);
     setStatus2('Lỗi: ' + e.message, 'error');
   }
+}
+
+function t2OnDescModeChange(){
+  state.descMode = document.getElementById('t2DescMode').value;
+  const m = state.descMode;
+  if (m === 'inline_bible') {
+    const hasBible = Object.keys(state.charBible || {}).length || Object.keys(state.bgBible || {}).length;
+    setStatus2(hasBible
+      ? '📋 Chế độ Inline + hồ sơ. Đã có hồ sơ — Tạo Prompt sẽ chèn mô tả cố định vào mọi cảnh.'
+      : '📋 Chế độ Inline + hồ sơ. Bấm "⚡ Quét Trước (AI)" để tạo hồ sơ mô tả nhân vật/bối cảnh trước.', 'info');
+  } else if (m === 'inline') {
+    setStatus2('📝 Chế độ Inline tự do. AI tả chi tiết nhân vật/bối cảnh trong mỗi prompt (không dùng tag, không cần reference sheet).', 'info');
+  } else {
+    setStatus2('🎭 Chế độ Tag tham chiếu. Dùng [tên-nhân-vật] [bối-cảnh] — cần reference sheet ở Tool 3.', 'info');
+  }
+  saveState();
 }
 
 async function doAssign(){
@@ -3916,38 +3986,39 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
   }
 }
 
-async function doGenerateScenePrompts(){
-  syncTool2();
-  if (state.scenes.length === 0) return setStatus2('Cần chia cảnh trước.', 'error');
-  const bs = parseInt(document.getElementById('batchSize').value) || 5;
-  const p = getProfile();
-  if (!p) return setStatus2('Cần Profile trước.', 'error');
-
-  // Chỉ tạo cảnh CHƯA có prompt → bấm lại sau khi Dừng sẽ chạy tiếp, không làm lại từ đầu
-  const todo = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim());
-  const already = state.scenes.length - todo.length;
-  if (todo.length === 0) {
-    return setStatus2(`Tất cả ${state.scenes.length} cảnh đã có prompt. Muốn tạo lại từ đầu? Bấm "🗑 Xoá hết" rồi tạo lại.`, 'info');
-  }
-
-  setStatus2(already > 0
-    ? `Chạy tiếp: đã có ${already} prompt, còn ${todo.length} cảnh...`
-    : 'AI đang sinh prompt G-Labs...', 'working');
-  clearCancel();
-  const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}`;
-
-  try {
-    for (let i = 0; i < todo.length; i += bs) {
-      if (state.cancelRequested) {
-        clearCancel();
-        const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
-        setStatus2(`⏸ Đã dừng. Đã tạo ${done}/${state.scenes.length}. Bấm "Tạo Prompt G-Labs" để chạy TIẾP từ chỗ dừng.`, 'info');
-        saveState();
-        return;
+function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
+  // ---- Mode-aware: Tag / Inline / Inline+bible ----
+      const dm = state.descMode || 'tag';
+      let charCtx, bgCtx, charHeader, bgHeader, mode1Rule;
+      if (dm === 'inline_bible') {
+        charCtx = state.charactersV.map(c => `- ${c}: ${(state.charBible && state.charBible[c]) || '(chưa có hồ sơ — bấm Quét Trước)'}`).join('\n');
+        bgCtx = state.backgroundsV.map(b => `- ${b}: ${(state.bgBible && state.bgBible[b]) || '(chưa có hồ sơ)'}`).join('\n');
+        charHeader = 'NHÂN VẬT — CHÈN NGUYÊN VĂN mô tả cố định sau vào prompt (KHÔNG đổi chữ, KHÔNG dùng ngoặc vuông):';
+        bgHeader = 'BỐI CẢNH — CHÈN NGUYÊN VĂN mô tả cố định sau:';
+        mode1Rule = `- Tư thế/biểu cảm/hành động: tả theo VO
+- Nhân vật là NGƯỜI: CHÈN NGUYÊN VĂN mô tả cố định của nhân vật đó (ở danh sách trên) vào prompt, KHÔNG đổi 1 chữ, KHÔNG ngoặc vuông → giữ nhân vật giống hệt mọi cảnh. VD: "a tired female nurse, mid-30s, mint-green scrubs, brown hair in low bun, stands at the desk..."
+- Động vật/vật thể: miêu tả bình thường
+- Bối cảnh: CHÈN NGUYÊN VĂN mô tả cố định của bối cảnh đó`;
+      } else if (dm === 'inline') {
+        charCtx = state.charactersV.map(c => '- ' + c).join('\n');
+        bgCtx = state.backgroundsV.map(b => '- ' + b).join('\n');
+        charHeader = 'NHÂN VẬT (gợi ý vai — TẢ ĐẦY ĐỦ ngoại hình trong prompt):';
+        bgHeader = 'BỐI CẢNH (gợi ý):';
+        mode1Rule = `- Tư thế/biểu cảm/hành động: tả theo VO
+- Nhân vật là NGƯỜI: TẢ ĐẦY ĐỦ ngoại hình NGAY trong prompt (tuổi, giới, trang phục+màu, tóc, đặc điểm), KHÔNG dùng ngoặc vuông. VD: "a young male agent in a grey suit, short black hair, stands at the desk..."
+- Nếu cùng 1 nhân vật xuất hiện nhiều cảnh: tả GIỐNG NHAU mỗi lần để nhất quán
+- Động vật/vật thể: miêu tả bình thường
+- Bối cảnh: TẢ ĐẦY ĐỦ bối cảnh trong prompt (KHÔNG ngoặc vuông)`;
+      } else {
+        charCtx = state.charactersV.map(c => '- ' + c).join('\n');
+        bgCtx = state.backgroundsV.map(b => '- ' + b).join('\n');
+        charHeader = 'NHÂN VẬT (reference từ sheet):';
+        bgHeader = 'BỐI CẢNH (reference từ sheet):';
+        mode1Rule = `- Mô tả nhân vật: tư thế, biểu cảm, hành động
+- Nhân vật là NGƯỜI: ghi [tên-nhân-vật] (VD: "[agent-young] stands at desk...")
+- Động vật/vật thể: miêu tả bình thường KHÔNG ngoặc vuông
+- Bối cảnh: ghi [tên-bối-cảnh] (VD: "inside [dark-office-night]...")`;
       }
-      const batch = todo.slice(i, i + bs);
-      const charCtx = state.charactersV.map(c => '- ' + c).join('\n');
-      const bgCtx = state.backgroundsV.map(b => '- ' + b).join('\n');
       const prompt = `Bạn là prompt engineer G-Labs (Imagen / Nano Banana). Tạo prompt cảnh cho mỗi cảnh bên dưới.
 
 PROFILE KÊNH:
@@ -3957,19 +4028,16 @@ SCENE AESTHETIC (dùng cho MỌI cảnh): "${p.sceneStyle || 'consistent visual 
 
 PROMPT RULES / NEGATIVE: "${p.promptRules || ''}"
 
-NHÂN VẬT (reference từ sheet):
+${charHeader}
 ${charCtx || '(không có)'}
 
-BỐI CẢNH (reference từ sheet):
+${bgHeader}
 ${bgCtx || '(không có)'}
 
 Với mỗi cảnh, TRƯỚC TIÊN xác định LOẠI CẢNH từ nội dung VO, sau đó viết prompt phù hợp:
 
 🔹 LOẠI 1 — NHÂN VẬT TRONG BỐI CẢNH (VO nói về hành động của người):
-- Mô tả nhân vật: tư thế, biểu cảm, hành động
-- Nhân vật là NGƯỜI: ghi [tên-nhân-vật] (VD: "[agent-young] stands at desk...")
-- Động vật/vật thể: miêu tả bình thường KHÔNG ngoặc vuông
-- Bối cảnh: ghi [tên-bối-cảnh] (VD: "inside [dark-office-night]...")
+${mode1Rule}
 
 🔹 LOẠI 2 — INFOGRAPHIC / BIỂU ĐỒ (VO nói về số liệu, so sánh, thống kê):
 - Mô tả layout: biểu đồ cột/tròn/đường, nhãn text, con số
@@ -3996,11 +4064,17 @@ QUY TẮC CHUNG:
 - Ánh sáng và tông màu phù hợp VO
 - Kết thúc bằng scene aesthetic tag
 
+🔗 LIÊN TỤC HÌNH ẢNH (để video KHÔNG rời rạc — rất quan trọng):
+- Đây là các cảnh LIÊN TIẾP trong CÙNG 1 video → giữ mạch hình ảnh liền lạc.
+- Cảnh liên tiếp CÙNG bối cảnh → giữ KHÔNG GIAN nhất quán (cùng phòng, cùng layout, cùng hướng ánh sáng), chỉ đổi góc máy/hành động.
+- Đổi góc máy CÓ CHỦ ĐÍCH (vd wide → medium → close để dẫn dắt), KHÔNG nhảy góc ngẫu nhiên giữa các cảnh.
+- Cùng 1 phân đoạn nội dung → tông màu + ánh sáng + bố cục phải nối tiếp mượt với cảnh trước, không đổi đột ngột.
+${prevSceneCtx ? '\n📍 CẢNH NGAY TRƯỚC (cảnh đầu tiên bên dưới phải nối tiếp mượt với cảnh này):\n"' + prevSceneCtx + '"\n' : ''}
 ⚠️ TUYỆT ĐỐI KHÔNG:
 - KHÔNG ghi "LOẠI 1", "LOẠI 2", "LOẠI 3", "LOẠI 4", "LOẠI 5" vào prompt output
 - KHÔNG ghi "Type 1", "Type 2", ... hay bất kỳ label phân loại nào
 - KHÔNG ghi "[001]", "[002]" hay chỉ số cảnh vào prompt
-- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
+${dm !== 'tag' ? '- KHÔNG dùng ngoặc vuông [] cho tên nhân vật/bối cảnh — phải TẢ THẲNG bằng chữ tiếng Anh\n' : ''}- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
 - Prompt trả về phải BẮT ĐẦU NGAY bằng mô tả visual (vd: "Medium shot of...", "Split layout showing...", "Wide angle of..."), KHÔNG có prefix nào khác
 
 Ngôn ngữ prompt: TIẾNG ANH (cho image gen). 60-120 từ/prompt.
@@ -4010,6 +4084,89 @@ Trả về CHỈ JSON array:
 
 CÁC CẢNH:
 ${batch.map(s => `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | ${s.duration}s`).join('\n')}`;
+  return prompt;
+}
+
+// Tạo lại prompt cho ĐÚNG 1 cảnh (nút trên từng card)
+async function genSingleScenePrompt(id){
+  const p = getProfile();
+  if (!p) return setStatus2('Cần Profile trước.', 'error');
+  const idx = state.scenes.findIndex(s => s.id === id);
+  if (idx < 0) return;
+  const scene = state.scenes[idx];
+  const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}`;
+  // Lấy cảnh ngay trước làm ngữ cảnh liên tục
+  let prevSceneCtx = '';
+  if (idx > 0) {
+    const prev = state.scenes[idx - 1];
+    const pp = state.scenePrompts[prev.id];
+    if (pp) prevSceneCtx = `[${prev.id}] ${pp.slice(0, 220)}`;
+  }
+  setStatus2(`Đang tạo lại prompt cảnh [${id}]...`, 'working');
+  try {
+    const prompt = buildSceneGenPrompt([scene], prevSceneCtx, p, profileContext);
+    let reply = await callClaude(prompt, 1000);
+    let parsed = safeParseJSON(reply);
+    if (!parsed.length) { reply = await callClaude(prompt, 1000); parsed = safeParseJSON(reply); }
+    // Lấy prompt đầu tiên trả về (chỉ có 1 cảnh) — không phụ thuộc ID AI trả
+    const got = parsed.find(x => x && x.prompt);
+    if (got && got.prompt) {
+      state.scenePrompts[id] = cleanPrompt(got.prompt);
+      renderPromptsV();
+      setStatus2(`✓ Đã tạo lại prompt cảnh [${id}].`, 'ok');
+      saveState();
+    } else {
+      setStatus2(`⚠️ Cảnh [${id}] tạo lỗi, thử lại lần nữa.`, 'error');
+    }
+  } catch (e) {
+    console.error(e);
+    setStatus2('Lỗi: ' + e.message, 'error');
+  }
+}
+
+async function doGenerateScenePrompts(){
+  syncTool2();
+  if (state.scenes.length === 0) return setStatus2('Cần chia cảnh trước.', 'error');
+  const bs = parseInt(document.getElementById('batchSize').value) || 5;
+  const p = getProfile();
+  if (!p) return setStatus2('Cần Profile trước.', 'error');
+
+  // Chỉ tạo cảnh CHƯA có prompt → bấm lại sau khi Dừng sẽ chạy tiếp, không làm lại từ đầu
+  const todo = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim());
+  const already = state.scenes.length - todo.length;
+  if (todo.length === 0) {
+    return setStatus2(`Tất cả ${state.scenes.length} cảnh đã có prompt. Muốn tạo lại từ đầu? Bấm "🗑 Xoá hết" rồi tạo lại.`, 'info');
+  }
+
+  setStatus2(already > 0
+    ? `Chạy tiếp: đã có ${already} prompt, còn ${todo.length} cảnh...`
+    : 'AI đang sinh prompt G-Labs...', 'working');
+  clearCancel();
+  const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}`;
+
+  // Ngữ cảnh cảnh ngay trước (giữ mạch hình ảnh liền lạc, tránh rời rạc)
+  let prevSceneCtx = '';
+  // Nếu chạy tiếp, lấy prompt cảnh ngay trước cảnh đầu tiên trong todo làm mồi
+  if (todo.length && state.scenes.length) {
+    const firstIdx = state.scenes.findIndex(s => s.id === todo[0].id);
+    if (firstIdx > 0) {
+      const prev = state.scenes[firstIdx - 1];
+      const pp = state.scenePrompts[prev.id];
+      if (pp) prevSceneCtx = `[${prev.id}] ${pp.slice(0, 220)}`;
+    }
+  }
+
+  try {
+    for (let i = 0; i < todo.length; i += bs) {
+      if (state.cancelRequested) {
+        clearCancel();
+        const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
+        setStatus2(`⏸ Đã dừng. Đã tạo ${done}/${state.scenes.length}. Bấm "Tạo Prompt G-Labs" để chạy TIẾP từ chỗ dừng.`, 'info');
+        saveState();
+        return;
+      }
+      const batch = todo.slice(i, i + bs);
+      const prompt = buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext);
       let reply = await callClaude(prompt, 4000);
       let parsed = safeParseJSON(reply);
       // Retry 1 lần nếu batch trả về rỗng (parse lỗi)
@@ -4027,6 +4184,11 @@ ${batch.map(s => `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'}
         if (id && batchIdSet.has(id) && x.prompt) state.scenePrompts[id] = cleanPrompt(x.prompt);
       });
       renderPromptsV();
+      // Cập nhật ngữ cảnh: lấy prompt của cảnh CUỐI trong batch làm mồi cho batch sau
+      for (let k = batch.length - 1; k >= 0; k--) {
+        const pp = state.scenePrompts[batch[k].id];
+        if (pp && pp.trim()) { prevSceneCtx = `[${batch[k].id}] ${pp.slice(0, 220)}`; break; }
+      }
       const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
       setStatus2(`Tạo prompt... ${done}/${state.scenes.length}`, 'working');
     }
@@ -4044,10 +4206,12 @@ ${batch.map(s => `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'}
 function syncTool2(){
   state.script = document.getElementById('scriptInput').value;
   state.minChars = parseInt(document.getElementById('minChars').value) || 30;
-  state.maxChars = parseInt(document.getElementById('maxChars').value) || 100;
+  state.maxChars = parseInt(document.getElementById('maxChars').value) || 150;
   state.splitMode = document.getElementById('splitMode').value;
   state.charactersV = document.getElementById('charsInputV').value.split('\n').map(s => s.trim()).filter(Boolean);
   state.backgroundsV = document.getElementById('bgInputV').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const dmEl = document.getElementById('t2DescMode');
+  if (dmEl) state.descMode = dmEl.value;
 }
 
 function renderAllT2(){ renderPreview(); renderTable(); renderPromptsV(); renderStats2(); updateScriptCount(); }
@@ -4309,10 +4473,11 @@ function renderPromptsV(){
       ${editing
         ? renderEditPromptUI(p)
         : `<div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt.'}</div>
-           ${p ? `<div class="prompt-card-actions">
-             <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
-             <button class="btn ghost sm" onclick="startEditPrompt('scene','${s.id}')">✏️ Sửa</button>
-           </div>` : ''}`
+           <div class="prompt-card-actions">
+             ${p ? `<button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
+             <button class="btn ghost sm" onclick="startEditPrompt('scene','${s.id}')">✏️ Sửa</button>` : ''}
+             <button class="btn ghost sm" style="border-color:#d97706;color:#d97706" onclick="genSingleScenePrompt('${s.id}')" title="Tạo lại prompt cho riêng cảnh này">🔧 ${p ? 'Tạo lại' : 'Tạo prompt'}</button>
+           </div>`
       }
     </div>`;
   }).join('');
@@ -4448,7 +4613,7 @@ function copySRT(){
 function restoreUI(){
   const $ = id => document.getElementById(id);
   if ($('minChars')) $('minChars').value = state.minChars || 30;
-  if ($('maxChars')) $('maxChars').value = state.maxChars || 100;
+  if ($('maxChars')) $('maxChars').value = state.maxChars || 150;
   if ($('splitMode')) $('splitMode').value = state.splitMode || 'smart';
   if ($('scriptInput')) $('scriptInput').value = state.script || '';
   if ($('charsInputV')) $('charsInputV').value = (state.charactersV || []).join('\n');
