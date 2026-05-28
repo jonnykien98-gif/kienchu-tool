@@ -896,6 +896,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="nav-item" data-tool="tool4" onclick="switchTool('tool4')">
           <span class="num">8</span><span>Đổi Tên Ảnh</span>
         </div>
+        <div class="nav-item" data-tool="tool9" onclick="switchTool('tool9')">
+          <span class="num">9</span><span>YouTube SEO</span>
+        </div>
       </div>
       <div style="margin-top:14px;padding:0 4px">
         <button class="btn ghost" onclick="openAssetLibrary()" style="width:100%;display:flex;align-items:center;gap:8px;font-size:13px;justify-content:flex-start;padding:9px 12px" title="Thư viện nhân vật & bối cảnh dùng chung">
@@ -1299,6 +1302,99 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="panel-head"><span>Xem trước đổi tên</span></div>
         <div id="fileList" style="max-height:500px;overflow-y:auto">
           <div class="empty-state">Chưa có file.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOOL 9: YOUTUBE SEO (Title + Description + Chapters + Tags) -->
+    <div class="tool" id="tool-tool9">
+      <div class="tool-head">
+        <div class="tool-title">YouTube SEO</div>
+        <div class="tool-subtitle">Tạo tiêu đề chuẩn CTR, mô tả có hook, chapters tự động từ timing, tags & hashtags. Tự lấy kịch bản từ Tool 02.</div>
+      </div>
+
+      <div class="info-box">
+        <span class="lbl">💡 Mẹo:</span> Title + thumbnail quyết định 70-80% lượt click. Tool này lo phần text (title/mô tả/chapters/tags). Chạy <strong>Tool 8 (Căn Timing)</strong> trước để chapters chính xác theo giọng đọc thật.
+      </div>
+
+      <div class="grid-2 mb-16" style="grid-template-columns:180px 1fr;gap:14px;align-items:end">
+        <div>
+          <label class="label">🌐 NGÔN NGỮ</label>
+          <select id="t9Language">
+            <option value="en" selected>English 🇬🇧</option>
+            <option value="vi">Tiếng Việt 🇻🇳</option>
+            <option value="es">Español 🇪🇸</option>
+            <option value="fr">Français 🇫🇷</option>
+            <option value="de">Deutsch 🇩🇪</option>
+            <option value="ja">日本語 🇯🇵</option>
+            <option value="ko">한국어 🇰🇷</option>
+            <option value="pt">Português 🇵🇹</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">🎯 KEYWORD MỤC TIÊU <span style="font-weight:400;color:var(--text-muted);font-size:11px">(tuỳ chọn — keyword chính muốn lên top)</span></label>
+          <input type="text" id="t9Keyword" placeholder="vd: morning routine, weight loss tips...">
+        </div>
+      </div>
+
+      <div class="panel mb-16">
+        <div class="panel-head">
+          <span>📄 Nội dung video</span>
+          <button class="btn ghost sm" onclick="t9LoadFromTool2()">📥 Lấy từ Tool 02</button>
+        </div>
+        <div class="panel-body">
+          <textarea id="t9Script" rows="5" placeholder="Tự động lấy kịch bản từ Tool 02, hoặc paste nội dung video vào đây..."></textarea>
+          <div id="t9TimingInfo" style="font-size:11.5px;color:var(--text-muted);margin-top:6px"></div>
+        </div>
+      </div>
+
+      <div class="actions mb-24">
+        <button class="btn primary" onclick="t9Generate()">✨ Tạo SEO Pack</button>
+        <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t9Reset()">🗑 Xoá kết quả</button>
+      </div>
+
+      <div class="status-bar" id="status9">Sẵn sàng. Lấy kịch bản từ Tool 02 → bấm Tạo SEO Pack.</div>
+
+      <div id="t9Results" style="display:none">
+        <!-- TITLES -->
+        <div class="panel mb-16">
+          <div class="panel-head"><span>📝 Tiêu đề (10 phương án — chọn cái CTR cao nhất)</span></div>
+          <div class="panel-body" id="t9Titles"></div>
+        </div>
+
+        <!-- DESCRIPTION -->
+        <div class="panel mb-16">
+          <div class="panel-head">
+            <span>📄 Mô tả (description)</span>
+            <button class="btn ghost sm" onclick="copyText(document.getElementById('t9Desc').value);this.textContent='✓ Đã copy';setTimeout(()=>this.textContent='📋 Copy',1500)">📋 Copy</button>
+          </div>
+          <div class="panel-body">
+            <textarea id="t9Desc" rows="12" style="font-size:12.5px;line-height:1.6"></textarea>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">2 dòng đầu là hook (YouTube cắt sau đó). Chapters đã chèn sẵn. Nhớ thay [link] bằng link thật của bạn.</div>
+          </div>
+        </div>
+
+        <!-- TAGS -->
+        <div class="panel mb-16">
+          <div class="panel-head">
+            <span>🏷 Tags</span>
+            <button class="btn ghost sm" onclick="copyText(document.getElementById('t9Tags').value);this.textContent='✓ Đã copy';setTimeout(()=>this.textContent='📋 Copy',1500)">📋 Copy</button>
+          </div>
+          <div class="panel-body">
+            <textarea id="t9Tags" rows="3" style="font-size:12px"></textarea>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tags là tín hiệu phụ (đã giảm tầm quan trọng), nhưng vẫn nên điền. Copy → dán vào ô Tags khi upload.</div>
+          </div>
+        </div>
+
+        <!-- HASHTAGS -->
+        <div class="panel">
+          <div class="panel-head">
+            <span># Hashtags (3 cái đầu hiện trên tiêu đề)</span>
+            <button class="btn ghost sm" onclick="copyText(document.getElementById('t9Hash').value);this.textContent='✓ Đã copy';setTimeout(()=>this.textContent='📋 Copy',1500)">📋 Copy</button>
+          </div>
+          <div class="panel-body">
+            <input type="text" id="t9Hash" style="font-size:13px">
+          </div>
         </div>
       </div>
     </div>
@@ -1828,7 +1924,7 @@ const TIER_CONFIG = {
     name: 'Pro',
     maxProfiles: Infinity,
     maxScenes: Infinity,
-    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7', 'tool8'],
+    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7', 'tool8', 'tool9'],
     badge: { text: 'PRO ✨', bg: 'linear-gradient(135deg,#f97316,#c2410c)', color: '#fff' }
   }
 };
@@ -2182,6 +2278,7 @@ function switchTool(name){
   );
   // Tool-specific init
   if (name === 'tool8' && typeof t8Init === 'function') t8Init();
+  if (name === 'tool9' && typeof t9Init === 'function') t9Init();
 }
 
 /* ============================================================
@@ -5897,6 +5994,160 @@ function t8Init(){
   if (langSel) langSel.value = t8GetLang();
   t8UpdateModelInfo();
   t8UpdateInfo();
+}
+
+/* ============================================================
+   TOOL 09 — YOUTUBE SEO (Title + Description + Chapters + Tags)
+============================================================ */
+const setStatus9 = (m, t) => setStatusBar('status9', m, t);
+const t9State = { result: null };
+
+// Tính start time (mm:ss) mỗi cảnh từ duration cộng dồn
+function t9BuildSceneTimeline(){
+  if (!state.scenes || !state.scenes.length) return [];
+  let acc = 0;
+  const fmt = sec => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + String(s).padStart(2, '0');
+  };
+  return state.scenes.map(sc => {
+    const start = fmt(acc);
+    acc += (sc.duration || 0);
+    return { id: sc.id, start, text: (sc.text || '').slice(0, 120) };
+  });
+}
+
+function t9LoadFromTool2(){
+  const script = state.script || (state.scenes || []).map(s => s.text).join(' ');
+  if (!script.trim()) return setStatus9('Tool 02 chưa có kịch bản/cảnh. Chia cảnh trước đã.', 'error');
+  document.getElementById('t9Script').value = script;
+  const timeline = t9BuildSceneTimeline();
+  const info = document.getElementById('t9TimingInfo');
+  if (timeline.length) {
+    const total = (state.scenes || []).reduce((a, s) => a + (s.duration || 0), 0);
+    info.innerHTML = `✓ Đã lấy ${state.scenes.length} cảnh (tổng ~${Math.floor(total/60)}:${String(Math.floor(total%60)).padStart(2,'0')}). Chapters sẽ dùng timing này.`;
+  } else {
+    info.textContent = 'Đã lấy kịch bản (chưa có cảnh để tạo chapters).';
+  }
+  setStatus9('✓ Đã nạp nội dung. Bấm Tạo SEO Pack.', 'ok');
+}
+
+async function t9Generate(){
+  const script = document.getElementById('t9Script').value.trim();
+  if (!script) return setStatus9('Cần nội dung video. Bấm "Lấy từ Tool 02" hoặc paste vào.', 'error');
+
+  const langMap = { en: 'English', vi: 'Vietnamese', es: 'Spanish', fr: 'French', de: 'German', ja: 'Japanese', ko: 'Korean', pt: 'Portuguese' };
+  const langCode = document.getElementById('t9Language').value;
+  const langName = langMap[langCode] || 'English';
+  const keyword = document.getElementById('t9Keyword').value.trim();
+  const timeline = t9BuildSceneTimeline();
+
+  let timelineBlock = '';
+  if (timeline.length) {
+    timelineBlock = '\n\nSCENE TIMELINE (use these REAL timestamps to build chapters — group scenes into 5-8 logical chapters, each chapter must be at least 10 seconds apart, first chapter MUST be 0:00):\n'
+      + timeline.map(t => `[${t.start}] ${t.text}`).join('\n');
+  }
+
+  const prompt = `You are a YouTube SEO expert. Based on the video content below, generate a complete SEO package in ${langName}.
+
+VIDEO CONTENT:
+${script.slice(0, 6000)}
+${keyword ? `\nTARGET KEYWORD (must appear in title + early in description): "${keyword}"` : ''}
+${timelineBlock}
+
+Generate and return ONLY valid JSON (no markdown, no backticks, no preamble) with this exact structure:
+{
+  "titles": [10 title strings, each under 60 characters, primary keyword in first 5-7 words, mix of angles: curiosity gap, number/listicle, how-to, emotional, question, bold claim],
+  "hook": "first 1-2 sentences of description — the most compelling part, shown before 'show more', includes keyword naturally",
+  "summary": "2-3 sentence paragraph summarizing the video value, keyword-rich but natural",
+  "chapters": [${timeline.length ? 'array of {"time":"M:SS","label":"short chapter title"} using the REAL timestamps from the scene timeline above, first must be 0:00, 5-8 chapters, each >=10s apart' : 'empty array []'}],
+  "cta": "1-2 sentence call to action (subscribe/like/comment prompt)",
+  "tags": [15-20 relevant tag strings, mix of short and long-tail keywords],
+  "hashtags": [5 hashtag strings WITH the # symbol, most relevant first]
+}
+
+All text must be in ${langName}. Return JSON only.`;
+
+  setStatus9('Đang tạo SEO pack (title, mô tả, chapters, tags)...', 'working');
+  let raw;
+  try {
+    raw = await callClaude(prompt, 2500);
+  } catch (e) {
+    return setStatus9('Lỗi API: ' + e.message, 'error');
+  }
+
+  // Parse JSON (strip code fences nếu có)
+  let data;
+  try {
+    let clean = raw.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+    const first = clean.indexOf('{');
+    const last = clean.lastIndexOf('}');
+    if (first >= 0 && last >= 0) clean = clean.slice(first, last + 1);
+    data = JSON.parse(clean);
+  } catch (e) {
+    console.error('Parse fail:', raw);
+    return setStatus9('AI trả về sai định dạng. Bấm Tạo lại.', 'error');
+  }
+
+  t9State.result = data;
+  t9RenderResults(data);
+  setStatus9('✓ Xong! Chọn tiêu đề, copy mô tả/tags/hashtags để upload.', 'ok');
+  notifyDone('✓ SEO Pack xong!', `${(data.titles||[]).length} tiêu đề + mô tả + chapters.`);
+}
+
+function t9RenderResults(data){
+  document.getElementById('t9Results').style.display = 'block';
+
+  // Titles — mỗi cái 1 dòng + nút copy + đếm ký tự
+  const titles = data.titles || [];
+  document.getElementById('t9Titles').innerHTML = titles.map((t, i) => {
+    const len = t.length;
+    const lenColor = len > 60 ? 'var(--red)' : (len > 50 ? '#d97706' : 'var(--green)');
+    const safe = escapeHtml(t).replace(/'/g, "\\'");
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text-muted);font-size:12px;min-width:20px">${i + 1}.</span>
+      <span style="flex:1;font-size:13.5px">${escapeHtml(t)}</span>
+      <span style="font-size:11px;color:${lenColor};min-width:42px;text-align:right">${len} ký</span>
+      <button class="btn ghost sm" style="padding:3px 9px;font-size:11px" onclick="copyText('${safe}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1200)">📋</button>
+    </div>`;
+  }).join('');
+
+  // Description — ghép hook + summary + chapters + cta + hashtags
+  let desc = '';
+  if (data.hook) desc += data.hook + '\n\n';
+  if (data.summary) desc += data.summary + '\n\n';
+  if (data.chapters && data.chapters.length) {
+    desc += '⏱ CHAPTERS:\n' + data.chapters.map(c => `${c.time} ${c.label}`).join('\n') + '\n\n';
+  }
+  if (data.cta) desc += data.cta + '\n\n';
+  desc += '🔗 Theo dõi mình tại: [link social của bạn]\n\n';
+  if (data.hashtags && data.hashtags.length) desc += data.hashtags.join(' ');
+  document.getElementById('t9Desc').value = desc.trim();
+
+  // Tags — phẩy
+  document.getElementById('t9Tags').value = (data.tags || []).join(', ');
+
+  // Hashtags
+  document.getElementById('t9Hash').value = (data.hashtags || []).join(' ');
+}
+
+function t9Reset(){
+  t9State.result = null;
+  document.getElementById('t9Results').style.display = 'none';
+  setStatus9('Đã xoá kết quả. Sẵn sàng tạo lại.', 'info');
+}
+
+function t9Init(){
+  // Tự nạp script nếu ô trống + có dữ liệu Tool 2
+  const ta = document.getElementById('t9Script');
+  if (ta && !ta.value.trim() && (state.script || (state.scenes && state.scenes.length))) {
+    t9LoadFromTool2();
+  }
+  // Đồng bộ ngôn ngữ với Tool 8 nếu có
+  const t8lang = localStorage.getItem('t8_language');
+  const sel = document.getElementById('t9Language');
+  if (t8lang && sel && [...sel.options].some(o => o.value === t8lang)) sel.value = t8lang;
 }
 
 console.log('Chu Kiên Media Pipeline Builder — Phase 5 loaded (cloud sync hoàn chỉnh).');
