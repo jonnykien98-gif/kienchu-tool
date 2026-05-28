@@ -1421,28 +1421,30 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       <!-- API SETTINGS -->
       <div class="panel mb-24" style="border:1.5px solid var(--accent);border-radius:12px">
         <div class="panel-head" style="background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(194,65,12,.04))">
-          <span>🔑 Cài đặt Gemini Image API <span style="font-size:11px;color:var(--text-muted);font-weight:400">(riêng cho gen ảnh, KHÔNG dùng key Claude)</span></span>
+          <span>🔑 Cài đặt Image API <span style="font-size:11px;color:var(--text-muted);font-weight:400">(riêng cho gen ảnh)</span></span>
         </div>
         <div class="panel-body">
-          <div class="grid-2 mb-12" style="grid-template-columns:260px 1fr auto;gap:12px;align-items:end">
+          <div class="grid-2 mb-12" style="grid-template-columns:180px 1fr 1fr auto;gap:12px;align-items:end">
             <div>
-              <label class="label">MODEL</label>
-              <select id="t10Model" onchange="t10SaveSettings()">
-                <option value="gemini-2.5-flash-image" selected>Nano Banana (free 500/ngày ★)</option>
-                <option value="gemini-3-pro-image-preview">Nano Banana Pro (đẹp hơn, ~$0.13/ảnh)</option>
+              <label class="label">PROVIDER</label>
+              <select id="t10Provider" onchange="t10OnProviderChange()">
+                <option value="google" selected>Google (Nano Banana)</option>
+                <option value="openai">OpenAI (GPT Image)</option>
               </select>
             </div>
             <div>
-              <label class="label">GEMINI API KEY</label>
-              <input type="password" id="t10ApiKey" placeholder="Paste Google AI Studio key (AIza...)" autocomplete="off">
+              <label class="label">MODEL</label>
+              <select id="t10Model" onchange="t10SaveSettings()"></select>
+            </div>
+            <div>
+              <label class="label" id="t10KeyLabel">API KEY</label>
+              <input type="password" id="t10ApiKey" placeholder="Paste API key" autocomplete="off">
             </div>
             <div style="display:flex;gap:6px">
               <button class="btn" onclick="t10SaveSettings(true)">💾 Lưu</button>
             </div>
           </div>
-          <div style="font-size:11.5px;color:var(--text-muted);line-height:1.6">
-            Lấy key miễn phí tại <span style="color:var(--accent)">aistudio.google.com</span> → "Get API key" → tạo key (AIza...). Free tier ~500 ảnh/ngày, không cần thẻ.
-          </div>
+          <div id="t10ProviderHint" style="font-size:11.5px;color:var(--text-muted);line-height:1.6"></div>
           <div id="t10KeyStatus" style="font-size:12px;margin-top:8px"></div>
         </div>
       </div>
@@ -6282,14 +6284,67 @@ function t9Init(){
 const setStatus10 = (m, t) => setStatusBar('status10', m, t);
 const t10State = { refs: [], results: [] };  // refs: [{base64, mime, name}]
 
-function t10GetKey(){ return localStorage.getItem('t10_key') || ''; }
-function t10GetModel(){ return localStorage.getItem('t10_model') || 'gemini-2.5-flash-image'; }
+const T10_PROVIDERS = {
+  google: {
+    label: 'Google AI Studio key (AIza...)',
+    placeholder: 'Paste Google AI Studio key (AIza...)',
+    models: [
+      { id: 'gemini-2.5-flash-image', name: 'Nano Banana (rẻ ~$0.039/ảnh)' },
+      { id: 'gemini-3-pro-image-preview', name: 'Nano Banana Pro (đẹp hơn ~$0.13/ảnh)' }
+    ],
+    hint: 'Key tại <span style="color:var(--accent)">aistudio.google.com</span>. ⚠️ Tài khoản mới phải NẠP prepaid credit tối thiểu $10 (credit trial $300 KHÔNG dùng cho gen ảnh). Nếu báo "prepayment depleted" → nạp credit hoặc đổi sang OpenAI.'
+  },
+  openai: {
+    label: 'OpenAI key (sk-...)',
+    placeholder: 'Paste OpenAI key (sk-...)',
+    models: [
+      { id: 'gpt-image-1', name: 'GPT Image 1 (chuẩn ~$0.04/ảnh)' },
+      { id: 'gpt-image-1-mini', name: 'GPT Image 1 Mini (rẻ hơn)' }
+    ],
+    hint: 'Key tại <span style="color:var(--accent)">platform.openai.com</span>. Trả theo dùng (~$0.04/ảnh), KHÔNG vướng prepay như Google. ⚠️ Có thể cần "Verify Organization" trong console OpenAI để dùng GPT Image.'
+  }
+};
+
+function t10GetProvider(){ return localStorage.getItem('t10_provider') || 'google'; }
+function t10GetKey(provider){
+  provider = provider || t10GetProvider();
+  let k = localStorage.getItem('t10_key_' + provider) || '';
+  // OpenAI: nếu chưa có key riêng, mượn key chính nếu provider chính là openai
+  if (!k && provider === 'openai' && localStorage.getItem('api_provider') === 'openai') {
+    k = localStorage.getItem('api_key') || '';
+  }
+  return k;
+}
+function t10GetModel(){
+  const p = t10GetProvider();
+  return localStorage.getItem('t10_model_' + p) || T10_PROVIDERS[p].models[0].id;
+}
+
+function t10PopulateModels(){
+  const p = document.getElementById('t10Provider').value;
+  const sel = document.getElementById('t10Model');
+  sel.innerHTML = T10_PROVIDERS[p].models.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  sel.value = localStorage.getItem('t10_model_' + p) || T10_PROVIDERS[p].models[0].id;
+}
+
+function t10OnProviderChange(){
+  const p = document.getElementById('t10Provider').value;
+  const cfg = T10_PROVIDERS[p];
+  localStorage.setItem('t10_provider', p);
+  t10PopulateModels();
+  document.getElementById('t10KeyLabel').textContent = cfg.label;
+  document.getElementById('t10ApiKey').placeholder = cfg.placeholder;
+  document.getElementById('t10ApiKey').value = t10GetKey(p);
+  document.getElementById('t10ProviderHint').innerHTML = cfg.hint;
+}
 
 function t10SaveSettings(showStatus){
+  const p = document.getElementById('t10Provider').value;
   const model = document.getElementById('t10Model').value;
   const key = document.getElementById('t10ApiKey').value.trim();
-  localStorage.setItem('t10_model', model);
-  if (key) localStorage.setItem('t10_key', key);
+  localStorage.setItem('t10_provider', p);
+  localStorage.setItem('t10_model_' + p, model);
+  if (key) localStorage.setItem('t10_key_' + p, key);
   if (showStatus) {
     document.getElementById('t10KeyStatus').innerHTML = '<span style="color:var(--green)">✓ Đã lưu cài đặt.</span>';
     setTimeout(() => { const e = document.getElementById('t10KeyStatus'); if (e) e.innerHTML = ''; }, 3000);
@@ -6358,8 +6413,9 @@ async function t10AnalyzeStyle(){
 }
 
 async function t10Generate(){
-  const key = t10GetKey() || document.getElementById('t10ApiKey').value.trim();
-  if (!key) return setStatus10('Chưa có Gemini key. Cài + Lưu key trước.', 'error');
+  const provider = t10GetProvider();
+  const key = t10GetKey(provider) || document.getElementById('t10ApiKey').value.trim();
+  if (!key) return setStatus10('Chưa có API key. Cài + Lưu key trước.', 'error');
   const title = document.getElementById('t10Title').value.trim();
   const subject = document.getElementById('t10Subject').value.trim();
   if (!title && !subject) return setStatus10('Cần tiêu đề hoặc mô tả hình muốn vẽ.', 'error');
@@ -6392,7 +6448,9 @@ CRITICAL RULES:
     if (state.cancelRequested) { setStatus10('Đã dừng.', 'info'); break; }
     setStatus10(`Đang gen ảnh ${i + 1}/${count} (${model})...`, 'working');
     try {
-      const img = await t10CallGemini(prompt, model, key);
+      const img = provider === 'openai'
+        ? await t10CallOpenAI(prompt, model, key)
+        : await t10CallGemini(prompt, model, key);
       t10State.results.push(img);
       t10RenderResults();
     } catch (e) {
@@ -6404,6 +6462,31 @@ CRITICAL RULES:
     setStatus10(`✓ Xong ${t10State.results.length} ảnh. Tải về → Canva thêm chữ.`, 'ok');
     notifyDone('✓ Thumbnail xong!', `${t10State.results.length} ảnh đã tạo.`);
   }
+}
+
+async function t10CallOpenAI(prompt, model, key){
+  const images = t10State.refs.map(r => ({ b64: r.base64, mime: r.mime }));
+  const body = JSON.stringify({ model, prompt, size: '1536x1024', n: 1, images });
+  let data;
+  try {
+    const r = await fetch('/api/openai-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
+      body
+    });
+    const ct = r.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || `HTTP ${r.status}`);
+    }
+  } catch (e) {
+    if (data) throw e;  // lỗi thật từ API
+  }
+  if (!data) throw new Error('Không gọi được /api/openai-image. Đã upload file api/openai-image.js lên chưa?');
+
+  const item = data.data?.[0];
+  if (!item?.b64_json) throw new Error('Không có ảnh trong response. Kiểm tra key/credit/verify org.');
+  return { b64: item.b64_json, mime: 'image/png' };
 }
 
 async function t10CallGemini(prompt, model, key){
@@ -6483,10 +6566,11 @@ function t10Reset(){
 }
 
 function t10Init(){
-  const modelSel = document.getElementById('t10Model');
-  if (modelSel) modelSel.value = t10GetModel();
-  const keyInput = document.getElementById('t10ApiKey');
-  if (keyInput && !keyInput.value) keyInput.value = t10GetKey();
+  const provSel = document.getElementById('t10Provider');
+  if (provSel) {
+    provSel.value = t10GetProvider();
+    t10OnProviderChange();
+  }
   // Auto lấy title từ Tool 9 nếu có
   const t10title = document.getElementById('t10Title');
   if (t10title && !t10title.value) {
