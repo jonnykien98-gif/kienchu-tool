@@ -1820,8 +1820,8 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div>
           <label class="label">ĐỊNH DẠNG</label>
           <select id="t7Format">
-            <option value="webm" selected>WebM (chuẩn web)</option>
-            <option value="mp4">MP4 (Chrome 130+)</option>
+            <option value="mp4" selected>MP4 (khuyên dùng — CapCut OK) ★</option>
+            <option value="webm">WebM (chuẩn web)</option>
           </select>
         </div>
       </div>
@@ -5510,6 +5510,27 @@ async function t7SliceAudio(buffer, startSec, durSec){
   return await offCtx.startRendering();
 }
 
+// Vá duration vào WebM của MediaRecorder (nếu không sẽ báo 0:00 / không seek)
+let _t7WebmFixer = undefined;
+async function t7FixWebmDuration(blob, durationMs){
+  if (_t7WebmFixer === undefined) {
+    try {
+      const mod = await import('https://cdn.jsdelivr.net/npm/fix-webm-duration@1.0.5/+esm');
+      _t7WebmFixer = mod.default || mod.ysFixWebmDuration || mod.fixWebmDuration || null;
+    } catch (e) {
+      console.warn('Không tải được fix-webm-duration:', e);
+      _t7WebmFixer = null;
+    }
+  }
+  if (!_t7WebmFixer) return blob;
+  try {
+    const out = await _t7WebmFixer(blob, durationMs);
+    return out instanceof Blob ? out : blob;
+  } catch (e) {
+    return blob;
+  }
+}
+
 // Render 1 clip: vẽ ảnh tĩnh lên canvas + audio đoạn → MediaRecorder
 // Easing functions
 function t7Easing(t, type){
@@ -5658,12 +5679,16 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
     let rafId = null;
     let stopped = false;
     let startTime = 0;
-    recorder.onstop = () => {
+    recorder.onstop = async () => {
       stopped = true;
       if (rafId) cancelAnimationFrame(rafId);
       if (audioCtx) audioCtx.close();
       const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
-      const blob = new Blob(chunks, { type: mimeType });
+      let blob = new Blob(chunks, { type: mimeType });
+      // Vá duration cho WebM (MediaRecorder không ghi duration → player/CapCut báo 0:00)
+      if (ext === 'webm') {
+        try { blob = await t7FixWebmDuration(blob, durSec * 1000); } catch (e) { console.warn('fix webm dur:', e); }
+      }
       resolve({ blob, ext, mimeType, effectMode: mode });
     };
     recorder.onerror = e => reject(e);
