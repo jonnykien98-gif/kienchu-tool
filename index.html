@@ -779,14 +779,29 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
     </div>
 
     <h3>🎨 Style Prompts G-Labs</h3>
+    <div class="mb-12" style="padding:12px;background:rgba(124,58,237,.06);border:1px solid var(--border);border-radius:8px">
+      <label class="label" style="color:var(--violet)">⚡ STYLE PRESET <span style="font-weight:400;color:var(--text-muted);font-size:11px">(chọn để điền nhanh 4 ô dưới — dùng cho mọi loại kênh)</span></label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="pStylePreset" onchange="applyStylePreset(this.value)" style="max-width:340px">
+          <option value="">— Chọn preset style —</option>
+          <option value="cartoon2d">🎨 Cartoon 2D (flat vector)</option>
+          <option value="realistic">📷 Ảnh thực (photorealistic)</option>
+          <option value="anime">🌸 Anime / Manga</option>
+          <option value="render3d">🧊 3D Render (Pixar-like)</option>
+          <option value="watercolor">🖌 Màu nước (watercolor)</option>
+          <option value="lineart">✏️ Line art tối giản</option>
+        </select>
+        <span style="font-size:11px;color:var(--text-muted)">hoặc upload ảnh mẫu để AI tự phân tích (chuẩn nhất)</span>
+      </div>
+    </div>
     <div class="grid-2 mb-12">
       <div>
         <label class="label green">CHARACTER STYLE</label>
-        <textarea id="pCharStyle" style="min-height:100px" placeholder="AI sẽ điền..."></textarea>
+        <textarea id="pCharStyle" style="min-height:100px" placeholder="Chọn preset, upload ảnh mẫu, hoặc tự viết..."></textarea>
       </div>
       <div>
         <label class="label" style="color:var(--blue)">BACKGROUND STYLE</label>
-        <textarea id="pBgStyle" style="min-height:100px" placeholder="AI sẽ điền..."></textarea>
+        <textarea id="pBgStyle" style="min-height:100px" placeholder="Chọn preset, upload ảnh mẫu, hoặc tự viết..."></textarea>
       </div>
     </div>
     <div class="grid-2 mb-12">
@@ -1880,6 +1895,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
 
       <div class="actions mb-24">
         <button class="btn primary" onclick="t7RenderAll()">🎬 Render tất cả clips</button>
+        <button class="btn ghost" id="t7FailBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="t7RenderFailed()">🔧 Render lại clip lỗi <span id="t7FailCount"></span></button>
         <button class="btn" onclick="t7DownloadZip()">↓ Tải ZIP clips</button>
         <button class="btn ghost" onclick="t7Reset()">🗑 Xoá kết quả</button>
       </div>
@@ -3004,6 +3020,53 @@ const PRESET = {
   sceneStyle: "2D cartoon style, bold thick black ink outlines, flat color fills, hand-drawn illustration"
 };
 
+// Bộ Style Preset cho MỌI loại kênh — chọn để điền nhanh 4 trường style
+const STYLE_PRESETS = {
+  '': { label: '— Chọn preset style —' },
+  cartoon2d: {
+    label: '🎨 Cartoon 2D (flat vector)',
+    characterStyle: 'Flat 2D cartoon character, bold clean black outlines, simple expressive face with dot eyes and curved mouth, simple body proportions, flat color fills no gradients, era/role-appropriate clothing, hand-drawn vector illustration style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    backgroundStyle: 'Flat 2D cartoon background illustration, clean black outlines, environment with depth and props, muted color palette with soft shading, flat color fills, hand-drawn vector style, NO characters NO people NO figures NO text NO words, 16:9 ratio',
+    sceneStyle: 'flat 2D cartoon, clean black outlines, flat color fills, hand-drawn vector illustration',
+    promptRules: 'No text, no watermark, consistent character design across all scenes, flat 2D cartoon aesthetic, avoid photorealism'
+  },
+  realistic: {
+    label: '📷 Ảnh thực (photorealistic)',
+    characterStyle: 'Photorealistic person, natural realistic skin texture and pores, realistic hair, accurate human proportions and anatomy, detailed realistic clothing with fabric texture, soft natural studio lighting, sharp focus, professional photography, neutral grey backdrop, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 facial expression close-ups, NO text NO words',
+    backgroundStyle: 'Photorealistic environment, realistic materials and textures, accurate perspective and depth, natural or practical lighting with realistic shadows, cinematic photography, high detail, NO characters NO people NO text NO words, 16:9 ratio',
+    sceneStyle: 'photorealistic, cinematic photography, natural lighting, realistic textures, sharp focus, shallow depth of field',
+    promptRules: 'No text, no watermark, no cartoon or illustration look, no distorted anatomy, no extra fingers, consistent character appearance'
+  },
+  anime: {
+    label: '🌸 Anime / Manga',
+    characterStyle: 'Anime style character, clean cel-shaded coloring, large expressive eyes with highlights, detailed stylized hair, slim anime proportions, sharp clean lineart, vibrant colors, detailed costume, white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    backgroundStyle: 'Anime background art, detailed painterly environment, soft gradient skies, cel-shaded lighting, vibrant saturated colors, depth and atmosphere, Studio-anime quality, NO characters NO people NO text NO words, 16:9 ratio',
+    sceneStyle: 'anime style, cel-shaded, clean lineart, vibrant colors, expressive, detailed background art',
+    promptRules: 'No text, no watermark, consistent character design, no photorealism, maintain anime cel-shaded look'
+  },
+  render3d: {
+    label: '🧊 3D Render (Pixar-like)',
+    characterStyle: '3D rendered character, stylized Pixar-like proportions, smooth subsurface-scattering skin, soft rounded forms, detailed textured clothing, soft global illumination, subtle ambient occlusion, clean studio render, neutral background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    backgroundStyle: '3D rendered environment, stylized props with smooth surfaces, soft global illumination and ambient occlusion, depth of field, cinematic 3D render, NO characters NO people NO text NO words, 16:9 ratio',
+    sceneStyle: '3D render, stylized Pixar-like, soft global illumination, smooth surfaces, cinematic lighting, ambient occlusion',
+    promptRules: 'No text, no watermark, consistent character model, no 2D flat look, maintain 3D rendered style'
+  },
+  watercolor: {
+    label: '🖌 Màu nước (watercolor)',
+    characterStyle: 'Watercolor illustration character, soft hand-painted washes, visible paper texture, gentle bleeding edges, loose expressive brushwork, soft muted palette, delicate linework, white paper background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    backgroundStyle: 'Watercolor painted environment, soft washes and bleeding colors, visible paper grain, loose brushwork, gentle muted palette, airy atmosphere, NO characters NO people NO text NO words, 16:9 ratio',
+    sceneStyle: 'watercolor illustration, soft hand-painted washes, paper texture, loose brushwork, muted gentle palette',
+    promptRules: 'No text, no watermark, keep soft watercolor look, no hard digital edges, no photorealism'
+  },
+  lineart: {
+    label: '✏️ Line art tối giản',
+    characterStyle: 'Minimalist line art character, clean single-weight black lines on white, minimal or no fill, simple geometric shapes, lots of negative space, modern editorial illustration, white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    backgroundStyle: 'Minimalist line art environment, clean thin black lines on white, minimal detail, lots of negative space, modern editorial style, NO characters NO people NO text NO words, 16:9 ratio',
+    sceneStyle: 'minimalist line art, clean thin black lines, white background, lots of negative space, modern editorial',
+    promptRules: 'No text, no watermark, keep minimalist clean lines, avoid heavy shading, avoid clutter'
+  }
+};
+
 function getProfile(){ return state.currentProfileIdx >= 0 ? state.profiles[state.currentProfileIdx] : null; }
 
 function makeEmptyProfile(){
@@ -3337,6 +3400,27 @@ function importProfile(event){
   };
   reader.readAsText(f);
   event.target.value = '';
+}
+
+function applyStylePreset(key){
+  if (!key) return;
+  const p = STYLE_PRESETS[key];
+  if (!p || !p.characterStyle) return;
+  const cs = document.getElementById('pCharStyle');
+  const bs = document.getElementById('pBgStyle');
+  const ss = document.getElementById('pSceneStyle');
+  const pr = document.getElementById('pPromptRules');
+  const hasContent = (cs && cs.value.trim()) || (bs && bs.value.trim()) || (ss && ss.value.trim());
+  if (hasContent && !confirm('Đè 4 ô style hiện tại bằng preset "' + (p.label || key) + '"?')) {
+    document.getElementById('pStylePreset').value = '';
+    return;
+  }
+  if (cs) cs.value = p.characterStyle || '';
+  if (bs) bs.value = p.backgroundStyle || '';
+  if (ss) ss.value = p.sceneStyle || '';
+  if (pr) pr.value = p.promptRules || '';
+  const st = document.getElementById('extractStatus');
+  if (st) st.innerHTML = '<span style="color:var(--green)">✓ Đã điền preset ' + (p.label || key) + '. Sửa lại cho khớp kênh rồi Lưu.</span>';
 }
 
 function quickFill(){
@@ -3869,7 +3953,7 @@ async function doGenerateScenePrompts(){
 PROFILE KÊNH:
 ${profileContext}
 
-SCENE AESTHETIC (dùng cho MỌI cảnh): "${p.sceneStyle || PRESET.sceneStyle}"
+SCENE AESTHETIC (dùng cho MỌI cảnh): "${p.sceneStyle || 'consistent visual style across all scenes'}"
 
 PROMPT RULES / NEGATIVE: "${p.promptRules || ''}"
 
@@ -5149,7 +5233,7 @@ async function genVeoPrompts(){
   setStatus6('AI đang sinh prompt Veo 3...', 'working');
   clearCancel();
 
-  const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nVisual Style: ${p.visualStyle}\nPOV: ${p.povStyle}\nScene Aesthetic: ${p.sceneStyle || PRESET.sceneStyle}\nRules: ${p.promptRules || ''}`;
+  const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nVisual Style: ${p.visualStyle}\nPOV: ${p.povStyle}\nScene Aesthetic: ${p.sceneStyle || 'consistent visual style across all scenes'}\nRules: ${p.promptRules || ''}`;
 
   // Chỉ tạo cảnh CHƯA có prompt Veo → bấm lại sau khi Dừng sẽ chạy tiếp
   const todo = state.scenes.filter(s => !state.veoPrompts[s.id] || !state.veoPrompts[s.id].prompt);
@@ -5773,7 +5857,8 @@ async function t7RenderAll(){
       const { blob, ext, effectMode } = await t7RenderClip(t7State.images[i].img, audioSlice, dur, i);
       const name = `clip-${String(i + 1).padStart(3, '0')}.${ext}`;
       const url = URL.createObjectURL(blob);
-      t7State.clips.push({ sceneIdx: i, blob, url, name, duration: dur, effectMode });
+      const failed = blob.size < 8000;  // file quá nhỏ = render rỗng/đen
+      t7State.clips.push({ sceneIdx: i, blob, url, name, duration: dur, effectMode, failed });
       renderT7Clips();
     } catch (e) {
       console.error(e);
@@ -5787,9 +5872,58 @@ async function t7RenderAll(){
   pct.textContent = '100%';
   text.textContent = 'Hoàn tất';
   if (!state.cancelRequested) {
-    setStatus7(`✓ Đã render ${t7State.clips.length} clips${silent ? ' (không tiếng — ghép giọng ở CapCut)' : ''}. Bấm "Tải ZIP clips".`, 'ok');
+    const failedN = t7State.clips.filter(c => c.failed).length;
+    setStatus7(`✓ Đã render ${t7State.clips.length} clips${silent ? ' (không tiếng)' : ''}.` + (failedN > 0 ? ` ⚠️ ${failedN} clip lỗi — bấm "🔧 Render lại clip lỗi".` : ' Bấm "Tải ZIP clips".'), failedN > 0 ? 'info' : 'ok');
     notifyDone('✓ Render xong!', `${t7State.clips.length} clips đã sẵn sàng.`);
   }
+}
+
+// Render lại CHỈ các clip lỗi (file rỗng/đen) hoặc còn thiếu
+async function t7RenderFailed(){
+  const silent = document.getElementById('t7AudioMode')?.value === 'silent';
+  if (!silent && !t7State.audioBuffer) return setStatus7('Cần audio (hoặc chọn chế độ không tiếng).', 'error');
+  const timings = parseT7Timings();
+  if (!timings.length) return setStatus7('Cần timing.', 'error');
+  const sceneCount = Math.min(t7State.images.length, timings.length);
+
+  // cursor audio tích luỹ theo timing
+  const cursors = [];
+  let acc = 0;
+  for (let i = 0; i < sceneCount; i++) { cursors[i] = acc; acc += timings[i]; }
+
+  const byIdx = {};
+  t7State.clips.forEach(c => { byIdx[c.sceneIdx] = c; });
+  const todo = [];
+  for (let i = 0; i < sceneCount; i++) { const c = byIdx[i]; if (!c || c.failed) todo.push(i); }
+  if (!todo.length) return setStatus7('Không có clip lỗi để render lại.', 'ok');
+
+  clearCancel();
+  let fixed = 0;
+  for (const i of todo) {
+    if (state.cancelRequested) { clearCancel(); setStatus7(`⏸ Đã dừng. Sửa được ${fixed}/${todo.length}.`, 'info'); break; }
+    setStatus7(`Render lại clip lỗi: cảnh ${i + 1} (còn ${todo.length - fixed})...`, 'working');
+    const audioDur = silent ? Infinity : t7State.audioBuffer.duration;
+    const dur = silent ? timings[i] : Math.min(timings[i], audioDur - cursors[i]);
+    if (dur <= 0) continue;
+    try {
+      const audioSlice = silent ? null : await t7SliceAudio(t7State.audioBuffer, cursors[i], dur);
+      const { blob, ext, effectMode } = await t7RenderClip(t7State.images[i].img, audioSlice, dur, i);
+      const name = `clip-${String(i + 1).padStart(3, '0')}.${ext}`;
+      const url = URL.createObjectURL(blob);
+      const failed = blob.size < 8000;
+      const existing = t7State.clips.find(c => c.sceneIdx === i);
+      if (existing) { try { URL.revokeObjectURL(existing.url); } catch(e){} Object.assign(existing, { blob, url, name, duration: dur, effectMode, failed }); }
+      else t7State.clips.push({ sceneIdx: i, blob, url, name, duration: dur, effectMode, failed });
+      if (!failed) fixed++;
+      renderT7Clips();
+    } catch (e) { console.error(e); }
+  }
+  t7State.clips.sort((a, b) => a.sceneIdx - b.sceneIdx);
+  renderT7Clips();
+  const stillFailed = t7State.clips.filter(c => c.failed).length;
+  setStatus7(stillFailed > 0
+    ? `Đã sửa ${fixed}. Còn ${stillFailed} clip vẫn lỗi — bấm lại lần nữa, hoặc kiểm tra ảnh gốc cảnh đó.`
+    : `✓ Đã sửa xong tất cả clip lỗi (${fixed}).`, stillFailed > 0 ? 'info' : 'ok');
 }
 
 function renderT7Clips(){
@@ -5810,14 +5944,24 @@ function renderT7Clips(){
   };
   list.innerHTML = t7State.clips.map(c => {
     const fxLabel = c.effectMode ? (effectLabels[c.effectMode] || '') : '';
-    return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px">
+    const bord = c.failed ? '#d97706' : 'var(--border)';
+    const warn = c.failed ? '<span style="color:#d97706;font-weight:600">⚠ lỗi</span> ' : '';
+    return `<div style="background:var(--surface-2);border:1px solid ${bord};border-radius:8px;padding:10px${c.failed ? ';box-shadow:0 0 0 1px #d97706' : ''}">
       <video src="${c.url}" controls style="width:100%;border-radius:4px;background:#000"></video>
       <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:11px;color:var(--text-muted)">${c.name} · ${c.duration.toFixed(1)}s ${fxLabel}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${warn}${c.name} · ${c.duration.toFixed(1)}s ${fxLabel}</span>
         <a href="${c.url}" download="${c.name}" class="btn ghost sm" style="font-size:11px;padding:2px 8px;text-decoration:none">↓</a>
       </div>
     </div>`;
   }).join('');
+  // Nút "Render lại clip lỗi"
+  const failedN = t7State.clips.filter(c => c.failed).length;
+  const fb = document.getElementById('t7FailBtn');
+  const fc = document.getElementById('t7FailCount');
+  if (fb && fc) {
+    if (failedN > 0) { fb.style.display = ''; fc.textContent = '(' + failedN + ')'; }
+    else fb.style.display = 'none';
+  }
 }
 
 async function t7DownloadZip(){
