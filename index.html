@@ -1685,7 +1685,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           </div>
           <div id="t8ModelInfo" style="font-size:11.5px;color:var(--accent);margin-bottom:6px"></div>
           <div id="t8ProviderHint" style="font-size:11.5px;color:var(--text-muted);line-height:1.6">
-            <strong>Groq</strong> (miễn phí): đăng ký tại <span style="color:var(--accent)">console.groq.com</span> → tạo key (không cần thẻ). Free tier 2.000 lượt/ngày, model whisper-large-v3, file tối đa 25MB.
+            <strong>Groq</strong> (miễn phí): đăng ký tại <span style="color:var(--accent)">console.groq.com</span> → tạo key (không cần thẻ). Free tier 2.000 lượt/ngày, model whisper-large-v3-turbo, file tối đa 25MB.
           </div>
           <div id="t8KeyStatus" style="font-size:12px;margin-top:8px"></div>
         </div>
@@ -5845,9 +5845,9 @@ const T8_PROVIDERS = {
   groq: {
     name: 'Groq',
     url: 'https://api.groq.com/openai/v1/audio/transcriptions',
-    model: 'whisper-large-v3',
+    model: 'whisper-large-v3-turbo',
     keyPrefix: 'gsk_',
-    hint: '<strong>Groq</strong> (miễn phí): đăng ký tại <span style="color:var(--accent)">console.groq.com</span> → tạo key (không cần thẻ). Free tier 2.000 lượt/ngày, whisper-large-v3, file ≤25MB.',
+    hint: '<strong>Groq</strong> (miễn phí): đăng ký tại <span style="color:var(--accent)">console.groq.com</span> → tạo key (không cần thẻ). Free tier 2.000 lượt/ngày, whisper-large-v3-turbo, file ≤25MB.',
     placeholder: 'Paste Groq API key (gsk_...)'
   },
   openai: {
@@ -5872,8 +5872,9 @@ function t8GetLang(){ return localStorage.getItem('t8_language') ?? 'en'; }
 // Chọn model tối ưu theo provider + ngôn ngữ
 function t8PickModel(provider, lang){
   if (provider === 'groq') {
-    // English → distil-whisper-large-v3-en (nhanh hơn, English-optimized)
-    return lang === 'en' ? 'distil-whisper-large-v3-en' : 'whisper-large-v3';
+    // whisper-large-v3-turbo: nhanh nhất, đa ngôn ngữ (distil-whisper-large-v3-en đã bị Groq gỡ).
+    // whisper-large-v3: chính xác cao nhất cho ngôn ngữ khó.
+    return 'whisper-large-v3-turbo';
   }
   if (provider === 'openai') {
     return 'whisper-1';  // OpenAI chỉ có 1 whisper model qua API này
@@ -5882,7 +5883,7 @@ function t8PickModel(provider, lang){
     // English → base.en (English-only, chính xác hơn cho English)
     return lang === 'en' ? 'Xenova/whisper-base.en' : 'Xenova/whisper-base';
   }
-  return 'whisper-large-v3';
+  return 'whisper-large-v3-turbo';
 }
 
 function t8UpdateModelInfo(){
@@ -5893,7 +5894,7 @@ function t8UpdateModelInfo(){
   const el = document.getElementById('t8ModelInfo');
   if (!el) return;
   let note = '';
-  if (prov === 'groq' && lang === 'en') note = ' (English-optimized, nhanh nhất)';
+  if (prov === 'groq') note = ' (đa ngôn ngữ, nhanh nhất)';
   else if (prov === 'local' && lang === 'en') note = ' (English-only, chính xác hơn)';
   else if (lang === '') note = ' (Whisper tự nhận ngôn ngữ)';
   el.innerHTML = `📌 Sẽ dùng model: <strong>${model}</strong>${note} · Ngôn ngữ: ${langLabel}`;
