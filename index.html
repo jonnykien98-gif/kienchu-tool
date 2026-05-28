@@ -1471,6 +1471,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <input type="text" id="t10Title" placeholder="vd: What Happens During Severe Sleep Deprivation" style="margin-bottom:10px">
             <label class="label">MÔ TẢ HÌNH MUỐN VẼ <span style="font-weight:400;color:var(--text-muted);font-size:11px">(nhân vật/cảnh/cảm xúc)</span></label>
             <textarea id="t10Subject" rows="3" placeholder="vd: a exhausted man with dark eye bags, slumped, dramatic tired expression"></textarea>
+            <button class="btn ghost sm" style="margin-top:8px" onclick="t10GenSubject()">✨ Gợi ý mô tả từ tiêu đề (Claude)</button>
           </div>
         </div>
       </div>
@@ -1927,30 +1928,38 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div style="font-size:13px;line-height:1.7;color:var(--text)">
           • 1 profile<br>
           • 10 cảnh/video<br>
-          • Tool 1 + Tool 2<br>
-          • <span style="color:var(--text-dim)">Không có Asset Prompts</span><br>
-          • <span style="color:var(--text-dim)">Không có Veo 3</span><br>
-          • <span style="color:var(--text-dim)">Không có Tìm Media</span>
+          • Chỉ Tool 1 + Tool 2<br>
+          • <span style="color:var(--text-dim)">Khoá 8 tool còn lại</span><br>
+          • <span style="color:var(--text-dim)">Không có Thumbnail AI</span><br>
+          • <span style="color:var(--text-dim)">Không có YouTube SEO</span>
         </div>
       </div>
       <div style="background:linear-gradient(135deg,rgba(249,115,22,.08),rgba(194,65,12,.04));border-radius:10px;padding:14px;border:2px solid var(--accent);position:relative">
         <div style="position:absolute;top:-10px;right:10px;background:linear-gradient(135deg,#f97316,#c2410c);color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px">PRO</div>
         <div style="font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.5px;margin-bottom:8px">GÓI PRO</div>
-        <div style="font-size:13px;line-height:1.7;color:var(--text)">
+        <div style="font-size:12.5px;line-height:1.65;color:var(--text)">
           ✓ Profile <strong>không giới hạn</strong><br>
           ✓ Cảnh <strong>không giới hạn</strong><br>
-          ✓ <strong>Tất cả 6 Tool</strong><br>
+          ✓ <strong>Tất cả 10 Tool</strong><br>
           ✓ Asset Prompts + Vision<br>
           ✓ Prompt Veo 3<br>
-          ✓ Tìm Media Pexels
+          ✓ Tìm Media Pexels<br>
+          ✓ Căn Timing (Whisper)<br>
+          ✓ YouTube SEO chuẩn<br>
+          ✓ <strong>Thumbnail AI</strong> 🔥
         </div>
       </div>
     </div>
 
     <div style="background:var(--surface-2);border-radius:10px;padding:16px;border:1px solid var(--border);margin-bottom:20px">
       <div style="text-align:center;margin-bottom:14px">
-        <span style="font-size:28px;font-weight:800;color:var(--accent)">500.000đ</span>
-        <span style="font-size:13px;color:var(--text-muted)"> / tháng</span>
+        <div style="display:inline-block;background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;margin-bottom:8px">🔥 GIẢM 50% — CÓ HẠN</div>
+        <div>
+          <span style="font-size:16px;color:var(--text-muted);text-decoration:line-through;margin-right:8px">1.000.000đ</span>
+          <span style="font-size:30px;font-weight:800;color:var(--accent)">499.000đ</span>
+          <span style="font-size:13px;color:var(--text-muted)"> / tháng</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--green);font-weight:600;margin-top:4px">Tiết kiệm 501.000đ — 10 tool trọn bộ, gen được cả thumbnail AI</div>
       </div>
 
       <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:14px">💳 THANH TOÁN</div>
@@ -2041,7 +2050,7 @@ const TIER_CONFIG = {
 };
 
 const PRICING = {
-  pro: { priceVND: 500000, period: '1 tháng' }
+  pro: { priceVND: 499000, originalVND: 1000000, period: '1 tháng' }
 };
 
 // ⚠️ SỬA INFO CHUYỂN KHOẢN CỦA BẠN VÀO ĐÂY
@@ -6397,8 +6406,27 @@ function t10PullFromTool9(){
   }
 }
 
+// Claude gợi ý mô tả hình (subject) từ tiêu đề video
+async function t10GenSubject(){
+  const title = document.getElementById('t10Title').value.trim();
+  if (!title) return setStatus10('Nhập tiêu đề trước (hoặc lấy từ Tool 9) để Claude gợi ý mô tả.', 'error');
+  setStatus10('Claude đang nghĩ ý tưởng hình thumbnail...', 'working');
+  const ctx = (state.script || '').slice(0, 1500);
+  const prompt = `You are a YouTube thumbnail art director. For a video titled "${title}"${ctx ? `\n\nVideo content context:\n${ctx}` : ''}
+
+Describe ONE strong, click-worthy thumbnail image concept in a single concise English paragraph (2-3 sentences) that an image generator can follow. Focus on: the main subject/character, their facial expression and emotion, pose, key props or scene elements, and composition. Make it dramatic and eye-catching. Do NOT mention any text/words/captions (text will be added separately). Output ONLY the image description, no preamble.`;
+  try {
+    const desc = await callClaude(prompt, 400);
+    document.getElementById('t10Subject').value = desc.trim();
+    setStatus10('✓ Đã gợi ý mô tả. Sửa lại nếu muốn rồi Gen.', 'ok');
+  } catch (e) {
+    setStatus10('Lỗi: ' + e.message, 'error');
+  }
+}
+
 // Claude vision phân tích style ảnh mẫu
 async function t10AnalyzeStyle(){
+  if (!t10State.refs.length) return setStatus10('Upload ảnh mẫu trước khi phân tích.', 'error');
   if (!t10State.refs.length) return setStatus10('Upload ảnh mẫu trước khi phân tích.', 'error');
   setStatus10('Claude đang phân tích style ảnh mẫu...', 'working');
   const prompt = `Analyze the ART STYLE of this YouTube thumbnail image (ignore any text/words in it). Describe ONLY the visual style in a concise English paragraph an image generator can follow: line work, outline thickness, coloring/shading technique, color palette, character design and proportions, facial expression style, background treatment, overall vibe. Do NOT describe the specific subject matter — only the reusable style. 3-5 sentences.`;
