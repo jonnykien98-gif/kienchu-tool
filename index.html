@@ -5618,8 +5618,12 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
   // Initial frame draw (progress=0) — đảm bảo captureStream có frame đầu
   t7DrawFrame(ctx, image, cw, ch, dw, dh, baseX, baseY, mode, intensity, easingType, 0, fadeDuration, durSec);
 
-  // Video stream từ canvas
-  const videoStream = canvas.captureStream(fps);
+  // Video stream từ canvas — capture thủ công từng frame (mượt hơn, không lấy mẫu lệch nhịp)
+  const probe = canvas.captureStream(0);
+  const canReqFrame = typeof probe.getVideoTracks()[0]?.requestFrame === 'function';
+  probe.getTracks().forEach(t => t.stop());
+  const videoStream = canvas.captureStream(canReqFrame ? 0 : fps);
+  const vTrack = videoStream.getVideoTracks()[0];
 
   const silent = !audioSlice;  // chế độ chỉ ảnh, không tiếng
   let audioCtx = null, src = null, dest = null, combined;
@@ -5651,10 +5655,12 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
   recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
   return new Promise((resolve, reject) => {
-    let interval = null;
+    let rafId = null;
+    let stopped = false;
     let startTime = 0;
     recorder.onstop = () => {
-      if (interval) clearInterval(interval);
+      stopped = true;
+      if (rafId) cancelAnimationFrame(rafId);
       if (audioCtx) audioCtx.close();
       const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
       const blob = new Blob(chunks, { type: mimeType });
@@ -5662,7 +5668,8 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
     };
     recorder.onerror = e => reject(e);
     const stopRec = () => {
-      if (interval) { clearInterval(interval); interval = null; }
+      stopped = true;
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
       try { if (src) src.disconnect(); if (dest) dest.disconnect(); } catch (e) {}
       Promise.resolve().then(() => {
         if (recorder.state === 'recording') recorder.stop();
@@ -5673,13 +5680,17 @@ async function t7RenderClip(image, audioSlice, durSec, sceneIdx){
     if (!silent) src.start(0);
     startTime = performance.now();
     // Chế độ silent: dừng theo timer (không có audio để onended)
-    if (silent) setTimeout(stopRec, durSec * 1000 + 60);
-    // Animation loop — vẽ từng frame với Ken Burns + Fade
-    interval = setInterval(() => {
+    if (silent) setTimeout(stopRec, durSec * 1000 + 80);
+    // Animation loop bằng requestAnimationFrame — mượt, đồng bộ refresh màn hình
+    const frameLoop = () => {
+      if (stopped) return;
       const elapsed = (performance.now() - startTime) / 1000;
       const progress = Math.min(elapsed / durSec, 1);
       t7DrawFrame(ctx, image, cw, ch, dw, dh, baseX, baseY, mode, intensity, easingType, progress, fadeDuration, durSec);
-    }, 1000 / fps);
+      if (canReqFrame) { try { vTrack.requestFrame(); } catch (e) {} }  // đẩy đúng frame vừa vẽ
+      rafId = requestAnimationFrame(frameLoop);
+    };
+    rafId = requestAnimationFrame(frameLoop);
   });
 }
 
