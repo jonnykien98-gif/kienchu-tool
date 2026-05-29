@@ -4077,15 +4077,25 @@ ${mode1Rule}
 - Dùng metaphor hình ảnh (não = suy nghĩ, tim = cảm xúc, ví tiền = tài chính)
 - VD: "Central brain illustration surrounded by 5 circular icons: declining chart, warning triangle, dollar document, empty wallet, with lightning bolts connecting them"
 
-🔹 LOẠI 5 — TEXT + MINH HOẠ (VO có con số ấn tượng, tiêu đề):
-- Text lớn bold ở trên/giữa + hình minh hoạ bên dưới
+🔹 LOẠI 5 — SỐ/TỪ KHOÁ ẤN TƯỢNG + MINH HOẠ (CHỈ khi VO có con số sốc, năm cụ thể, hoặc 1 từ khoá duy nhất):
+- CHỈ dùng cho text 1-4 TỪ ngắn, KHÔNG dùng cho câu trần thuật/đối thoại
+- Text ngắn bold ở trên/giữa + hình minh hoạ bên dưới
 - VD: "Bold black text '13,000 YEARS AGO' at top, below a cartoon beer mug with foam overflowing, white background"
+- KHÔNG dùng LOẠI 5 nếu VO là câu kể chuyện — chọn LOẠI 1 (nhân vật) hoặc LOẠI 4 (icon khái niệm)
 
 QUY TẮC CHUNG:
 - Luôn mô tả BỐ CỤC KHÔNG GIAN (trái/phải/trên/dưới/giữa)
-- Text trong ảnh viết bằng TIẾNG ANH và đặt trong nháy đơn
 - Ánh sáng và tông màu phù hợp VO
 - Kết thúc bằng scene aesthetic tag
+
+⚠️ TEXT TRONG ẢNH — RẤT QUAN TRỌNG (ĐA SỐ CẢNH KHÔNG NÊN CÓ TEXT):
+- MẶC ĐỊNH: KHÔNG có text trong ảnh. Để hình ảnh tự kể chuyện qua nhân vật, icon, bố cục.
+- CHỈ thêm text khi thật cần điểm nhấn: con số ('8 HOURS'), năm ('1965'), 1 từ khoá ('WARNING', 'DANGER')
+- GIỚI HẠN CỨNG: text trong ảnh tối đa 4 TỪ. Viết HOA, trong nháy đơn.
+- TUYỆT ĐỐI KHÔNG đưa cả câu VO, câu thoại, hay tiêu đề dài vào ảnh (vd KHÔNG ghi 'SKIP SEVERAL NIGHTS? THE STREETS STOP WORKING' hay 'SLEEP IS WHEN THE CLEANUP HAPPENS')
+- TUYỆT ĐỐI KHÔNG dịch nguyên VO sang tiếng Anh để làm text — text chỉ là điểm nhấn cực ngắn, không phải tiêu đề câu
+- 🌐 NGÔN NGỮ TEXT: CHỈ TIẾNG ANH. TUYỆT ĐỐI KHÔNG có chữ Hàn, Trung, Nhật, Thái, Ả Rập, hay bất kỳ ngôn ngữ nào khác. Phải ghi rõ trong prompt: "all text in English only, no Korean / Chinese / Japanese characters"
+- LOẠI 4 ICON CONCEPT: icon dùng METAPHOR HÌNH ẢNH thuần (não, đồng hồ, biểu tượng) — KHÔNG dán label chữ dưới mỗi icon (đây là lỗi thường gặp: AI mặc định thêm label Hàn dưới icon health/medical)
 
 🔗 LIÊN TỤC HÌNH ẢNH (để video KHÔNG rời rạc — rất quan trọng):
 - Đây là các cảnh LIÊN TIẾP trong CÙNG 1 video → giữ mạch hình ảnh liền lạc.
@@ -6135,7 +6145,7 @@ function renderT7Clips(){
     const bord = c.failed ? '#d97706' : 'var(--border)';
     const warn = c.failed ? '<span style="color:#d97706;font-weight:600">⚠ lỗi</span> ' : '';
     return `<div style="background:var(--surface-2);border:1px solid ${bord};border-radius:8px;padding:10px${c.failed ? ';box-shadow:0 0 0 1px #d97706' : ''}">
-      <video src="${c.url}" controls style="width:100%;border-radius:4px;background:#000"></video>
+      <video src="${c.url}" controls preload="none" style="width:100%;border-radius:4px;background:#000"></video>
       <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;color:var(--text-muted)">${warn}${c.name} · ${c.duration.toFixed(1)}s ${fxLabel}</span>
         <a href="${c.url}" download="${c.name}" class="btn ghost sm" style="font-size:11px;padding:2px 8px;text-decoration:none">↓</a>
