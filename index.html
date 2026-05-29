@@ -6805,7 +6805,26 @@ function t8ApplyTimings(){
 }
 
 function t8ExportSRT(){
-  if (!t8State.alignResults) return setStatus8('Chưa có kết quả. Bấm Whisper Align trước.', 'error');
+  // Ưu tiên kết quả align mới nhất; nếu mất (reload) → fallback dùng state.scenes (đã áp dụng timing)
+  let entries;
+  if (t8State.alignResults && t8State.alignResults.length) {
+    entries = t8State.alignResults.map(r => ({
+      text: r.text || '',
+      start: r.newStart,
+      end: r.newEnd,
+      fallbackDur: r.oldDur
+    }));
+  } else if (state.scenes && state.scenes.length) {
+    let cur = 0;
+    entries = state.scenes.map(s => {
+      const start = cur;
+      const end = cur + (s.duration || 2);
+      cur = end;
+      return { text: s.text || '', start, end };
+    });
+  } else {
+    return setStatus8('Chưa có cảnh để xuất SRT. Chia cảnh ở Tool 02 trước.', 'error');
+  }
   const fmt = sec => {
     if (sec == null) sec = 0;
     const h = String(Math.floor(sec / 3600)).padStart(2, '0');
@@ -6815,21 +6834,25 @@ function t8ExportSRT(){
     return `${h}:${m}:${s},${ms}`;
   };
   let srt = '';
-  let idx = 1;
   let cursor = 0;
-  for (const r of t8State.alignResults) {
-    const start = r.newStart != null ? r.newStart : cursor;
-    const end = r.newEnd != null ? r.newEnd : start + (r.oldDur || 2);
-    srt += `${idx}\n${fmt(start)} --> ${fmt(end)}\n${r.text || ''}\n\n`;
-    idx++;
+  entries.forEach((e, idx) => {
+    const start = e.start != null ? e.start : cursor;
+    const end = e.end != null ? e.end : start + (e.fallbackDur || 2);
+    srt += `${idx + 1}\n${fmt(start)} --> ${fmt(end)}\n${e.text}\n\n`;
     cursor = end;
-  }
+  });
   const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'subtitle-' + Date.now() + '.srt'; a.click();
+  const profile = getProfile();
+  const safeName = (profile?.tenKenh || 'video').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
+  a.href = url;
+  a.download = `subtitle_${safeName}_${new Date().toISOString().slice(0,10)}.srt`;
+  a.click();
   URL.revokeObjectURL(url);
-  setStatus8('✓ Đã tải file SRT. Import vào CapCut/Premiere hoặc upload YouTube.', 'ok');
+  const total = entries[entries.length - 1]?.end || 0;
+  const source = t8State.alignResults?.length ? 'theo audio thật' : 'theo duration cảnh hiện tại';
+  setStatus8(`✓ Đã tải SRT (${entries.length} dòng, ${Math.round(total)}s, ${source}). Import vào CapCut/Premiere/YouTube.`, 'ok');
 }
 
 function t8Reset(){
