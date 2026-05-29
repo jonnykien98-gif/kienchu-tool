@@ -3056,7 +3056,7 @@ window.addEventListener('beforeunload', () => {
 const PRESET = {
   characterStyle: "2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words",
   backgroundStyle: "2D cartoon background illustration, bold black outlines, detailed interior or exterior environment with depth and atmosphere, muted dark color palette browns grays dark greens warm shadows, visible furniture props architectural details environmental storytelling elements, cinematic moody lighting with warm practical light sources, flat color fills with subtle tone variation, hand-drawn illustration style, NO characters NO people NO figures NO text NO words, 16:9 ratio",
-  sceneStyle: "2D cartoon style, bold thick black ink outlines, flat color fills, hand-drawn illustration"
+  sceneStyle: "simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors"
 };
 
 // Bộ Style Preset cho MỌI loại kênh — chọn để điền nhanh 4 trường style
@@ -3066,8 +3066,8 @@ const STYLE_PRESETS = {
     label: '🎨 Cartoon 2D (flat vector)',
     characterStyle: 'Flat 2D cartoon character, bold clean black outlines, simple expressive face with dot eyes and curved mouth, simple body proportions, flat color fills no gradients, era/role-appropriate clothing, hand-drawn vector illustration style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
     backgroundStyle: 'Flat 2D cartoon background illustration, clean black outlines, environment with depth and props, muted color palette with soft shading, flat color fills, hand-drawn vector style, NO characters NO people NO figures NO text NO words, 16:9 ratio',
-    sceneStyle: 'flat 2D cartoon, clean black outlines, flat color fills, hand-drawn vector illustration',
-    promptRules: 'No text, no watermark, consistent character design across all scenes, flat 2D cartoon aesthetic, avoid photorealism'
+    sceneStyle: 'simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors',
+    promptRules: 'No text overlay, no watermark, no photorealism, no gradients, no 3D shading, consistent character design across all scenes, thick black outlines on every element, flat color fills only, simple hand-drawn shapes'
   },
   realistic: {
     label: '📷 Ảnh thực (photorealistic)',
@@ -4135,6 +4135,24 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
 - Động vật/vật thể: miêu tả bình thường KHÔNG ngoặc vuông
 - Bối cảnh: ghi [tên-bối-cảnh] (VD: "inside [dark-office-night]...")`;
       }
+      // Detect animation/cartoon style → inject formula block
+      const styleStr = (p.sceneStyle || '').toLowerCase();
+      const isCartoon2D = /cartoon|flat|2d|animation|hand.drawn|stick|explainer|educational/.test(styleStr);
+      const animFormulaBlock = isCartoon2D ? `
+🎬 ANIMATION FORMULA (BẮT BUỘC áp dụng cho mọi cảnh — đây là style kênh):
+Công thức: [Nhân vật đơn giản] + [Hành động cụ thể] + [Bối cảnh rõ ràng], flat 2D animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, [palette màu phù hợp bối cảnh], educational explainer video style, no photorealism, flat colors --ar 16:9
+
+📐 Nhân vật phải là: simple cartoon stick/round-head figure, thick black outlines, round white/light head, small dot eyes, simple curved mouth, flat-colored clothing. KHÔNG vẽ người realistic.
+
+🎨 Môi trường phải là: simple flat shapes (teal/blue waves = ocean, green hills = countryside, orange flames = fire, grey rocks = cave, dark stone = ancient), muted warm palette, simple details (V-shape seagulls, puffy cloud shapes, wavy lines = water). KHÔNG vẽ cảnh 3D hay photorealistic.
+
+📦 Ví dụ mẫu theo bối cảnh:
+- Biển/thuyền: "A cartoon sailor on a wooden trading boat on calm ocean waves, simple 2D flat, thick black outlines, round white head, teal blue water with simple wave lines, pale sky, white puffy clouds, seagulls as V shapes"
+- Hang động/tiền sử: "Three prehistoric stick figures around campfire in cave, flat 2D cartoon, thick black outlines, warm orange firelight, dark cave walls with simple animal drawings, rocky ground, smoke in thin lines"  
+- Cánh đồng/nông thôn: "Cartoon farmer stick figure planting rice in flooded paddy, flat 2D, thick black outlines, lush green terraced hills, pale blue sky, calm water reflection, simple white clouds, wearing conical hat"
+- Thành phố/hiện đại: "Simple cartoon person walking city street, flat 2D, thick black outlines, simple building silhouettes, clean sidewalk, warm muted palette"
+` : '';
+
       const prompt = `Bạn là prompt engineer G-Labs (Imagen / Nano Banana). Tạo prompt cảnh cho mỗi cảnh bên dưới.
 
 PROFILE KÊNH:
@@ -4143,6 +4161,7 @@ ${profileContext}
 SCENE AESTHETIC (dùng cho MỌI cảnh): "${p.sceneStyle || 'consistent visual style across all scenes'}"
 
 PROMPT RULES / NEGATIVE: "${p.promptRules || ''}"
+${animFormulaBlock}
 
 ${charHeader}
 ${charCtx || '(không có)'}
