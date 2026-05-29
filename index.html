@@ -3784,15 +3784,38 @@ Quy tắc gộp:
 - Câu ngắn ấn tượng (như "Ồ.", "Chờ đã.") có thể đứng riêng 1 cảnh.
 - GIỮ NGUYÊN lời gốc 100% — chỉ quyết định chỗ gộp, không sửa chữ.
 
-Trả về CHỈ JSON array các chuỗi (các cảnh theo thứ tự):
-["cảnh 1", "cảnh 2", ...]
+ĐỊNH DẠNG OUTPUT — BẮT BUỘC theo mẫu sau, mỗi cảnh trên dòng riêng, phân cách bằng dòng "===SCENE===":
+
+===SCENE===
+nội dung cảnh 1 ở đây
+===SCENE===
+nội dung cảnh 2 ở đây
+===SCENE===
+nội dung cảnh 3 ở đây
+
+KHÔNG dùng JSON, KHÔNG ngoặc kép quanh cảnh, KHÔNG đánh số. CHỈ in các cảnh phân cách bằng "===SCENE===".
 
 Đoạn kịch bản:
 """
 ${batches[bi]}
 """`;
-    const reply = await callClaude(prompt, 4000);
-    all.push(...parseJSON(reply));
+    let reply = await callClaude(prompt, 4000);
+    // Parse theo delimiter — chống lỗi escape JSON
+    let parts = reply.split(/===SCENE===/i).map(s => s.trim()).filter(Boolean);
+    // Bỏ phần preamble nếu có (vd "Đây là các cảnh:")
+    if (parts.length && parts[0].length < 80 && !/[.!?…]$/.test(parts[0])) parts = parts.slice(1);
+    if (!parts.length) {
+      // Retry 1 lần
+      reply = await callClaude(prompt, 4000);
+      parts = reply.split(/===SCENE===/i).map(s => s.trim()).filter(Boolean);
+      if (parts.length && parts[0].length < 80 && !/[.!?…]$/.test(parts[0])) parts = parts.slice(1);
+    }
+    if (!parts.length) {
+      // Fallback: chia regex cho riêng batch này, không kill cả run
+      console.warn('Smart split batch ' + (bi+1) + ' parse rỗng → fallback fast');
+      parts = splitScenesFast(batches[bi], min, max);
+    }
+    all.push(...parts);
   }
   return all;
 }
