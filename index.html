@@ -3845,14 +3845,16 @@ function verifyScenesAgainstScript(){
   const sceneJoined = state.scenes.map(s => s.text).join(' ');
   const sceneNorm = normalize(sceneJoined);
 
+  const tokenize = s => s.match(/[\w'-]+/g) || [];
+  const oWordsAll = tokenize(origNorm);
+
   if (origNorm === sceneNorm) {
-    setStatus2('✅ Khớp 100% — tất cả 118 từ trong kịch bản đều có trong cảnh, không mất, không thêm.', 'ok');
+    setStatus2(`✅ Khớp 100% — tất cả ${oWordsAll.length} từ trong kịch bản đều có trong ${state.scenes.length} cảnh, không mất, không thêm.`, 'ok');
     return;
   }
 
   // Word-level diff bằng multiset (đếm số lần xuất hiện)
-  const tokenize = s => s.match(/[\w'-]+/g) || [];
-  const oW = tokenize(origNorm);
+  const oW = oWordsAll;
   const sW = tokenize(sceneNorm);
   const count = arr => { const c = {}; arr.forEach(w => c[w] = (c[w]||0)+1); return c; };
   const oC = count(oW), sC = count(sW);
@@ -6068,6 +6070,32 @@ async function t7RenderAll(){
   if (!silent && !t7State.audioBuffer) return setStatus7('Cần upload audio trước (hoặc chọn "Chỉ ảnh — không tiếng").', 'error');
   const timings = parseT7Timings();
   if (timings.length === 0) return setStatus7('Cần điền timing.', 'error');
+
+  // ⚠️ Phát hiện timing Tool 7 lệch với state.scenes (vd Tool 8 đã căn timing nhưng Tool 7 chưa load lại)
+  if (state.scenes && state.scenes.length) {
+    const sceneTimings = state.scenes.map(s => s.duration || 3);
+    const t7Total = timings.reduce((a,b)=>a+b, 0);
+    const sceneTotal = sceneTimings.reduce((a,b)=>a+b, 0);
+    const diff = Math.abs(t7Total - sceneTotal);
+    // Lệch >5 giây hoặc >5% tổng → có thể user quên load timing mới
+    if (diff > 5 && diff / Math.max(sceneTotal, 1) > 0.05) {
+      const useNew = confirm(
+        `⚠️ Timing trong Tool 7 lệch ${diff.toFixed(1)}s so với cảnh hiện tại của Tool 2/8.\n\n` +
+        `• Tool 7 hiện tại: ${t7Total.toFixed(1)}s (${timings.length} cảnh)\n` +
+        `• Cảnh ở Tool 2/8: ${sceneTotal.toFixed(1)}s (${sceneTimings.length} cảnh)\n\n` +
+        `Có thể bạn đã chạy Tool 8 căn timing nhưng chưa "Load từ Tool 02" lại.\n\n` +
+        `OK = Dùng timing MỚI từ Tool 2/8 (khuyên dùng)\nCancel = Vẫn dùng timing hiện tại trong Tool 7`
+      );
+      if (useNew) {
+        document.getElementById('t7Timing').value = sceneTimings.join('\n');
+        updateT7TimingInfo();
+        // Re-parse sau khi update
+        timings.length = 0;
+        sceneTimings.forEach(n => timings.push(n));
+      }
+    }
+  }
+
   const sceneCount = Math.min(t7State.images.length, timings.length);
   if (sceneCount === 0) return setStatus7('Số ảnh hoặc timing = 0.', 'error');
 
