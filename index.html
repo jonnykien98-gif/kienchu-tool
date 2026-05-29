@@ -1035,7 +1035,8 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </select>
         <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
         <button class="btn ghost" id="t2FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="doGenerateScenePrompts()" title="Chỉ tạo các cảnh chưa có prompt">🔧 Tạo nốt cảnh thiếu <span id="t2MissingCount"></span></button>
-        <button class="btn ghost" onclick="exportVideo()">↓ Xuất Dữ Liệu</button>
+        <button class="btn ghost" onclick="exportVideo()">↓ Xuất JSON</button>
+        <button class="btn ghost" onclick="exportScenesXLSX()" title="Xuất danh sách cảnh ra file Excel (.xlsx)">📊 Xuất XLSX</button>
         <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT2()" title="Xoá toàn bộ data Tool 2">🗑 Xoá hết</button>
         <div class="batch-control"><span>Batch:</span><input type="number" id="batchSize" value="5" min="1" max="20"></div>
       </div>
@@ -4659,6 +4660,77 @@ function exportVideo(){
     exportedAt: new Date().toISOString()
   }, 'video-' + Date.now() + '.json');
   setStatus2('✓ Đã xuất.', 'ok');
+}
+
+// Xuất danh sách cảnh ra file Excel (.xlsx) — lazy load SheetJS từ CDN
+async function exportScenesXLSX(){
+  if (!state.scenes.length) return setStatus2('Chưa có cảnh để xuất.', 'error');
+  syncTool2();
+  setStatus2('Đang tạo file XLSX...', 'working');
+  try {
+    if (typeof XLSX === 'undefined') {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Không tải được thư viện XLSX'));
+        document.head.appendChild(s);
+      });
+    }
+
+    // Sheet 1: "scenes" — định dạng 4 cột theo mẫu
+    const sceneRows = state.scenes.map((s, i) => {
+      const parts = [s.character, s.background].filter(Boolean);
+      return {
+        '#': i + 1,
+        'VO': s.text || '',
+        'Nội dung / Mô tả': parts.join(' / '),
+        'Camera guide': s.camera || ''
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(sceneRows);
+    ws['!cols'] = [{ wch: 5 }, { wch: 70 }, { wch: 35 }, { wch: 18 }];
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'scenes');
+
+    // Sheet 2: "prompts" — nếu có prompt G-Labs (bonus, dễ tham chiếu)
+    const promptRows = state.scenes
+      .map((s, i) => ({
+        '#': i + 1,
+        'ID': s.id,
+        'VO': s.text || '',
+        'Prompt G-Labs': cleanPrompt(state.scenePrompts[s.id]) || ''
+      }))
+      .filter(r => r['Prompt G-Labs']);
+    if (promptRows.length) {
+      const ws2 = XLSX.utils.json_to_sheet(promptRows);
+      ws2['!cols'] = [{ wch: 5 }, { wch: 6 }, { wch: 50 }, { wch: 90 }];
+      ws2['!freeze'] = { xSplit: 0, ySplit: 1 };
+      XLSX.utils.book_append_sheet(wb, ws2, 'prompts');
+    }
+
+    // Sheet 3: "Hồ sơ" — nếu chế độ Inline + hồ sơ có data
+    if (Object.keys(state.charBible || {}).length || Object.keys(state.bgBible || {}).length) {
+      const bibleRows = [];
+      Object.entries(state.charBible || {}).forEach(([name, desc]) => bibleRows.push({ Loại: 'Nhân vật', Tên: name, 'Mô tả cố định': desc }));
+      Object.entries(state.bgBible || {}).forEach(([name, desc]) => bibleRows.push({ Loại: 'Bối cảnh', Tên: name, 'Mô tả cố định': desc }));
+      if (bibleRows.length) {
+        const ws3 = XLSX.utils.json_to_sheet(bibleRows);
+        ws3['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 80 }];
+        XLSX.utils.book_append_sheet(wb, ws3, 'Hồ sơ');
+      }
+    }
+
+    const profile = getProfile();
+    const safeName = (profile?.tenKenh || 'video').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
+    const filename = `scene-list_${safeName}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    setStatus2(`✓ Đã xuất ${sceneRows.length} cảnh ra ${filename}` + (promptRows.length ? ` (kèm sheet prompts)` : ''), 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus2('Lỗi xuất XLSX: ' + e.message, 'error');
+  }
 }
 
 function copyAllScenePrompts(){
