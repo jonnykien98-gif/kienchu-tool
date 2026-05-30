@@ -2854,7 +2854,6 @@ function downloadJSON(obj, name){
 /* ============================================================
    AUTH FLOW
 ============================================================ */
-// Bypass login gate khi user bấm "Vào thử không đăng nhập"
 function enterAsGuest(){
   const gate = document.getElementById('authGate');
   const appRoot = document.getElementById('appRoot');
@@ -2865,23 +2864,16 @@ function enterAsGuest(){
 }
 
 // Fallback: nếu Firebase load > 5s mà chưa gọi onAuthChange → tự vào guest mode
-(function authFallback(){
-  const TIMEOUT = 5000;
-  let fired = false;
-  const origOnAuth = window.onAuthChange;
-  window.onAuthChange = async function(user){
-    fired = true;
-    return origOnAuth ? origOnAuth(user) : undefined;
-  };
-  setTimeout(() => {
-    if (!fired) {
-      console.warn('Firebase chưa phản hồi sau ' + TIMEOUT + 'ms — tự vào guest mode');
-      enterAsGuest();
-    }
-  }, TIMEOUT);
-})();
+window._authFired = false;
+setTimeout(() => {
+  if (!window._authFired) {
+    console.warn('Firebase chưa phản hồi sau 5s — tự vào guest mode');
+    enterAsGuest();
+  }
+}, 5000);
 
 window.onAuthChange = async function(user){
+  window._authFired = true;
   const gate = document.getElementById('authGate');
   const appRoot = document.getElementById('appRoot');
   const authBox = document.getElementById('userBoxAuth');
