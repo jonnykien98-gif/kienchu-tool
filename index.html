@@ -27,7 +27,7 @@ import { getFirestore, doc, setDoc, getDoc }
 
 const firebaseConfig = {
   apiKey: "AIzaSyAjnbMBiouI2TfQ2VA13CJZ1INqs0oMGPc",
-  authDomain: "chukienmedia.com",
+  authDomain: "chukien-media.firebaseapp.com",
   projectId: "chukien-media",
   storageBucket: "chukien-media.firebasestorage.app",
   messagingSenderId: "375192994724",
@@ -2864,9 +2864,9 @@ function enterAsGuest(){
   if (typeof restoreUI === 'function') restoreUI();
 }
 
-// Fallback: nếu Firebase load > 3s mà chưa gọi onAuthChange → tự vào guest mode
+// Fallback: nếu Firebase load > 5s mà chưa gọi onAuthChange → tự vào guest mode
 (function authFallback(){
-  const TIMEOUT = 3000;
+  const TIMEOUT = 5000;
   let fired = false;
   const origOnAuth = window.onAuthChange;
   window.onAuthChange = async function(user){
