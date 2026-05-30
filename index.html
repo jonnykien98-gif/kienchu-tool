@@ -4139,18 +4139,18 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
       const styleStr = (p.sceneStyle || '').toLowerCase();
       const isCartoon2D = /cartoon|flat|2d|animation|hand.drawn|stick|explainer|educational/.test(styleStr);
       const animFormulaBlock = isCartoon2D ? `
-🎬 ANIMATION FORMULA (BẮT BUỘC áp dụng cho mọi cảnh — đây là style kênh):
-Công thức: [Nhân vật đơn giản] + [Hành động cụ thể] + [Bối cảnh rõ ràng], flat 2D animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, [palette màu phù hợp bối cảnh], educational explainer video style, no photorealism, flat colors --ar 16:9
+🎬 ANIMATION STYLE RULES (BẮT BUỘC áp dụng cho mọi cảnh — đây là style kênh):
+Visual style: flat 2D animation, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors --ar 16:9
 
-📐 Nhân vật phải là: simple cartoon stick/round-head figure, thick black outlines, round white/light head, small dot eyes, simple curved mouth, flat-colored clothing. KHÔNG vẽ người realistic.
+📐 Nhân vật phải là: simple cartoon stick/round-head figure, thick black outlines, round white/light head, small dot eyes, simple curved mouth, flat-colored clothing. KHÔNG vẽ người realistic, KHÔNG màu da.
+${dm === 'tag' ? `- Ghi tag [tên-nhân-vật] như bình thường — AI gen ảnh sẽ dùng reference sheet để biết đây là stick figure style.` : '- Tả nhân vật theo stick figure formula: "a simple cartoon stick figure with round white head, [hành động], [trang phục màu đơn]"'}
 
-🎨 Môi trường phải là: simple flat shapes (teal/blue waves = ocean, green hills = countryside, orange flames = fire, grey rocks = cave, dark stone = ancient), muted warm palette, simple details (V-shape seagulls, puffy cloud shapes, wavy lines = water). KHÔNG vẽ cảnh 3D hay photorealistic.
+🎨 Môi trường phải là: simple flat shapes (teal/blue waves = ocean, green hills = countryside, orange flames = fire, grey rocks = cave), muted warm palette, simple details (V-shape seagulls, puffy cloud shapes, wavy lines = water). KHÔNG vẽ cảnh 3D hay photorealistic.
 
-📦 Ví dụ mẫu theo bối cảnh:
-- Biển/thuyền: "A cartoon sailor on a wooden trading boat on calm ocean waves, simple 2D flat, thick black outlines, round white head, teal blue water with simple wave lines, pale sky, white puffy clouds, seagulls as V shapes"
-- Hang động/tiền sử: "Three prehistoric stick figures around campfire in cave, flat 2D cartoon, thick black outlines, warm orange firelight, dark cave walls with simple animal drawings, rocky ground, smoke in thin lines"  
-- Cánh đồng/nông thôn: "Cartoon farmer stick figure planting rice in flooded paddy, flat 2D, thick black outlines, lush green terraced hills, pale blue sky, calm water reflection, simple white clouds, wearing conical hat"
-- Thành phố/hiện đại: "Simple cartoon person walking city street, flat 2D, thick black outlines, simple building silhouettes, clean sidewalk, warm muted palette"
+📦 Ví dụ mẫu (CHỈ dùng khi KHÔNG có reference tag — chế độ inline):
+- Biển/thuyền: "...on calm ocean, simple 2D flat, thick black outlines, teal blue water with simple wave lines, pale sky, V-shape seagulls"
+- Hang động: "...inside cave, flat 2D cartoon, dark cave walls with simple animal drawings, orange firelight glow"
+- Đồng ruộng: "...in flooded rice paddy, flat 2D, lush green terraced hills, pale blue sky, calm water reflection"
 ` : '';
 
       const prompt = `Bạn là prompt engineer G-Labs (Imagen / Nano Banana). Tạo prompt cảnh cho mỗi cảnh bên dưới.
@@ -4174,25 +4174,28 @@ Với mỗi cảnh, TRƯỚC TIÊN xác định LOẠI CẢNH từ nội dung VO
 🔹 LOẠI 1 — NHÂN VẬT TRONG BỐI CẢNH (VO nói về hành động của người):
 ${mode1Rule}
 
-🔹 LOẠI 2 — INFOGRAPHIC / BIỂU ĐỒ (VO nói về số liệu, so sánh, thống kê):
-- Mô tả layout: biểu đồ cột/tròn/đường, nhãn text, con số
-- Mô tả bố cục: bên trái/phải, mũi tên, icon minh hoạ
-- VD: "Split layout: left side shows bar chart declining with red arrow, right side shows growth chart with green arrow, small person icon above left, basket icon above right, clean white background, minimal line art style"
+🔹 LOẠI 2 — INFOGRAPHIC / BIỂU ĐỒ ĐƠN GIẢN (VO nói về số liệu, so sánh, thống kê):
+- Vẽ ĐƠN GIẢN: 1-2 icon/biểu đồ đơn giản + nhân vật ${dm === 'tag' ? '[tên-nhân-vật]' : 'stick figure'} chỉ tay hoặc đứng cạnh
+- Tuyệt đối KHÔNG vẽ infographic phức tạp nhiều panel, KHÔNG nhiều text label
+- KHÔNG vẽ nội tạng, ký hiệu y tế trừ khi VO yêu cầu rõ ràng
+- VD: "${dm === 'tag' ? '[narrator-male]' : 'A cartoon stick figure'} pointing at a simple bar chart with 3 bars (short, medium, tall), clean flat background, minimal style"
 
 🔹 LOẠI 3 — QUY TRÌNH / BƯỚC (VO giải thích cách làm, từng bước):
-- Mô tả các bước từ trái sang phải với mũi tên
-- Mỗi bước có icon/hình minh hoạ + label text bên dưới
-- VD: "Three-step process left to right: step 1 glass jar labeled '1. SOAK', arrow, step 2 foaming mug with clock icon '2. WAIT', arrow, step 3 finished mug 'DONE'"
+- Mô tả 2-3 bước từ trái sang phải với mũi tên đơn giản
+- ${dm === 'tag' ? 'Nếu có nhân vật: ghi [tên-nhân-vật] thực hiện hành động' : 'Stick figure thực hiện từng bước'}
+- VD: "Three steps left to right with arrows: step 1 seed icon, step 2 watering can icon, step 3 plant sprouting, warm muted palette, flat 2D style"
 
 🔹 LOẠI 4 — ICON / KHÁI NIỆM (VO giải thích khái niệm trừu tượng):
-- Mô tả icon/biểu tượng trung tâm + các icon phụ xung quanh
+- 1 icon trung tâm lớn + tối đa 4 icon phụ xung quanh, kiểu simple flat illustration
 - Dùng metaphor hình ảnh (não = suy nghĩ, tim = cảm xúc, ví tiền = tài chính)
-- VD: "Central brain illustration surrounded by 5 circular icons: declining chart, warning triangle, dollar document, empty wallet, with lightning bolts connecting them"
+- KHÔNG vẽ nhân vật realistic, KHÔNG vẽ nội tạng người trừ khi VO nói về y tế cụ thể
+- ${dm === 'tag' ? 'Nếu có nhân vật phụ: ghi [tên-nhân-vật] đứng cạnh icon' : 'Nếu có người: dùng stick figure đơn giản'}
+- VD: "Central large coin icon surrounded by 4 small flat icons: house, car, graduation cap, piggy bank, connected by dotted lines, warm yellow background, flat 2D style"
 
 🔹 LOẠI 5 — SỐ/TỪ KHOÁ ẤN TƯỢNG + MINH HOẠ (CHỈ khi VO có con số sốc, năm cụ thể, hoặc 1 từ khoá duy nhất):
 - CHỈ dùng cho text 1-4 TỪ ngắn, KHÔNG dùng cho câu trần thuật/đối thoại
-- Text ngắn bold ở trên/giữa + hình minh hoạ bên dưới
-- VD: "Bold black text '13,000 YEARS AGO' at top, below a cartoon beer mug with foam overflowing, white background"
+- Text ngắn bold ở trên/giữa + hình minh hoạ đơn giản bên dưới
+- VD: "Bold black text '13,000 YEARS' at top center, below a simple flat illustration of ancient cave with campfire, warm earthy palette, flat 2D style"
 - KHÔNG dùng LOẠI 5 nếu VO là câu kể chuyện — chọn LOẠI 1 (nhân vật) hoặc LOẠI 4 (icon khái niệm)
 
 QUY TẮC CHUNG:
@@ -4219,7 +4222,7 @@ ${prevSceneCtx ? '\n📍 CẢNH NGAY TRƯỚC (cảnh đầu tiên bên dưới 
 - KHÔNG ghi "LOẠI 1", "LOẠI 2", "LOẠI 3", "LOẠI 4", "LOẠI 5" vào prompt output
 - KHÔNG ghi "Type 1", "Type 2", ... hay bất kỳ label phân loại nào
 - KHÔNG ghi "[001]", "[002]" hay chỉ số cảnh vào prompt
-${dm !== 'tag' ? '- KHÔNG dùng ngoặc vuông [] cho tên nhân vật/bối cảnh — phải TẢ THẲNG bằng chữ tiếng Anh\n' : ''}- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
+${dm === 'tag' ? '- LUÔN dùng [tên-nhân-vật] và [tên-bối-cảnh] cho MỌI cảnh có nhân vật — KHÔNG tả inline\n- VD đúng: "[narrator-male] walks in [outdoor-nature-daytime]" | VD SAI: "a cartoon stick figure walks in a green field"\n' : '- KHÔNG dùng ngoặc vuông [] cho tên nhân vật/bối cảnh — TẢ THẲNG bằng chữ tiếng Anh\n'}- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
 - Prompt trả về phải BẮT ĐẦU NGAY bằng mô tả visual (vd: "Medium shot of...", "Split layout showing...", "Wide angle of..."), KHÔNG có prefix nào khác
 
 Ngôn ngữ prompt: TIẾNG ANH (cho image gen). 60-120 từ/prompt.
