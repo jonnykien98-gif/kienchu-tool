@@ -4871,6 +4871,56 @@ async function exportScenesXLSX(){
       XLSX.utils.book_append_sheet(wb, ws2, 'prompts');
     }
 
+    // Sheet "build" — format cho build_video_srt.py
+    // Mỗi cảnh có ảnh B sẽ ra 2 dòng (001a + 001b), chia đôi thời lượng
+    const buildRows = [];
+    state.scenes.forEach((s, i) => {
+      const hasB = !!(cleanPrompt((state.scenePrompts2 || {})[s.id]));
+      const dur = s.duration || 5;
+      if (hasB) {
+        const durA = Math.round(dur / 2 * 10) / 10;
+        const durB = Math.round((dur - durA) * 10) / 10;
+        buildRows.push({
+          'scene_id': s.id + 'a',
+          'original_id': s.id,
+          'image_file': s.id + 'a.jpg',
+          'duration': durA,
+          'vo_text': s.text || '',
+          'character': s.character || '',
+          'background': s.background || '',
+          'camera': s.camera || '',
+          'prompt': cleanPrompt(state.scenePrompts[s.id]) || ''
+        });
+        buildRows.push({
+          'scene_id': s.id + 'b',
+          'original_id': s.id,
+          'image_file': s.id + 'b.jpg',
+          'duration': durB,
+          'vo_text': '',
+          'character': s.character || '',
+          'background': s.background || '',
+          'camera': s.camera || '',
+          'prompt': cleanPrompt(state.scenePrompts2[s.id]) || ''
+        });
+      } else {
+        buildRows.push({
+          'scene_id': s.id,
+          'original_id': s.id,
+          'image_file': s.id + '.jpg',
+          'duration': dur,
+          'vo_text': s.text || '',
+          'character': s.character || '',
+          'background': s.background || '',
+          'camera': s.camera || '',
+          'prompt': cleanPrompt(state.scenePrompts[s.id]) || ''
+        });
+      }
+    });
+    const wsBuild = XLSX.utils.json_to_sheet(buildRows);
+    wsBuild['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 8 }, { wch: 55 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 80 }];
+    wsBuild['!freeze'] = { xSplit: 0, ySplit: 1 };
+    XLSX.utils.book_append_sheet(wb, wsBuild, 'build');
+
     // Sheet 3: "Hồ sơ" — nếu chế độ Inline + hồ sơ có data
     if (Object.keys(state.charBible || {}).length || Object.keys(state.bgBible || {}).length) {
       const bibleRows = [];
