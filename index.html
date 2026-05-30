@@ -43,9 +43,13 @@ provider.setCustomParameters({ prompt: 'select_account' }); // chỉ hỏi khi c
 // Đảm bảo session được lưu LOCAL (không mất khi tắt tab)
 setPersistence(auth, browserLocalPersistence).catch(e => console.warn('setPersistence error:', e));
 
-// Sau khi redirect quay về, xử lý result (silently — onAuthStateChanged sẽ fire sau)
-getRedirectResult(auth).catch(e => {
-  console.warn('Redirect result error:', e);
+// Xử lý redirect result (nếu có) — sau đó onAuthStateChanged tự fire
+getRedirectResult(auth).then(result => {
+  if (result?.user && typeof window.onAuthChange === 'function') {
+    window.onAuthChange(result.user);
+  }
+}).catch(e => {
+  console.warn('Redirect result error:', e.code || e.message);
 });
 
 // Expose to window for non-module code
@@ -54,10 +58,13 @@ window.firebaseDb = db;
 // Hybrid sign-in: popup trước, fallback redirect nếu popup fail
 window.firebaseSignIn = async () => {
   try {
-    await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    // Popup thành công — gọi thẳng onAuthChange vì COOP header có thể block callback
+    if (result?.user && typeof window.onAuthChange === 'function') {
+      window.onAuthChange(result.user);
+    }
   } catch (e) {
     console.warn('Popup sign-in failed:', e.code, '— falling back to redirect');
-    // Popup bị block/đóng/COOP chặn → redirect cả trang
     if (e.code === 'auth/popup-closed-by-user' ||
         e.code === 'auth/popup-blocked' ||
         e.code === 'auth/cancelled-popup-request' ||
