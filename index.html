@@ -836,7 +836,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
 </div>
 
 <!-- ===== AUTH GATE ===== -->
-<div class="auth-gate" id="authGate">
+<div class="auth-gate" id="authGate" style="display:none">
   <div class="auth-card">
     <div class="auth-logo">Chu Kiên Media</div>
     <div class="auth-sub">Pipeline Builder — Kịch bản → Video</div>
@@ -855,7 +855,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
 </div>
 
 <!-- ===== APP (after login) ===== -->
-<div class="app" id="appRoot" style="display:none">
+<div class="app" id="appRoot" style="display:flex">
 
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
@@ -2862,34 +2862,11 @@ function downloadJSON(obj, name){
 /* ============================================================
    AUTH FLOW
 ============================================================ */
-function enterAsGuest(){
-  const gate = document.getElementById('authGate');
-  const appRoot = document.getElementById('appRoot');
-  if (gate) gate.style.display = 'none';
-  if (appRoot) appRoot.style.display = 'flex';
-  loadApiSettings();
-  if (typeof restoreUI === 'function') restoreUI();
-}
-
-// Fallback: nếu Firebase load > 5s mà chưa gọi onAuthChange → tự vào guest mode
-window._authFired = false;
-setTimeout(() => {
-  if (!window._authFired) {
-    console.warn('Firebase chưa phản hồi sau 5s — tự vào guest mode');
-    enterAsGuest();
-  }
-}, 5000);
+function enterAsGuest(){} // App luôn hiện — không cần gate
 
 window.onAuthChange = async function(user){
-  window._authFired = true;
-  const gate = document.getElementById('authGate');
-  const appRoot = document.getElementById('appRoot');
   const authBox = document.getElementById('userBoxAuth');
   const guestBox = document.getElementById('userBoxGuest');
-
-  // LUÔN hiện app ngay từ đầu — user xem tool trước, login sau cũng được
-  gate.style.display = 'none';
-  appRoot.style.display = 'flex';
 
   if (user) {
     // Logged in — hiện user card, ẩn guest
