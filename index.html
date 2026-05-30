@@ -2062,6 +2062,7 @@ const state = {
   // Tool data (sẽ phát triển ở Phase 2+)
   scenes: [],
   scenePrompts: {},
+  scenePrompts2: {},
   characterImages: {},
   assetCharPrompts: {},
   assetBgPrompts: {},
@@ -2521,6 +2522,7 @@ function saveEditPrompt(){
   const val = ta.value.trim();
   const { type, key } = state.editingPrompt;
   if (type === 'scene') state.scenePrompts[key] = val;
+  else if (type === 'scene2') { if (!state.scenePrompts2) state.scenePrompts2 = {}; state.scenePrompts2[key] = val; }
   else if (type === 'char') state.assetCharPrompts[key] = val;
   else if (type === 'bg') state.assetBgPrompts[key] = val;
   else if (type === 'styleRef') state.styleRefPrompt = val;
@@ -3130,6 +3132,7 @@ function createEmptyWorkData(){
     script: '',
     scenes: [],
     scenePrompts: {},
+    scenePrompts2: {},
     charactersV: [],
     backgroundsV: [],
     assetCharPrompts: {},
@@ -3151,6 +3154,7 @@ function syncStateToCurrentProfile(){
   p.workData.script = state.script || '';
   p.workData.scenes = state.scenes || [];
   p.workData.scenePrompts = state.scenePrompts || {};
+  p.workData.scenePrompts2 = state.scenePrompts2 || {};
   p.workData.charactersV = state.charactersV || [];
   p.workData.backgroundsV = state.backgroundsV || [];
   p.workData.assetCharPrompts = state.assetCharPrompts || {};
@@ -3169,6 +3173,7 @@ function loadStateFromProfile(p){
   state.script = wd.script || '';
   state.scenes = wd.scenes || [];
   state.scenePrompts = wd.scenePrompts || {};
+  state.scenePrompts2 = wd.scenePrompts2 || {};
   state.charactersV = wd.charactersV || [];
   state.backgroundsV = wd.backgroundsV || [];
   state.assetCharPrompts = wd.assetCharPrompts || {};
@@ -3950,6 +3955,7 @@ async function doSplit(){
       setTimeout(() => showUpgradeModal(`Kịch bản chia ra ${maxScenes + cut} cảnh, nhưng gói Free chỉ giữ ${maxScenes}. Nâng cấp Pro để dùng không giới hạn.`), 500);
     }
     state.scenePrompts = {};
+    state.scenePrompts2 = {};
     renderAllT2();
     setStatus2(`✓ Đã chia thành ${state.scenes.length} cảnh.${trimmedNotice}`, 'ok');
     saveState();
@@ -4272,8 +4278,60 @@ async function genSingleScenePrompt(id){
   }
 }
 
-async function doGenerateScenePrompts(){
-  syncTool2();
+// ---- PROMPT B (ảnh thứ 2 cho cảnh dài) ----
+function addPromptB(id){
+  if (!state.scenePrompts2) state.scenePrompts2 = {};
+  state.scenePrompts2[id] = '';   // đánh dấu có B (rỗng để AI tạo)
+  renderPromptsV();
+  saveState(true);
+}
+
+function removePromptB(id){
+  if (state.scenePrompts2) delete state.scenePrompts2[id];
+  renderPromptsV();
+  saveState(true);
+}
+
+async function genSingleScenePromptB(id){
+  const p = getProfile();
+  if (!p) return setStatus2('Cần Profile trước.', 'error');
+  const idx = state.scenes.findIndex(s => s.id === id);
+  if (idx < 0) return;
+  const scene = state.scenes[idx];
+  const promptA = cleanPrompt(state.scenePrompts[id]);
+  if (!promptA) return setStatus2(`Cần tạo Prompt A cho cảnh [${id}] trước.`, 'error');
+  setStatus2(`Đang tạo Prompt B cảnh [${id}]...`, 'working');
+  try {
+    const sysPrompt = `Bạn là prompt engineer G-Labs. Dựa trên Prompt A của cảnh, tạo Prompt B cho NỬA SAU của cảnh đó.
+Prompt B phải:
+- Cùng nhân vật, bối cảnh, style với Prompt A
+- Thể hiện HÀNH ĐỘNG / TRẠNG THÁI tiếp theo (sau khi Prompt A kết thúc)
+- Cùng độ dài và format với Prompt A (~60-100 từ)
+- Tiếng Anh, bắt đầu ngay bằng mô tả visual
+
+VO cảnh: "${scene.text}"
+Thời lượng: ${scene.duration}s
+Prompt A: "${promptA}"
+
+Trả về CHỈ text prompt B, không có prefix, không có JSON.`;
+    const reply = await callClaude(sysPrompt, 400);
+    const clean = cleanPrompt(reply.trim());
+    if (clean) {
+      if (!state.scenePrompts2) state.scenePrompts2 = {};
+      state.scenePrompts2[id] = clean;
+      renderPromptsV();
+      setStatus2(`✓ Đã tạo Prompt B cảnh [${id}].`, 'ok');
+      saveState(true);
+    } else {
+      setStatus2(`⚠️ Tạo Prompt B thất bại, thử lại.`, 'error');
+    }
+  } catch(e) {
+    console.error(e);
+    setStatus2('Lỗi: ' + e.message, 'error');
+  }
+}
+
+
   if (state.scenes.length === 0) return setStatus2('Cần chia cảnh trước.', 'error');
   const bs = parseInt(document.getElementById('batchSize').value) || 5;
   const p = getProfile();
@@ -4610,8 +4668,12 @@ function renderPromptsV(){
   if (state.scenes.length === 0) { box.innerHTML = '<div class="empty-state">Chưa có cảnh.</div>'; return; }
   box.innerHTML = state.scenes.map(s => {
     const p = cleanPrompt(state.scenePrompts[s.id]);
-    const promptEsc = p ? p.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
+    const p2 = cleanPrompt((state.scenePrompts2 || {})[s.id]);
+    const promptEsc = p ? p.replace(/`/g, "'").replace(/\\/g, '\\\\') : '';
+    const prompt2Esc = p2 ? p2.replace(/`/g, "'").replace(/\\/g, '\\\\') : '';
     const editing = isEditingPrompt('scene', s.id);
+    const editing2 = isEditingPrompt('scene2', s.id);
+    const hasB = !!(p2 || editing2);
     return `<div class="prompt-card ${p ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="prompt-card-head">
         <span class="prompt-card-id">[${s.id}]</span>
@@ -4620,19 +4682,43 @@ function renderPromptsV(){
       <div class="prompt-card-vo">"${escapeHtml(s.text)}"</div>
       ${editing
         ? renderEditPromptUI(p)
-        : `<div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt.'}</div>
+        : `<div class="prompt-card-text" style="margin-bottom:4px">${p ? escapeHtml(p) : 'Chưa có prompt.'}</div>
            <div class="prompt-card-actions">
              ${p ? `<button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
              <button class="btn ghost sm" onclick="startEditPrompt('scene','${s.id}')">✏️ Sửa</button>` : ''}
-             <button class="btn ghost sm" style="border-color:#d97706;color:#d97706" onclick="genSingleScenePrompt('${s.id}')" title="Tạo lại prompt cho riêng cảnh này">🔧 ${p ? 'Tạo lại' : 'Tạo prompt'}</button>
+             <button class="btn ghost sm" style="border-color:#d97706;color:#d97706" onclick="genSingleScenePrompt('${s.id}')" title="Tạo lại prompt A">🔧 ${p ? 'Tạo lại' : 'Tạo prompt'}</button>
+             ${p && !hasB ? `<button class="btn ghost sm" style="border-color:#0d9488;color:#0d9488" onclick="addPromptB('${s.id}')">✂️ Thêm ảnh B</button>` : ''}
            </div>`
       }
+      ${hasB ? `<div style="margin-top:10px;padding-top:10px;border-top:1.5px dashed var(--teal)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:11px;font-weight:700;color:var(--teal);background:rgba(13,148,136,.1);padding:2px 8px;border-radius:20px">🖼 ẢNH B</span>
+          <span style="font-size:11px;color:var(--text-dim)">nửa sau cảnh · ${s.duration}s</span>
+          <button class="btn ghost sm" style="margin-left:auto;color:var(--red);border-color:var(--red);font-size:11px;padding:3px 8px" onclick="removePromptB('${s.id}')">🗑</button>
+        </div>
+        ${editing2
+          ? renderEditPromptUI(p2)
+          : `<div class="prompt-card-text" style="margin-bottom:4px">${p2 ? escapeHtml(p2) : '<em style="color:var(--text-dim)">Chưa có prompt B.</em>'}</div>
+             <div class="prompt-card-actions">
+               ${p2 ? `<button class="btn ghost sm" onclick="copyText(\`${prompt2Esc}\`)">📋 Sao chép</button>
+               <button class="btn ghost sm" onclick="startEditPrompt('scene2','${s.id}')">✏️ Sửa</button>` : ''}
+               <button class="btn ghost sm" style="border-color:#d97706;color:#d97706" onclick="genSingleScenePromptB('${s.id}')">🔧 ${p2 ? 'Tạo lại B' : 'Tạo prompt B'}</button>
+             </div>`
+        }
+      </div>` : ''}
     </div>`;
   }).join('');
-  // Fill unified textarea
+  // Fill unified textarea — A rồi B liền nhau, 1 dòng trống giữa
   const ta = document.getElementById('allPromptsV');
   if (ta) {
-    ta.value = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean).join('\n\n');
+    const lines = [];
+    state.scenes.forEach(s => {
+      const a = cleanPrompt(state.scenePrompts[s.id]);
+      const b = cleanPrompt((state.scenePrompts2 || {})[s.id]);
+      if (a) lines.push(a);
+      if (b) lines.push(b);
+    });
+    ta.value = lines.join('\n\n');
   }
   // Nút "Tạo nốt cảnh thiếu" — hiện khi có cảnh chưa có prompt
   const missing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
@@ -4751,12 +4837,13 @@ async function exportScenesXLSX(){
         '#': i + 1,
         'ID': s.id,
         'VO': s.text || '',
-        'Prompt G-Labs': cleanPrompt(state.scenePrompts[s.id]) || ''
+        'Prompt A': cleanPrompt(state.scenePrompts[s.id]) || '',
+        'Prompt B': cleanPrompt((state.scenePrompts2 || {})[s.id]) || ''
       }))
-      .filter(r => r['Prompt G-Labs']);
+      .filter(r => r['Prompt A'] || r['Prompt B']);
     if (promptRows.length) {
       const ws2 = XLSX.utils.json_to_sheet(promptRows);
-      ws2['!cols'] = [{ wch: 5 }, { wch: 6 }, { wch: 50 }, { wch: 90 }];
+      ws2['!cols'] = [{ wch: 5 }, { wch: 6 }, { wch: 50 }, { wch: 85 }, { wch: 85 }];
       ws2['!freeze'] = { xSplit: 0, ySplit: 1 };
       XLSX.utils.book_append_sheet(wb, ws2, 'prompts');
     }
