@@ -4363,7 +4363,8 @@ Trả về CHỈ text prompt B, không có prefix, không có JSON.`;
   }
 }
 
-
+async function doGenerateScenePrompts(){
+  syncTool2();
   if (state.scenes.length === 0) return setStatus2('Cần chia cảnh trước.', 'error');
   const bs = parseInt(document.getElementById('batchSize').value) || 5;
   const p = getProfile();
