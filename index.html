@@ -5503,6 +5503,7 @@ function clearFiles(){
   if (!renamer.files.length) return;
   if (!confirm('Xoá tất cả?')) return;
   renamer.files = [];
+  renamer.isB = [];
   renderFileList();
   setStatus4('Đã xoá.', 'ok');
 }
@@ -5514,24 +5515,66 @@ function renderFileList(){
   if (!renamer.files.length) { list.innerHTML = '<div class="empty-state">Chưa có file.</div>'; return; }
 
   const start = parseInt(document.getElementById('startNum').value) || 1;
-  const pad = parseInt(document.getElementById('padding').value) || 3;
-  const ext = document.getElementById('keepExt').value;
+  const pad   = parseInt(document.getElementById('padding').value) || 3;
+  const ext   = document.getElementById('keepExt').value;
+
+  // Build new names — track scene counter, handle A/B
+  // renamer.isB[i] = true nếu ảnh đó là ảnh B (nửa sau cảnh)
+  if (!renamer.isB) renamer.isB = [];
+  while (renamer.isB.length < renamer.files.length) renamer.isB.push(false);
+
+  // Tính số thứ tự từng ảnh
+  const names = [];
+  let sceneNum = start;
+  for (let i = 0; i < renamer.files.length; i++) {
+    const f   = renamer.files[i];
+    const oe  = f.name.match(/\.[a-z0-9]+$/i)?.[0] || '.jpg';
+    const ne  = ext === 'keep' ? oe : '.' + ext;
+    const isB = renamer.isB[i];
+    // Nếu là B → dùng cùng số với ảnh trước (A), thêm suffix 'b'
+    // Nếu là A (nhưng có B theo sau) → suffix 'a'
+    const nextIsB = renamer.isB[i + 1];
+    const prevIsB = i > 0 && renamer.isB[i - 1];
+    if (isB) {
+      // B: dùng sceneNum hiện tại (chưa tăng)
+      const num = String(sceneNum - 1).padStart(pad, '0');
+      names.push({ num, suffix: 'b', ne, sceneNum: sceneNum - 1 });
+    } else {
+      const num = String(sceneNum).padStart(pad, '0');
+      // A: có suffix 'a' nếu ảnh kế là B
+      const suffix = nextIsB ? 'a' : '';
+      names.push({ num, suffix, ne, sceneNum });
+      sceneNum++;
+    }
+  }
 
   list.innerHTML = `<table class="scene-table">
-    <thead><tr><th>#</th><th>File gốc</th><th></th><th>Tên mới</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>File gốc</th><th></th><th>Tên mới</th><th>A/B</th><th></th></tr></thead>
     <tbody>` +
     renamer.files.map((f, i) => {
-      const num = String(start + i).padStart(pad, '0');
-      const oe = f.name.match(/\.[a-z0-9]+$/i)?.[0] || '.jpg';
-      const ne = ext === 'keep' ? oe : '.' + ext;
+      const { num, suffix, ne } = names[i];
+      const isB = renamer.isB[i];
+      const newName = num + suffix + ne;
+      const abBtn = `<button class="btn ghost sm" style="font-size:11px;padding:2px 7px;${isB ? 'background:var(--teal);color:#fff;border-color:var(--teal)' : 'color:var(--text-dim)'}"
+        onclick="toggleB(${i})" title="${isB ? 'Đang là ảnh B — click để bỏ' : 'Đánh dấu là ảnh B (nửa sau cảnh)'}">${isB ? '🖼B' : '+B'}</button>`;
       return `<tr>
-        <td class="id">${num}</td>
+        <td class="id" style="color:${isB ? 'var(--teal)' : ''}">${num}${suffix}</td>
         <td style="color:var(--text-muted)">${escapeHtml(f.name)}</td>
         <td style="text-align:center;color:var(--text-dim)">→</td>
-        <td style="color:var(--accent);font-weight:600">${num}${ne}</td>
-        <td class="actions"><button class="del" onclick="renamer.files.splice(${i},1);renderFileList()" title="Xoá">×</button></td>
+        <td style="color:var(--accent);font-weight:600">${escapeHtml(newName)}</td>
+        <td>${abBtn}</td>
+        <td class="actions"><button class="del" onclick="renamer.files.splice(${i},1);renamer.isB.splice(${i},1);renderFileList()" title="Xoá">×</button></td>
       </tr>`;
-    }).join('') + `</tbody></table>`;
+    }).join('') + `</tbody></table>
+    <div style="padding:6px 14px;font-size:11px;color:var(--text-dim)">
+      💡 Bấm <strong>+B</strong> để đánh dấu ảnh là "nửa sau" của cảnh trước → tên sẽ thêm hậu tố <strong>a/b</strong> (VD: 002a, 002b)
+    </div>`;
+}
+
+function toggleB(i){
+  if (!renamer.isB) renamer.isB = [];
+  renamer.isB[i] = !renamer.isB[i];
+  renderFileList();
 }
 
 async function downloadZip(){
@@ -5539,24 +5582,42 @@ async function downloadZip(){
   if (typeof JSZip === 'undefined') return setStatus4('JSZip chưa tải.', 'error');
 
   setStatus4('Đang tạo ZIP...', 'working');
-  const zip = new JSZip();
+  const zip  = new JSZip();
   const start = parseInt(document.getElementById('startNum').value) || 1;
-  const pad = parseInt(document.getElementById('padding').value) || 3;
-  const ext = document.getElementById('keepExt').value;
+  const pad   = parseInt(document.getElementById('padding').value) || 3;
+  const ext   = document.getElementById('keepExt').value;
+  if (!renamer.isB) renamer.isB = [];
 
+  let sceneNum = start;
+  let abCount = 0;
   for (let i = 0; i < renamer.files.length; i++) {
-    const f = renamer.files[i];
-    const num = String(start + i).padStart(pad, '0');
-    const oe = f.name.match(/\.[a-z0-9]+$/i)?.[0] || '.jpg';
-    const ne = ext === 'keep' ? oe : '.' + ext;
-    zip.file(num + ne, await f.arrayBuffer());
+    const f   = renamer.files[i];
+    const oe  = f.name.match(/\.[a-z0-9]+$/i)?.[0] || '.jpg';
+    const ne  = ext === 'keep' ? oe : '.' + ext;
+    const isB = renamer.isB[i] || false;
+    const nextIsB = renamer.isB[i + 1] || false;
+
+    let filename;
+    if (isB) {
+      filename = String(sceneNum - 1).padStart(pad, '0') + 'b' + ne;
+      abCount++;
+    } else {
+      const suffix = nextIsB ? 'a' : '';
+      filename = String(sceneNum).padStart(pad, '0') + suffix + ne;
+      sceneNum++;
+    }
+    zip.file(filename, await f.arrayBuffer());
   }
+
   const blob = await zip.generateAsync({ type: 'blob' });
   const u = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = u; a.download = 'images-' + Date.now() + '.zip'; a.click();
   URL.revokeObjectURL(u);
-  setStatus4(`✓ Đã tạo ZIP với ${renamer.files.length} ảnh.`, 'ok');
+  const msg = abCount > 0
+    ? `✓ ZIP ${renamer.files.length} ảnh (${abCount} ảnh B có hậu tố a/b).`
+    : `✓ ZIP ${renamer.files.length} ảnh.`;
+  setStatus4(msg, 'ok');
 }
 
 // Initialize Tool 4
