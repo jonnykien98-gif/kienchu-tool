@@ -4313,9 +4313,11 @@ async function genSingleScenePrompt(id){
 // ---- PROMPT B (ảnh thứ 2 cho cảnh dài) ----
 function addPromptB(id){
   if (!state.scenePrompts2) state.scenePrompts2 = {};
-  state.scenePrompts2[id] = '';   // đánh dấu có B (rỗng để AI tạo)
+  state.scenePrompts2[id] = '';
   renderPromptsV();
   saveState(true);
+  // Tự động tạo prompt B ngay sau khi thêm
+  genSingleScenePromptB(id);
 }
 
 function removePromptB(id){
