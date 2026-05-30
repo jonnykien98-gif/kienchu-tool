@@ -1065,6 +1065,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <option value="inline_bible">📋 Tả inline + hồ sơ (nhất quán)</option>
         </select>
         <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
+        <button class="btn ghost" style="border-color:var(--rose);color:var(--rose);font-weight:600" onclick="regenAllScenePrompts()" title="Xoá toàn bộ prompt cũ và tạo lại từ đầu">🔄 Tạo lại tất cả</button>
         <button class="btn ghost" id="t2FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="doGenerateScenePrompts()" title="Chỉ tạo các cảnh chưa có prompt">🔧 Tạo nốt cảnh thiếu <span id="t2MissingCount"></span></button>
         <button class="btn ghost" onclick="exportVideo()">↓ Xuất JSON</button>
         <button class="btn ghost" onclick="exportScenesXLSX()" title="Xuất danh sách cảnh ra file Excel (.xlsx)">📊 Xuất XLSX</button>
@@ -4444,7 +4445,17 @@ async function doGenerateScenePrompts(){
   }
 }
 
-function syncTool2(){
+function regenAllScenePrompts(){
+  if (!state.scenes.length) return setStatus2('Chưa có cảnh.', 'error');
+  if (!confirm(`Xoá ${Object.keys(state.scenePrompts).length} prompt cũ và tạo lại tất cả ${state.scenes.length} cảnh?`)) return;
+  state.scenePrompts = {};
+  state.scenePrompts2 = {};
+  renderPromptsV();
+  saveState(true);
+  doGenerateScenePrompts();
+}
+
+
   state.script = document.getElementById('scriptInput').value;
   state.minChars = parseInt(document.getElementById('minChars').value) || 30;
   state.maxChars = parseInt(document.getElementById('maxChars').value) || 150;
@@ -5699,6 +5710,46 @@ function loadDataForVeo(){
   setStatus6(`✓ Đã load ${state.scenes.length} cảnh từ Tool 02.`, 'ok');
 }
 
+async function genSingleVeoPrompt(id){
+  const p = getProfile();
+  if (!p) return setStatus6('Cần Profile (Tool 1) trước.', 'error');
+  const idx = state.scenes.findIndex(s => s.id === id);
+  if (idx < 0) return;
+  const scene = state.scenes[idx];
+  const dur = getSceneDuration(scene);
+  const aspectRatio = document.getElementById('v6AspectRatio')?.value || '16:9';
+  const audioMode = document.getElementById('v6AudioMode')?.value || 'none';
+  const audioLine = audioMode === 'none' ? 'KHÔNG thêm dòng audio.' : 'Thêm dòng "Audio: [mô tả ambient music + sfx phù hợp scene]" cuối prompt.';
+  const gLabsPrompt = state.scenePrompts[id] ? `\nG-Labs prompt (tham khảo style): ${state.scenePrompts[id].slice(0, 200)}` : '';
+  setStatus6(`Đang tạo prompt Veo 3 cảnh [${id}]...`, 'working');
+  try {
+    const prompt = `Bạn là Veo 3 prompt engineer. Tạo 1 prompt video cho cảnh sau.
+Profile: ${p.tenKenh} | Style: ${p.sceneStyle || '2D animated'} | Rules: ${p.promptRules || ''}
+Nhân vật: ${state.charactersV.join(', ') || '-'} | Bối cảnh: ${state.backgroundsV.join(', ') || '-'}
+Aspect ratio: ${aspectRatio} | Audio: ${audioMode === 'none' ? 'không' : 'có'}
+
+Cảnh [${id}]: VO: "${scene.text}" | nhân vật: ${scene.character || '-'} | bối cảnh: ${scene.background || '-'} | camera: ${scene.camera} | duration: ${dur}s${gLabsPrompt}
+
+Yêu cầu: Subject+Action+CameraMovement+Lighting+Style. ${audioLine}
+70-130 từ tiếng Anh. Bắt đầu ngay bằng mô tả visual. Trả về CHỈ text prompt, không JSON.`;
+    const reply = await callClaude(prompt, 600);
+    const clean = cleanPrompt(reply.trim());
+    if (clean) {
+      if (!state.veoPrompts) state.veoPrompts = {};
+      state.veoPrompts[id] = { prompt: clean };
+      renderVeoPrompts();
+      renderVeoStats();
+      setStatus6(`✓ Đã tạo prompt Veo 3 cảnh [${id}].`, 'ok');
+      saveState(true);
+    } else {
+      setStatus6(`⚠️ Cảnh [${id}] tạo lỗi, thử lại.`, 'error');
+    }
+  } catch(e) {
+    console.error(e);
+    setStatus6('Lỗi: ' + e.message, 'error');
+  }
+}
+
 function renderVeoStats(){
   document.getElementById('v6StatScenes').textContent = state.scenes.length;
   const promptCount = Object.keys(state.veoPrompts || {}).length;
@@ -5864,10 +5915,11 @@ function renderVeoPrompts(){
       ${editing
         ? renderEditPromptUI(p)
         : `<div class="prompt-card-text">${p ? escapeHtml(p) : 'Chưa có prompt. Bấm Sinh Prompt Veo 3.'}</div>
-           ${p ? `<div class="prompt-card-actions">
-             <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
-             <button class="btn ghost sm" onclick="startEditPrompt('veo','${s.id}')">✏️ Sửa</button>
-           </div>` : ''}`
+           <div class="prompt-card-actions">
+             ${p ? `<button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
+             <button class="btn ghost sm" onclick="startEditPrompt('veo','${s.id}')">✏️ Sửa</button>` : ''}
+             <button class="btn ghost sm" style="border-color:#d97706;color:#d97706" onclick="genSingleVeoPrompt('${s.id}')">🔧 ${p ? 'Tạo lại' : 'Tạo'}</button>
+           </div>`
       }
     </div>`;
   }).join('');
