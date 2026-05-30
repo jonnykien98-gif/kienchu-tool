@@ -5166,21 +5166,24 @@ function updateAllAssetPromptsBox(){
   const parts = [];
   const cp = state.assetCharPrompts || {};
   const bp = state.assetBgPrompts || {};
-  for (const [name, prompt] of Object.entries(cp)) if (prompt) parts.push(`[CHARACTER: ${name}]\n${prompt}`);
-  for (const [name, prompt] of Object.entries(bp)) if (prompt) parts.push(`[BACKGROUND: ${name}]\n${prompt}`);
-  if (state.styleRefPrompt) parts.push(`[STYLE REFERENCE]\n${state.styleRefPrompt}`);
-  ta.value = parts.join('\n\n');
+  // Mỗi prompt nén thành 1 dòng: [TAG] {prompt một dòng}
+  const oneLine = p => p.replace(/\s*\n\s*/g, ' ').trim();
+  for (const [name, prompt] of Object.entries(cp)) if (prompt) parts.push(`[CHARACTER: ${name}] ${oneLine(prompt)}`);
+  for (const [name, prompt] of Object.entries(bp)) if (prompt) parts.push(`[BACKGROUND: ${name}] ${oneLine(prompt)}`);
+  if (state.styleRefPrompt) parts.push(`[STYLE REFERENCE] ${oneLine(state.styleRefPrompt)}`);
+  ta.value = parts.join('\n');
 }
 
 function copyAllAssetPrompts(){
   const parts = [];
   const cp = state.assetCharPrompts || {};
   const bp = state.assetBgPrompts || {};
-  for (const [name, prompt] of Object.entries(cp)) if (prompt) parts.push(`[CHARACTER: ${name}]\n${prompt}`);
-  for (const [name, prompt] of Object.entries(bp)) if (prompt) parts.push(`[BACKGROUND: ${name}]\n${prompt}`);
-  if (state.styleRefPrompt) parts.push(`[STYLE REFERENCE]\n${state.styleRefPrompt}`);
+  const oneLine = p => p.replace(/\s*\n\s*/g, ' ').trim();
+  for (const [name, prompt] of Object.entries(cp)) if (prompt) parts.push(`[CHARACTER: ${name}] ${oneLine(prompt)}`);
+  for (const [name, prompt] of Object.entries(bp)) if (prompt) parts.push(`[BACKGROUND: ${name}] ${oneLine(prompt)}`);
+  if (state.styleRefPrompt) parts.push(`[STYLE REFERENCE] ${oneLine(state.styleRefPrompt)}`);
   if (!parts.length) return setStatus3('Chưa có prompt nào.', 'error');
-  navigator.clipboard.writeText(parts.join('\n\n---\n\n'));
+  navigator.clipboard.writeText(parts.join('\n'));
   setStatus3(`✓ Đã sao chép ${parts.length} prompts.`, 'ok');
 }
 
