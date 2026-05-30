@@ -4895,15 +4895,23 @@ async function exportScenesXLSX(){
 }
 
 function copyAllScenePrompts(){
-  const prompts = state.scenes.map(s => cleanPrompt(state.scenePrompts[s.id])).filter(Boolean);
-  if (!prompts.length) return setStatus2('Chưa có prompt nào.', 'error');
-  navigator.clipboard.writeText(prompts.join('\n\n'));
-  const missing = state.scenes.length - prompts.length;
+  const lines = [];
+  state.scenes.forEach(s => {
+    const a = cleanPrompt(state.scenePrompts[s.id]);
+    const b = cleanPrompt((state.scenePrompts2 || {})[s.id]);
+    if (a) lines.push(a);
+    if (b) lines.push(b);
+  });
+  if (!lines.length) return setStatus2('Chưa có prompt nào.', 'error');
+  navigator.clipboard.writeText(lines.join('\n\n'));
+  const scenesWithPrompt = state.scenes.filter(s => cleanPrompt(state.scenePrompts[s.id])).length;
+  const scenesWithB = state.scenes.filter(s => cleanPrompt((state.scenePrompts2||{})[s.id])).length;
+  const missing = state.scenes.length - scenesWithPrompt;
   document.getElementById('copyAllInfo').textContent =
-    `✓ Đã sao chép ${prompts.length} prompts` + (missing > 0 ? ` ⚠️ thiếu ${missing} cảnh` : '');
+    `✓ Đã sao chép ${lines.length} prompts (${scenesWithPrompt} cảnh${scenesWithB > 0 ? ` + ${scenesWithB} ảnh B` : ''})` + (missing > 0 ? ` ⚠️ thiếu ${missing} cảnh` : '');
   setStatus2(missing > 0
-    ? `✓ Copy ${prompts.length}/${state.scenes.length} prompt. ⚠️ ${missing} cảnh CHƯA có prompt — bấm "✨ Tạo Prompt G-Labs" để tạo nốt (sẽ chỉ làm ${missing} cảnh thiếu).`
-    : `✓ Đã sao chép đủ ${prompts.length} prompt.`, missing > 0 ? 'info' : 'ok');
+    ? `✓ Copy ${lines.length} prompt. ⚠️ ${missing} cảnh CHƯA có prompt.`
+    : `✓ Đã sao chép đủ ${lines.length} prompt (bao gồm ảnh B).`, missing > 0 ? 'info' : 'ok');
 }
 
 /* --- SRT --- */
