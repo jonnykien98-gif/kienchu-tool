@@ -4933,9 +4933,7 @@ async function exportScenesXLSX(){
       }
     }
 
-    const profile = getProfile();
-    const safeName = (profile?.tenKenh || 'video').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
-    const filename = `scene-list_${safeName}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    const filename = `scene-list.xlsx`;
     XLSX.writeFile(wb, filename);
     setStatus2(`✓ Đã xuất ${sceneRows.length} cảnh ra ${filename}` + (promptRows.length ? ` (kèm sheet prompts)` : ''), 'ok');
   } catch (e) {
