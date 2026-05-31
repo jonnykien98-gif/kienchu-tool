@@ -3434,6 +3434,13 @@ function saveProfile(){
   renderProfileSelect();
   syncTool2FromProfile();
   renderProfileStyles();
+  // Refresh Tool 3 style fields ngay sau khi lưu
+  const rp = getProfile();
+  const _csb = document.getElementById('t3CharStyleB'); if (_csb) _csb.value = rp?.characterStyleB || '';
+  const _cs  = document.getElementById('t3CharStyle');  if (_cs)  _cs.value  = rp?.characterStyle  || '';
+  const _bs  = document.getElementById('t3BgStyle');    if (_bs)  _bs.value  = rp?.backgroundStyle || '';
+  const _ss  = document.getElementById('t3SceneStyle'); if (_ss)  _ss.value  = rp?.sceneStyle      || '';
+  const _pr  = document.getElementById('t3PromptRules');if (_pr)  _pr.value  = rp?.promptRules     || '';
   closeProfile();
   saveState(true);
   setStatus1('✓ Đã lưu Profile: ' + p.tenKenh, 'ok');
