@@ -1360,6 +1360,10 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn primary" onclick="downloadZip()">↓ Tải ZIP</button>
         <button class="btn ghost" onclick="clearFiles()">↺ Xoá hết</button>
         <button class="btn ghost" onclick="sortFiles()">⇅ Sắp xếp lại</button>
+        <label class="btn ghost" style="cursor:pointer;border-color:var(--teal);color:var(--teal)" title="Upload scene-list.xlsx để tự điền ảnh B">
+          📊 Load scene-list.xlsx
+          <input type="file" accept=".xlsx" style="display:none" onchange="loadXlsxForRenamer(this)">
+        </label>
       </div>
 
       <div class="status-bar" id="status4">Sẵn sàng. Kéo ảnh vào khu vực trên.</div>
@@ -5149,7 +5153,7 @@ async function genAllAssetPrompts(){
     let libPulledChars = 0;
     for (const rawName of chars) {
       // Parse tag: "passenger-narrator [stick]" → name="passenger-narrator", tag="stick"
-      const tagMatch = rawName.match(/^(.*?)\s*\[(\w+)\]\s*$/);
+      const tagMatch = rawName.match(/^(.*?)\s*\[\s*(\w+)\s*\]\s*$/);
       const name    = tagMatch ? tagMatch[1].trim() : rawName.trim();
       const charTag  = tagMatch ? tagMatch[2].toLowerCase() : '';
       // Bất kỳ tag nào → dùng Style B (nếu có); không tag → Style chính
@@ -5311,8 +5315,8 @@ function renderAssetCharPrompts(chars){
   if (!chars || chars.length === 0) { box.innerHTML = '<div class="empty-state">Chưa có nhân vật.</div>'; return; }
   box.innerHTML = chars.map(rawName => {
     // Strip tag: "passenger-narrator [b]" → "passenger-narrator"
-    const name = rawName.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
-    const tag  = (rawName.match(/\[(\w+)\]/) || [])[1] || '';
+    const name = rawName.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+    const tag  = (rawName.match(/\[\s*(\w+)\s*\]/) || [])[1] || '';
     const pr = state.assetCharPrompts?.[name];
     const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, '\\\\') : '';
     const editing = isEditingPrompt('char', name);
@@ -5528,7 +5532,8 @@ function addFiles(files){
   const imgs = files.filter(f => f.type.startsWith('image/'));
   if (!imgs.length) return setStatus4('Chỉ chấp nhận file ảnh.', 'error');
   renamer.files = renamer.files.concat(imgs).sort(naturalSort);
-  renderFileList();
+  if (renamer.buildOrder) applyBuildOrderToFiles();
+  else renderFileList();
   setStatus4(`Đã thêm ${imgs.length} ảnh. Tổng ${renamer.files.length}.`, 'ok');
 }
 
@@ -5613,6 +5618,61 @@ function renderFileList(){
 function toggleB(i){
   if (!renamer.isB) renamer.isB = [];
   renamer.isB[i] = !renamer.isB[i];
+  renderFileList();
+}
+
+async function loadXlsxForRenamer(input){
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  if (typeof XLSX === 'undefined') return setStatus4('Thư viện XLSX chưa tải.', 'error');
+  setStatus4('Đang đọc scene-list.xlsx...', 'working');
+  try {
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
+    if (!wb.SheetNames.includes('build')) {
+      return setStatus4('❌ Không tìm thấy sheet "build" trong file XLSX — hãy xuất lại từ Tool 2.', 'error');
+    }
+    const ws   = wb.Sheets['build'];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    // Lấy danh sách scene_id từ sheet build theo thứ tự
+    const buildOrder = rows.map(r => String(r['scene_id'] || '').trim()).filter(Boolean);
+    if (!buildOrder.length) return setStatus4('❌ Sheet "build" trống.', 'error');
+
+    // Map: scene_id → index trong buildOrder
+    const sceneIndex = {};
+    buildOrder.forEach((sid, i) => { sceneIndex[sid] = i; });
+
+    // Tìm các scene_id kết thúc bằng 'b' → là ảnh B
+    const bSet = new Set(buildOrder.filter(sid => /[a-z]b$/.test(sid)));
+
+    // Nếu chưa có ảnh thì chỉ lưu thứ tự để dùng khi kéo ảnh vào
+    renamer.buildOrder = buildOrder;
+    renamer.bSet = bSet;
+
+    // Nếu đã có ảnh → tự map và set isB
+    if (renamer.files.length) {
+      applyBuildOrderToFiles();
+    }
+
+    const bCount = bSet.size;
+    setStatus4(`✓ Đọc được ${buildOrder.length} cảnh từ sheet "build" (${bCount} ảnh B). ${renamer.files.length ? 'Đã tự điền A/B.' : 'Kéo ảnh vào để tự điền.'}`, 'ok');
+  } catch(e) {
+    setStatus4('❌ Lỗi đọc XLSX: ' + e.message, 'error');
+  }
+}
+
+function applyBuildOrderToFiles(){
+  if (!renamer.buildOrder || !renamer.buildOrder.length) return;
+  const bSet = renamer.bSet || new Set();
+  if (!renamer.isB) renamer.isB = [];
+  // Sort files theo buildOrder: files được sắp xếp theo natural sort trước
+  // Gán isB[i] = true nếu file thứ i trong danh sách sau khi sort tương ứng với scene là B
+  // Logic: đếm sequential — file thứ i map với buildOrder[i]
+  for (let i = 0; i < renamer.files.length; i++) {
+    const sid = renamer.buildOrder[i];
+    renamer.isB[i] = sid ? bSet.has(sid) : false;
+  }
   renderFileList();
 }
 
