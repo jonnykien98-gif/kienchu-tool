@@ -818,6 +818,20 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       <label class="label green">CHARACTER STYLE B <span style="font-weight:400;opacity:.7">— nhân vật có tag bất kỳ VD: [stick], [b], [realistic] trong Tool 3 → dùng style này</span></label>
       <textarea id="pCharStyleB" style="min-height:80px;background:var(--surface-2)" placeholder="VD: Simple stick figure, round white head, thin black lines... (để trống nếu không dùng)"></textarea>
     </div>
+    <div class="mb-12">
+      <label class="label" style="color:var(--teal)">NHÂN VẬT MẶC ĐỊNH KÊNH
+        <span style="font-weight:400;opacity:.7">— tự động điền vào Tool 3 mỗi video mới</span>
+      </label>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Mỗi dòng 1 nhân vật. Thêm tag nếu muốn dùng Style B. VD: <code>captain-narrator [b]</code></div>
+      <textarea id="pDefaultChars" style="min-height:80px;font-family:monospace;font-size:12px" placeholder="captain-narrator [b]&#10;host-character"></textarea>
+    </div>
+    <div class="mb-12">
+      <label class="label" style="color:var(--blue)">BỐI CẢNH MẶC ĐỊNH KÊNH
+        <span style="font-weight:400;opacity:.7">— tự động điền vào Tool 3 mỗi video mới</span>
+      </label>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Mỗi dòng 1 bối cảnh dùng lại xuyên suốt kênh (studio, backdrop thương hiệu...)</div>
+      <textarea id="pDefaultBgs" style="min-height:60px;font-family:monospace;font-size:12px" placeholder="studio-background&#10;brand-backdrop"></textarea>
+    </div>
     <div class="grid-2 mb-12">
       <div>
         <label class="label rose">SCENE STYLE / AESTHETIC (~40 từ, cố định cả video)</label>
@@ -3404,6 +3418,8 @@ function openProfile(){
   document.getElementById('pTargetPhut').value = p.targetPhut || 12;
   document.getElementById('pCharStyle').value = p.characterStyle || '';
   document.getElementById('pCharStyleB').value = p.characterStyleB || '';
+  document.getElementById('pDefaultChars').value = (p.defaultChars || []).join('\n');
+  document.getElementById('pDefaultBgs').value   = (p.defaultBgs   || []).join('\n');
   document.getElementById('pBgStyle').value = p.backgroundStyle || '';
   document.getElementById('pSceneStyle').value = p.sceneStyle || '';
   document.getElementById('pPromptRules').value = p.promptRules || '';
@@ -3428,8 +3444,10 @@ function saveProfile(){
   p.cauTruc = document.getElementById('pCauTruc').value;
   p.soPhan = parseInt(document.getElementById('pSoPhan').value) || 8;
   p.targetPhut = parseInt(document.getElementById('pTargetPhut').value) || 12;
-  p.characterStyle = document.getElementById('pCharStyle').value;
+  p.characterStyle  = document.getElementById('pCharStyle').value;
   p.characterStyleB = document.getElementById('pCharStyleB').value;
+  p.defaultChars = document.getElementById('pDefaultChars').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  p.defaultBgs   = document.getElementById('pDefaultBgs').value.split('\n').map(s=>s.trim()).filter(Boolean);
   p.backgroundStyle = document.getElementById('pBgStyle').value;
   p.sceneStyle = document.getElementById('pSceneStyle').value;
   p.promptRules = document.getElementById('pPromptRules').value;
@@ -5062,12 +5080,37 @@ function loadAssetsFromTool2(){
   if (state.charactersV.length === 0 && state.backgroundsV.length === 0)
     return setStatus3('Tool 02 chưa có nhân vật/bối cảnh. Chạy Quét Trước ở Tool 02.', 'error');
 
-  document.getElementById('t3Characters').value = state.charactersV.join('\n');
-  document.getElementById('t3Backgrounds').value = state.backgroundsV.join('\n');
-  document.getElementById('t3CharCount').textContent = state.charactersV.length;
-  document.getElementById('t3BgCount').textContent = state.backgroundsV.length;
-
   const p = getProfile();
+
+  // Merge nhân vật mặc định kênh vào đầu danh sách (không trùng lặp)
+  const defaultChars = (p?.defaultChars || []);
+  const defaultBgs   = (p?.defaultBgs   || []);
+  const videoChars   = state.charactersV || [];
+  const videoBgs     = state.backgroundsV || [];
+
+  // Strip tag để so sánh tên
+  const stripTag = s => s.replace(/\s*\[.*?\]\s*$/, '').trim();
+  const videoCharNames = new Set(videoChars.map(stripTag));
+  const videoBgNames   = new Set(videoBgs.map(stripTag));
+
+  // Nhân vật mặc định không có trong video → thêm vào đầu
+  const extraChars = defaultChars.filter(c => !videoCharNames.has(stripTag(c)));
+  const extraBgs   = defaultBgs.filter(b => !videoBgNames.has(stripTag(b)));
+
+  const mergedChars = [...extraChars, ...videoChars];
+  const mergedBgs   = [...extraBgs,   ...videoBgs];
+
+  document.getElementById('t3Characters').value = mergedChars.join('\n');
+  document.getElementById('t3Backgrounds').value = mergedBgs.join('\n');
+  document.getElementById('t3CharCount').textContent = mergedChars.length;
+  document.getElementById('t3BgCount').textContent = mergedBgs.length;
+
+  if (extraChars.length || extraBgs.length) {
+    setStatus3(`✓ Load từ Tool 02 + thêm ${extraChars.length} nhân vật / ${extraBgs.length} bối cảnh mặc định kênh.`, 'ok');
+  } else {
+    setStatus3('✓ Load từ Tool 02.', 'ok');
+  }
+
   if (p) {
     document.getElementById('t3VisualStyle').value = p.visualStyle || '';
     document.getElementById('t3Ngach').value = p.ngach || '';
@@ -5081,7 +5124,7 @@ function loadAssetsFromTool2(){
   // Populate character select for image upload
   const sel = document.getElementById('t3CharSelect');
   sel.innerHTML = '<option value="">— Chọn từ danh sách nhân vật —</option>' +
-    state.charactersV.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    mergedChars.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
 
   setStatus3(`✓ Đã load ${state.charactersV.length} nhân vật + ${state.backgroundsV.length} bối cảnh.`, 'ok');
 }
