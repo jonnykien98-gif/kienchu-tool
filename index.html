@@ -4797,7 +4797,7 @@ function renderStats2(){
 }
 
 function totalDur(){ return state.scenes.reduce((a, s) => a + s.duration, 0); }
-function fmtDur(s){ if (s < 60) return s + 's'; return Math.floor(s / 60) + 'p' + (s % 60 ? (s % 60) + 's' : ''); }
+function fmtDur(s){ s = Math.round(s); if (s < 60) return s + 's'; return Math.floor(s / 60) + 'p' + (s % 60 ? (s % 60) + 's' : ''); }
 
 function delScene(i){
   if (!confirm('Xoá cảnh này?')) return;
@@ -5644,7 +5644,8 @@ async function loadXlsxForRenamer(input){
     buildOrder.forEach((sid, i) => { sceneIndex[sid] = i; });
 
     // Tìm các scene_id kết thúc bằng 'b' → là ảnh B
-    const bSet = new Set(buildOrder.filter(sid => /[a-z]b$/.test(sid)));
+    // VD: "001b", "014b" — phân biệt với tên không có suffix
+    const bSet = new Set(buildOrder.filter(sid => /^[0-9]+b$/.test(sid)));
 
     // Nếu chưa có ảnh thì chỉ lưu thứ tự để dùng khi kéo ảnh vào
     renamer.buildOrder = buildOrder;
