@@ -815,7 +815,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       </div>
     </div>
     <div class="mb-12">
-      <label class="label green">CHARACTER STYLE B <span style="font-weight:400;opacity:.7">— dùng khi nhân vật có tag [stick] trong danh sách Tool 3</span></label>
+      <label class="label green">CHARACTER STYLE B <span style="font-weight:400;opacity:.7">— nhân vật có tag bất kỳ VD: [stick], [b], [realistic] trong Tool 3 → dùng style này</span></label>
       <textarea id="pCharStyleB" style="min-height:80px;background:var(--surface-2)" placeholder="VD: Simple stick figure, round white head, thin black lines... (để trống nếu không dùng)"></textarea>
     </div>
     <div class="grid-2 mb-12">
@@ -1177,7 +1177,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <div><label class="label" style="color:var(--blue)">BACKGROUND STYLE</label><textarea id="t3BgStyle" style="min-height:80px;background:var(--surface-2)" readonly></textarea></div>
           </div>
           <div class="mb-12">
-            <label class="label green">CHARACTER STYLE B <span style="opacity:.6;font-weight:400">— nhân vật có tag [stick] dùng style này</span></label>
+            <label class="label green">CHARACTER STYLE B <span style="opacity:.6;font-weight:400">— nhân vật có tag bất kỳ VD: [stick], [realistic], [b] → dùng style này</span></label>
             <textarea id="t3CharStyleB" style="min-height:60px;background:var(--surface-2)" readonly></textarea>
           </div>
           <div class="grid-2">
@@ -5144,9 +5144,9 @@ async function genAllAssetPrompts(){
       // Parse tag: "passenger-narrator [stick]" → name="passenger-narrator", tag="stick"
       const tagMatch = rawName.match(/^(.*?)\s*\[(\w+)\]\s*$/);
       const name    = tagMatch ? tagMatch[1].trim() : rawName.trim();
-      const charTag = tagMatch ? tagMatch[2].toLowerCase() : '';
-      // Chọn style: [stick] → charStyleB, không tag → charStyle chính
-      const useStyle = (charTag === 'stick' && charStyleB) ? charStyleB : charStyle;
+      const charTag  = tagMatch ? tagMatch[2].toLowerCase() : '';
+      // Bất kỳ tag nào → dùng Style B (nếu có); không tag → Style chính
+      const useStyle = (charTag && charStyleB) ? charStyleB : charStyle;
 
       if (state.cancelRequested) {
         clearCancel();
