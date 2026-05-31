@@ -5332,10 +5332,14 @@ function updateAllAssetPromptsBox(){
   const parts = [];
   const cp = state.assetCharPrompts || {};
   const bp = state.assetBgPrompts || {};
-  // Mỗi prompt nén thành 1 dòng: [TAG] {prompt một dòng}
   const oneLine = p => p.replace(/\s*\n\s*/g, ' ').trim();
-  for (const [name, prompt] of Object.entries(cp)) if (prompt) parts.push(`[CHARACTER: ${name}] ${oneLine(prompt)}`);
-  for (const [name, prompt] of Object.entries(bp)) if (prompt) parts.push(`[BACKGROUND: ${name}] ${oneLine(prompt)}`);
+  // Chỉ lấy nhân vật/bối cảnh đang dùng trong video hiện tại
+  const chars = (document.getElementById('t3Characters')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const bgs   = (document.getElementById('t3Backgrounds')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const charKeys = chars.length ? chars : Object.keys(cp);
+  const bgKeys   = bgs.length   ? bgs   : Object.keys(bp);
+  for (const name of charKeys) if (cp[name]) parts.push(`[CHARACTER: ${name}] ${oneLine(cp[name])}`);
+  for (const name of bgKeys)   if (bp[name]) parts.push(`[BACKGROUND: ${name}] ${oneLine(bp[name])}`);
   if (state.styleRefPrompt) parts.push(`[STYLE REFERENCE] ${oneLine(state.styleRefPrompt)}`);
   ta.value = parts.join('\n');
 }
@@ -5345,8 +5349,12 @@ function copyAllAssetPrompts(){
   const cp = state.assetCharPrompts || {};
   const bp = state.assetBgPrompts || {};
   const oneLine = p => p.replace(/\s*\n\s*/g, ' ').trim();
-  for (const [name, prompt] of Object.entries(cp)) if (prompt) parts.push(`[CHARACTER: ${name}] ${oneLine(prompt)}`);
-  for (const [name, prompt] of Object.entries(bp)) if (prompt) parts.push(`[BACKGROUND: ${name}] ${oneLine(prompt)}`);
+  const chars = (document.getElementById('t3Characters')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const bgs   = (document.getElementById('t3Backgrounds')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const charKeys = chars.length ? chars : Object.keys(cp);
+  const bgKeys   = bgs.length   ? bgs   : Object.keys(bp);
+  for (const name of charKeys) if (cp[name]) parts.push(`[CHARACTER: ${name}] ${oneLine(cp[name])}`);
+  for (const name of bgKeys)   if (bp[name]) parts.push(`[BACKGROUND: ${name}] ${oneLine(bp[name])}`);
   if (state.styleRefPrompt) parts.push(`[STYLE REFERENCE] ${oneLine(state.styleRefPrompt)}`);
   if (!parts.length) return setStatus3('Chưa có prompt nào.', 'error');
   navigator.clipboard.writeText(parts.join('\n'));
