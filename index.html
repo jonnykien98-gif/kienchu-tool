@@ -5309,15 +5309,19 @@ function renderAssetCharPrompts(chars){
   if (!box) return;
   document.getElementById('t3CharPromptCount').textContent = Object.keys(state.assetCharPrompts || {}).length;
   if (!chars || chars.length === 0) { box.innerHTML = '<div class="empty-state">Chưa có nhân vật.</div>'; return; }
-  box.innerHTML = chars.map(name => {
+  box.innerHTML = chars.map(rawName => {
+    // Strip tag: "passenger-narrator [b]" → "passenger-narrator"
+    const name = rawName.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+    const tag  = (rawName.match(/\[(\w+)\]/) || [])[1] || '';
     const pr = state.assetCharPrompts?.[name];
-    const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, "\\\\") : '';
+    const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, '\\\\') : '';
     const editing = isEditingPrompt('char', name);
     const nameEsc = name.replace(/'/g, "\\'");
     const inLib = !!_getLib().chars[name];
+    const tagBadge = tag ? `<span style="font-size:10px;background:rgba(13,148,136,.15);color:var(--teal);padding:1px 6px;border-radius:6px;margin-left:4px">[${tag}] Style B</span>` : '';
     return `<div class="ref-sheet-card ${pr ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="ref-sheet-card-head">
-        <span class="ref-sheet-card-name">${escapeHtml(name)} ${inLib ? '<span style="font-size:10px;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:6px;margin-left:4px">📚 Library</span>' : ''}</span>
+        <span class="ref-sheet-card-name">${escapeHtml(name)}${tagBadge} ${inLib ? '<span style="font-size:10px;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:6px;margin-left:4px">📚 Library</span>' : ''}</span>
         ${editing ? '' : (pr ? `<div style="display:flex;gap:6px">
           <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)" title="Sao chép">📋</button>
           <button class="btn ghost sm" onclick="startEditPrompt('char','${nameEsc}')" title="Sửa prompt">✏️</button>
@@ -5329,7 +5333,6 @@ function renderAssetCharPrompts(chars){
   }).join('');
   updateAllAssetPromptsBox();
 }
-
 function renderAssetBgPrompts(bgs){
   const box = document.getElementById('t3BgPromptsList');
   if (!box) return;
