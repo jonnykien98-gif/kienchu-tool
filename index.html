@@ -806,13 +806,17 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
     </div>
     <div class="grid-2 mb-12">
       <div>
-        <label class="label green">CHARACTER STYLE</label>
+        <label class="label green">CHARACTER STYLE <span style="font-weight:400;opacity:.7">(chính)</span></label>
         <textarea id="pCharStyle" style="min-height:100px" placeholder="Chọn preset, upload ảnh mẫu, hoặc tự viết..."></textarea>
       </div>
       <div>
         <label class="label" style="color:var(--blue)">BACKGROUND STYLE</label>
         <textarea id="pBgStyle" style="min-height:100px" placeholder="Chọn preset, upload ảnh mẫu, hoặc tự viết..."></textarea>
       </div>
+    </div>
+    <div class="mb-12">
+      <label class="label green">CHARACTER STYLE B <span style="font-weight:400;opacity:.7">— dùng khi nhân vật có tag [stick] trong danh sách Tool 3</span></label>
+      <textarea id="pCharStyleB" style="min-height:80px;background:var(--surface-2)" placeholder="VD: Simple stick figure, round white head, thin black lines... (để trống nếu không dùng)"></textarea>
     </div>
     <div class="grid-2 mb-12">
       <div>
@@ -1169,8 +1173,12 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="panel-head"><span><span class="led"></span>STYLE PROMPTS (TỪ PROFILE)</span></div>
         <div class="panel-body">
           <div class="grid-2 mb-12">
-            <div><label class="label green">CHARACTER STYLE</label><textarea id="t3CharStyle" style="min-height:80px;background:var(--surface-2)" readonly></textarea></div>
+            <div><label class="label green">CHARACTER STYLE <span style="opacity:.6;font-weight:400">(chính)</span></label><textarea id="t3CharStyle" style="min-height:80px;background:var(--surface-2)" readonly></textarea></div>
             <div><label class="label" style="color:var(--blue)">BACKGROUND STYLE</label><textarea id="t3BgStyle" style="min-height:80px;background:var(--surface-2)" readonly></textarea></div>
+          </div>
+          <div class="mb-12">
+            <label class="label green">CHARACTER STYLE B <span style="opacity:.6;font-weight:400">— nhân vật có tag [stick] dùng style này</span></label>
+            <textarea id="t3CharStyleB" style="min-height:60px;background:var(--surface-2)" readonly></textarea>
           </div>
           <div class="grid-2">
             <div><label class="label rose">SCENE STYLE</label><textarea id="t3SceneStyle" style="min-height:50px;background:var(--surface-2)" readonly></textarea></div>
@@ -3066,6 +3074,7 @@ window.addEventListener('beforeunload', () => {
    PROFILE — Quản lý
 ============================================================ */
 const PRESET = {
+  characterStyleB: "Simple stick figure character, large round white circle head (pure white no fill), two small black dot eyes, simple curved smile, thin single black line body arms legs, minimal clothing suggestion with flat color fill, NO detailed features, hand-drawn cartoon style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words",
   characterStyle: "2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words",
   backgroundStyle: "2D cartoon background illustration, bold black outlines, detailed interior or exterior environment with depth and atmosphere, muted dark color palette browns grays dark greens warm shadows, visible furniture props architectural details environmental storytelling elements, cinematic moody lighting with warm practical light sources, flat color fills with subtle tone variation, hand-drawn illustration style, NO characters NO people NO figures NO text NO words, 16:9 ratio",
   sceneStyle: "simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors"
@@ -3263,6 +3272,7 @@ function rerenderAllAfterProfileLoad(){
   // Tool 3 Style Prompts (display, từ profile object)
   const p = getProfile();
   const t3CS = document.getElementById('t3CharStyle'); if (t3CS) t3CS.value = p?.characterStyle || '';
+  const t3CSB = document.getElementById('t3CharStyleB'); if (t3CSB) t3CSB.value = p?.characterStyleB || '';
   const t3BS = document.getElementById('t3BgStyle'); if (t3BS) t3BS.value = p?.backgroundStyle || '';
   const t3SS = document.getElementById('t3SceneStyle'); if (t3SS) t3SS.value = p?.sceneStyle || '';
   const t3PR = document.getElementById('t3PromptRules'); if (t3PR) t3PR.value = p?.promptRules || '';
@@ -3388,6 +3398,7 @@ function openProfile(){
   document.getElementById('pSoPhan').value = p.soPhan || 8;
   document.getElementById('pTargetPhut').value = p.targetPhut || 12;
   document.getElementById('pCharStyle').value = p.characterStyle || '';
+  document.getElementById('pCharStyleB').value = p.characterStyleB || '';
   document.getElementById('pBgStyle').value = p.backgroundStyle || '';
   document.getElementById('pSceneStyle').value = p.sceneStyle || '';
   document.getElementById('pPromptRules').value = p.promptRules || '';
@@ -3413,6 +3424,7 @@ function saveProfile(){
   p.soPhan = parseInt(document.getElementById('pSoPhan').value) || 8;
   p.targetPhut = parseInt(document.getElementById('pTargetPhut').value) || 12;
   p.characterStyle = document.getElementById('pCharStyle').value;
+  p.characterStyleB = document.getElementById('pCharStyleB').value;
   p.backgroundStyle = document.getElementById('pBgStyle').value;
   p.sceneStyle = document.getElementById('pSceneStyle').value;
   p.promptRules = document.getElementById('pPromptRules').value;
@@ -3493,6 +3505,9 @@ function quickFill(){
   document.getElementById('pNgach').value = 'Dark educational, mysteries, lịch sử bí ẩn';
   document.getElementById('pVisualStyle').value = 'Crayon Capital — Dark';
   document.getElementById('pCharStyle').value = PRESET.characterStyle;
+  if (document.getElementById('pCharStyleB') && PRESET.characterStyleB) {
+    document.getElementById('pCharStyleB').value = PRESET.characterStyleB;
+  }
   document.getElementById('pBgStyle').value = PRESET.backgroundStyle;
   document.getElementById('pSceneStyle').value = PRESET.sceneStyle;
   document.getElementById('pPromptRules').value = 'No text, no watermark, consistent character design across all scenes, avoid gore, no realistic human faces, maintain flat 2D cartoon aesthetic';
@@ -5111,8 +5126,9 @@ async function genAllAssetPrompts(){
   if (chars.length === 0 && bgs.length === 0) return setStatus3('Cần load nhân vật/bối cảnh trước.', 'error');
 
   const p = getProfile();
-  const charStyle = document.getElementById('t3CharStyle').value || p?.characterStyle || '';
-  const bgStyle = document.getElementById('t3BgStyle').value || p?.backgroundStyle || '';
+  const charStyle  = document.getElementById('t3CharStyle').value  || p?.characterStyle  || '';
+  const charStyleB = document.getElementById('t3CharStyleB')?.value || p?.characterStyleB || '';
+  const bgStyle    = document.getElementById('t3BgStyle').value    || p?.backgroundStyle  || '';
   const rules = document.getElementById('t3PromptRules').value || p?.promptRules || '';
   if (!charStyle && !bgStyle) return setStatus3('Cần có Style Prompts trong Profile.', 'error');
 
@@ -5124,7 +5140,14 @@ async function genAllAssetPrompts(){
   try {
     // Character prompts (check Library first → skip AI if exists)
     let libPulledChars = 0;
-    for (const name of chars) {
+    for (const rawName of chars) {
+      // Parse tag: "passenger-narrator [stick]" → name="passenger-narrator", tag="stick"
+      const tagMatch = rawName.match(/^(.*?)\s*\[(\w+)\]\s*$/);
+      const name    = tagMatch ? tagMatch[1].trim() : rawName.trim();
+      const charTag = tagMatch ? tagMatch[2].toLowerCase() : '';
+      // Chọn style: [stick] → charStyleB, không tag → charStyle chính
+      const useStyle = (charTag === 'stick' && charStyleB) ? charStyleB : charStyle;
+
       if (state.cancelRequested) {
         clearCancel();
         setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật. Bấm lại để chạy tiếp.`, 'info');
@@ -5162,7 +5185,7 @@ async function genAllAssetPrompts(){
 
 Style template PHẢI tuân theo:
 """
-${charStyle}
+${useStyle}
 """
 
 NEGATIVE/RULES: ${rules}
@@ -5179,7 +5202,7 @@ Yêu cầu:
 
 Style template:
 """
-${charStyle}
+${useStyle}
 """
 
 NEGATIVE/RULES: ${rules}
