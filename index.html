@@ -5649,7 +5649,7 @@ function loadFromTool2ForRenamer(){
   setStatus4(`✓ Load từ Tool 2: ${buildOrder.length} slots (${bCount} ảnh B). ${renamer.files.length ? 'Đã tự điền A/B.' : 'Kéo ảnh vào để tự điền.'}`, 'ok');
 }
 
-
+async function loadXlsxForRenamer(input){
   const file = input.files[0];
   if (!file) return;
   input.value = '';
