@@ -1140,8 +1140,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           </div>
         </div>
         <div id="sub-prompts" style="display:none">
-          <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn primary sm" onclick="copyAllScenePrompts()">📋 Sao chép tất cả prompt</button>
+            <button class="btn ghost sm" style="border-color:#0d9488;color:#0d9488" onclick="autoAddPromptBForLongScenes()" title="Tự động thêm Prompt B cho mọi cảnh dài hơn 6s">✂️ Tự thêm ảnh B cho cảnh dài (>6s)</button>
             <span style="color:var(--text-muted);font-size:11px;align-self:center" id="copyAllInfo"></span>
           </div>
           <div style="padding:14px;border-bottom:1px solid var(--border)">
@@ -3093,8 +3094,8 @@ window.addEventListener('beforeunload', () => {
    PROFILE — Quản lý
 ============================================================ */
 const PRESET = {
-  characterStyleB: "Simple stick figure character, large round white circle head (pure white no fill), two small black dot eyes, simple curved smile, thin single black line body arms legs, minimal clothing suggestion with flat color fill, NO detailed features, hand-drawn cartoon style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words",
-  characterStyle: "2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words",
+  characterStyleB: "Simple stick figure character, large round white circle head (pure white no fill), two small black dot eyes, simple curved smile, thin single black line body arms legs, minimal clothing suggestion with flat color fill, NO detailed features, hand-drawn cartoon style, professional white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words",
+  characterStyle: "2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words",
   backgroundStyle: "2D cartoon background illustration, bold black outlines, detailed interior or exterior environment with depth and atmosphere, muted dark color palette browns grays dark greens warm shadows, visible furniture props architectural details environmental storytelling elements, cinematic moody lighting with warm practical light sources, flat color fills with subtle tone variation, hand-drawn illustration style, NO characters NO people NO figures NO text NO words, 16:9 ratio",
   sceneStyle: "simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors"
 };
@@ -3104,7 +3105,7 @@ const STYLE_PRESETS = {
   '': { label: '— Chọn preset style —' },
   cartoon2d: {
     label: '🎨 Cartoon 2D (flat vector)',
-    characterStyle: 'Flat 2D cartoon character, bold clean black outlines, simple expressive face with dot eyes and curved mouth, simple body proportions, flat color fills no gradients, era/role-appropriate clothing, hand-drawn vector illustration style, professional white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    characterStyle: 'Flat 2D cartoon character, bold clean black outlines, simple expressive face with dot eyes and curved mouth, simple body proportions, flat color fills no gradients, era/role-appropriate clothing, hand-drawn vector illustration style, professional white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
     backgroundStyle: 'Flat 2D cartoon background illustration, clean black outlines, environment with depth and props, muted color palette with soft shading, flat color fills, hand-drawn vector style, NO characters NO people NO figures NO text NO words, 16:9 ratio',
     sceneStyle: 'simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors',
     promptRules: 'No text overlay, no watermark, no photorealism, no gradients, no 3D shading, consistent character design across all scenes, thick black outlines on every element, flat color fills only, simple hand-drawn shapes'
@@ -3118,28 +3119,28 @@ const STYLE_PRESETS = {
   },
   anime: {
     label: '🌸 Anime / Manga',
-    characterStyle: 'Anime style character, clean cel-shaded coloring, large expressive eyes with highlights, detailed stylized hair, slim anime proportions, sharp clean lineart, vibrant colors, detailed costume, white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    characterStyle: 'Anime style character, clean cel-shaded coloring, large expressive eyes with highlights, detailed stylized hair, slim anime proportions, sharp clean lineart, vibrant colors, detailed costume, white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
     backgroundStyle: 'Anime background art, detailed painterly environment, soft gradient skies, cel-shaded lighting, vibrant saturated colors, depth and atmosphere, Studio-anime quality, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: 'anime style, cel-shaded, clean lineart, vibrant colors, expressive, detailed background art',
     promptRules: 'No text, no watermark, consistent character design, no photorealism, maintain anime cel-shaded look'
   },
   render3d: {
     label: '🧊 3D Render (Pixar-like)',
-    characterStyle: '3D rendered character, stylized Pixar-like proportions, smooth subsurface-scattering skin, soft rounded forms, detailed textured clothing, soft global illumination, subtle ambient occlusion, clean studio render, neutral background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    characterStyle: '3D rendered character, stylized Pixar-like proportions, smooth subsurface-scattering skin, soft rounded forms, detailed textured clothing, soft global illumination, subtle ambient occlusion, clean studio render, neutral background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
     backgroundStyle: '3D rendered environment, stylized props with smooth surfaces, soft global illumination and ambient occlusion, depth of field, cinematic 3D render, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: '3D render, stylized Pixar-like, soft global illumination, smooth surfaces, cinematic lighting, ambient occlusion',
     promptRules: 'No text, no watermark, consistent character model, no 2D flat look, maintain 3D rendered style'
   },
   watercolor: {
     label: '🖌 Màu nước (watercolor)',
-    characterStyle: 'Watercolor illustration character, soft hand-painted washes, visible paper texture, gentle bleeding edges, loose expressive brushwork, soft muted palette, delicate linework, white paper background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    characterStyle: 'Watercolor illustration character, soft hand-painted washes, visible paper texture, gentle bleeding edges, loose expressive brushwork, soft muted palette, delicate linework, white paper background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
     backgroundStyle: 'Watercolor painted environment, soft washes and bleeding colors, visible paper grain, loose brushwork, gentle muted palette, airy atmosphere, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: 'watercolor illustration, soft hand-painted washes, paper texture, loose brushwork, muted gentle palette',
     promptRules: 'No text, no watermark, keep soft watercolor look, no hard digital edges, no photorealism'
   },
   lineart: {
     label: '✏️ Line art tối giản',
-    characterStyle: 'Minimalist line art character, clean single-weight black lines on white, minimal or no fill, simple geometric shapes, lots of negative space, modern editorial illustration, white background, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 expression close-ups, NO text NO words',
+    characterStyle: 'Minimalist line art character, clean single-weight black lines on white, minimal or no fill, simple geometric shapes, lots of negative space, modern editorial illustration, white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
     backgroundStyle: 'Minimalist line art environment, clean thin black lines on white, minimal detail, lots of negative space, modern editorial style, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: 'minimalist line art, clean thin black lines, white background, lots of negative space, modern editorial',
     promptRules: 'No text, no watermark, keep minimalist clean lines, avoid heavy shading, avoid clutter'
@@ -4189,12 +4190,14 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
       } else {
         charCtx = state.charactersV.map(c => '- ' + c).join('\n');
         bgCtx = state.backgroundsV.map(b => '- ' + b).join('\n');
-        charHeader = 'NHÂN VẬT (reference từ sheet):';
+        charHeader = 'NHÂN VẬT CÓ REFERENCE SHEET (ghi tag [tên]):';
         bgHeader = 'BỐI CẢNH (reference từ sheet):';
-        mode1Rule = `- Mô tả nhân vật: tư thế, biểu cảm, hành động
-- Nhân vật là NGƯỜI: ghi [tên-nhân-vật] (VD: "[agent-young] stands at desk...")
+        mode1Rule = `- Nhân vật CÓ trong danh sách trên: ghi [tên-nhân-vật] (VD: "[narrator] stands at desk...")
+- Nhân vật PHỤ KHÔNG có trong danh sách (xuất hiện trong VO nhưng chưa có reference): TẢ TỰ DO ngoại hình ngắn gọn theo style chính của kênh — VD nếu cảnh có người lạ, người qua đường, đám đông → mô tả "a [mô tả ngắn] character in same art style" KHÔNG dùng ngoặc vuông
+- Nếu cảnh có NHIỀU nhân vật: ghi đủ cả nhân vật chính (tag) lẫn phụ (tả tự do). VD: "[narrator] talking to a worried elderly woman in plain dress, both in same cartoon style, inside [office-night]"
 - Động vật/vật thể: miêu tả bình thường KHÔNG ngoặc vuông
-- Bối cảnh: ghi [tên-bối-cảnh] (VD: "inside [dark-office-night]...")`;
+- Bối cảnh: ghi [tên-bối-cảnh] (VD: "inside [dark-office-night]...")
+- Style nhân vật phụ phải KHỚP style nhân vật chính (cùng nét vẽ, cùng tỉ lệ)`;
       }
       // Detect animation/cartoon style → inject formula block
       const styleStr = (p.sceneStyle || '').toLowerCase();
@@ -4204,7 +4207,7 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
 Visual style: flat 2D animation, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors --ar 16:9
 
 📐 Nhân vật phải là: simple cartoon stick/round-head figure, thick black outlines, round white/light head, small dot eyes, simple curved mouth, flat-colored clothing. KHÔNG vẽ người realistic, KHÔNG màu da.
-${dm === 'tag' ? `- Ghi tag [tên-nhân-vật] như bình thường — AI gen ảnh sẽ dùng reference sheet để biết đây là stick figure style.` : '- Tả nhân vật theo stick figure formula: "a simple cartoon stick figure with round white head, [hành động], [trang phục màu đơn]"'}
+${dm === 'tag' ? `- Nhân vật chính: ghi tag [tên-nhân-vật]. Nhân vật phụ chưa có reference: tả tự do nhưng PHẢI cùng style (stick figure / flat 2D như nhân vật chính).` : '- Tả nhân vật theo stick figure formula: "a simple cartoon stick figure with round white head, [hành động], [trang phục màu đơn]"'}
 
 🎨 Môi trường phải là: simple flat shapes (teal/blue waves = ocean, green hills = countryside, orange flames = fire, grey rocks = cave), muted warm palette, simple details (V-shape seagulls, puffy cloud shapes, wavy lines = water). KHÔNG vẽ cảnh 3D hay photorealistic.
 
@@ -4341,6 +4344,41 @@ function addPromptB(id){
   saveState(true);
   // Tự động tạo prompt B ngay sau khi thêm
   genSingleScenePromptB(id);
+}
+
+async function autoAddPromptBForLongScenes(){
+  const p = getProfile();
+  if (!p) return setStatus2('Cần Profile trước.', 'error');
+  const THRESHOLD = 6; // giây
+
+  // Tìm cảnh dài > 6s đã có Prompt A nhưng CHƯA có Prompt B
+  const targets = state.scenes.filter(s => {
+    const dur = parseFloat(s.duration) || 0;
+    const hasA = state.scenePrompts && state.scenePrompts[s.id] && state.scenePrompts[s.id].trim();
+    const hasB = state.scenePrompts2 && state.scenePrompts2[s.id] && state.scenePrompts2[s.id].trim();
+    return dur > THRESHOLD && hasA && !hasB;
+  });
+
+  if (!targets.length) {
+    return setStatus2(`Không có cảnh nào dài hơn ${THRESHOLD}s cần thêm ảnh B (hoặc đã có B rồi).`, 'info');
+  }
+
+  if (!confirm(`Tìm thấy ${targets.length} cảnh dài hơn ${THRESHOLD}s.\nTự động tạo Prompt B cho tất cả?\n\n(Mỗi cảnh tốn 1 lần gọi AI)`)) return;
+
+  if (!state.scenePrompts2) state.scenePrompts2 = {};
+
+  let done = 0;
+  for (const scene of targets) {
+    if (state.cancelRequested) { clearCancel(); break; }
+    state.scenePrompts2[scene.id] = ''; // tạo slot
+    setStatus2(`Đang tạo Prompt B: ${done + 1}/${targets.length} (cảnh [${scene.id}], ${scene.duration}s)...`, 'working');
+    await genSingleScenePromptB(scene.id);
+    done++;
+  }
+
+  renderPromptsV();
+  saveState(true);
+  setStatus2(`✓ Đã thêm Prompt B cho ${done}/${targets.length} cảnh dài hơn ${THRESHOLD}s.`, 'ok');
 }
 
 function removePromptB(id){
@@ -5248,8 +5286,8 @@ NEGATIVE/RULES: ${rules}
 Yêu cầu:
 - Mô tả CHÍNH XÁC visual của nhân vật trong ảnh (hình dạng đầu, mắt, miệng, tỷ lệ cơ thể, quần áo, màu sắc)
 - Ghi tên nhân vật [${name}] trong prompt
-- TOP ROW 4 full-body views, BOTTOM ROW 6 expression close-ups
-- 80-140 từ tiếng Anh
+- LAYOUT BẮT BUỘC: character reference sheet, TOP ROW shows 5 full-body views (front view, 3/4 front view, side profile, 3/4 back view, full back view), BOTTOM ROW shows 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), clean white background, consistent character design across all poses
+- 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text, không giải thích.`;
         state.assetCharPrompts[name] = await callClaudeWithImage(promptText, img.base64, img.mediaType, 700);
       } else {
@@ -5266,7 +5304,8 @@ Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
 Yêu cầu:
 - Suy luận đặc điểm nhân vật từ tên và context kênh
 - Ghi tên nhân vật [${name}] trong prompt
-- 80-140 từ tiếng Anh
+- LAYOUT BẮT BUỘC: character reference sheet, TOP ROW shows 5 full-body views (front view, 3/4 front view, side profile, 3/4 back view, full back view), BOTTOM ROW shows 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), clean white background, consistent character design across all poses
+- 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
         state.assetCharPrompts[name] = await callClaude(promptText, 500);
       }
@@ -5308,7 +5347,8 @@ Yêu cầu:
 - Mô tả chi tiết môi trường, đồ vật, ánh sáng
 - Ghi tên bối cảnh [${name}] trong prompt
 - NO characters NO people
-- 80-120 từ tiếng Anh
+- LAYOUT BẮT BUỘC: background reference sheet split into 4 panels (2x2 grid) showing the SAME location from 4 different angles and lighting moods — panel 1 wide establishing shot, panel 2 medium angle from opposite side, panel 3 high isometric overview, panel 4 low close detail angle with dramatic lighting. All 4 panels same location, consistent objects and architecture.
+- 100-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
       state.assetBgPrompts[name] = await callClaude(promptText, 500);
       renderAssetBgPrompts(bgs);
@@ -5328,23 +5368,30 @@ async function genStyleReference(){
   if (!p) return setStatus3('Cần Profile.', 'error');
   setStatus3('AI đang tạo Style Reference prompt...', 'working');
   try {
-    const prompt = `Tạo 1 prompt G-Labs cho "Channel Visual Style Reference Sheet" — 1 ảnh tóm tắt toàn bộ style visual của kênh.
+    const prompt = `Tạo 1 prompt G-Labs cho "Channel Visual Style Reference Sheet" — 1 ảnh master tóm tắt toàn bộ style visual của kênh, dùng làm chuẩn cho mọi video sau.
 
 Kênh: ${p.tenKenh} — ${p.ngach}
 Visual Style: ${p.visualStyle}
-Character Style: ${(p.characterStyle || '').slice(0, 200)}
-Background Style: ${(p.backgroundStyle || '').slice(0, 200)}
+Character Style: ${(p.characterStyle || '').slice(0, 250)}
+Background Style: ${(p.backgroundStyle || '').slice(0, 250)}
+Scene Style: ${(p.sceneStyle || '').slice(0, 150)}
+
+LAYOUT BẮT BUỘC — ảnh chia 3 hàng ngang rõ ràng, phân cách bằng đường kẻ mảnh:
+- HÀNG 1 (trên cùng): color palette — 8 ô vuông màu đại diện cho bảng màu chủ đạo của kênh (lấy từ style), xếp ngang đều nhau
+- HÀNG 2 (giữa): line-up 8 nhân vật mẫu đa dạng (nam/nữ, già/trẻ, các nghề khác nhau phù hợp ngách kênh) — TẤT CẢ cùng art style nhất quán, đứng full-body front view, nền trắng, có bóng đổ nhẹ dưới chân
+- HÀNG 3 (dưới cùng): 3 ô bối cảnh mẫu (3 môi trường tiêu biểu của kênh) với lighting và mood khác nhau, bo góc nhẹ
 
 Prompt phải:
-- Mô tả 1 bức tranh tóm tắt style: mẫu nhân vật, bảng màu, nét vẽ, ví dụ bối cảnh
-- 100-150 từ tiếng Anh
-- Kết thúc bằng: "Channel style reference sheet for [${p.tenKenh}]"
+- Mô tả CHÍNH XÁC art style (nét vẽ, outline, màu sắc, tỉ lệ nhân vật) theo Character Style ở trên
+- Áp dụng đúng bảng màu và mood theo Visual Style
+- 130-180 từ tiếng Anh
+- Kết thúc bằng: "channel style reference sheet, consistent art style throughout, clean layout, no text labels"
 - Trả về CHỈ prompt text.`;
-    state.styleRefPrompt = await callClaude(prompt, 500);
+    state.styleRefPrompt = await callClaude(prompt, 600);
     document.getElementById('styleRefPanel').style.display = 'block';
     renderStyleRef();
     updateAllAssetPromptsBox();
-    setStatus3('✓ Đã tạo Style Reference prompt.', 'ok');
+    setStatus3('✓ Đã tạo Style Reference prompt (3 hàng: palette + nhân vật + bối cảnh).', 'ok');
     saveState();
   } catch (e) {
     console.error(e);
