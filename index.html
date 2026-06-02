@@ -905,6 +905,10 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <label class="label">API Key</label>
         <input type="password" id="apiKey" placeholder="sk-...">
       </div>
+      <div class="api-row">
+        <label class="label">BASE URL <span style="font-weight:400;opacity:.6;font-size:10px">(tuỳ chọn — dùng API bên thứ 3)</span></label>
+        <input type="text" id="apiBaseUrl" placeholder="https://api.anthropic.com (để trống = mặc định)" style="font-size:11px">
+      </div>
       <div style="display:flex;gap:6px;margin-top:10px">
         <button class="btn sm primary" onclick="saveApiSettings()" style="flex:1">💾 Lưu</button>
         <button class="btn sm" onclick="testApi()" style="flex:1">⚡ Test</button>
@@ -2288,6 +2292,8 @@ function loadApiSettings(){
   onProviderChange();
   if (model) document.getElementById('apiModel').value = model;
   document.getElementById('apiKey').value = key;
+  const baseUrlEl = document.getElementById('apiBaseUrl');
+  if (baseUrlEl) baseUrlEl.value = localStorage.getItem('api_base_url') || '';
   updateApiStatus();
 }
 
@@ -2295,11 +2301,13 @@ function saveApiSettings(){
   const provider = document.getElementById('apiProvider').value;
   const model = document.getElementById('apiModel').value;
   const key = document.getElementById('apiKey').value.trim();
+  const baseUrl = document.getElementById('apiBaseUrl').value.trim().replace(/\/+$/, '');
   localStorage.setItem('api_provider', provider);
   localStorage.setItem('api_model', model);
   localStorage.setItem('api_key', key);
+  localStorage.setItem('api_base_url', baseUrl);
   updateApiStatus();
-  setApiStatus('✓ Đã lưu cấu hình API.', 'ok');
+  setApiStatus(baseUrl ? `✓ Đã lưu. Dùng Base URL: ${baseUrl}` : '✓ Đã lưu cấu hình API.', 'ok');
 }
 
 function updateApiStatus(){
@@ -2361,6 +2369,27 @@ async function callLLM(prompt, opts = {}){
 
 async function callAnthropic(messages, model, key, maxTokens){
   const body = JSON.stringify({ model, max_tokens: maxTokens, messages });
+  const baseUrl = localStorage.getItem('api_base_url') || '';
+
+  // Nếu có Base URL bên thứ 3 → gọi thẳng, bỏ qua proxy Vercel
+  if (baseUrl) {
+    const endpoint = baseUrl.replace(/\/+$/, '') + '/v1/messages';
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'Authorization': 'Bearer ' + key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body
+    });
+    if (!r.ok) { const e = await r.text(); throw new Error(`API ${r.status}: ${e.slice(0, 200)}`); }
+    const d = await r.json();
+    return d.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+  }
+
   // Try Vercel proxy first
   try {
     const r = await fetch('/api/claude', {
