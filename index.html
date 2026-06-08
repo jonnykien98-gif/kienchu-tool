@@ -6091,6 +6091,9 @@ async function searchAllScenes(){
 }
 
 function renderSceneResults(sceneId, keywords, results){
+  // Số thứ tự cảnh để đặt tên file (001, 002...)
+  const sceneIdx = state.scenes.findIndex(s => s.id === sceneId);
+  const sceneNum = sceneIdx >= 0 ? sceneIdx + 1 : '';
   const box = document.getElementById('media-results-' + sceneId);
   const photos = results.photos || [];
   const videos = results.videos || [];
@@ -6107,7 +6110,7 @@ function renderSceneResults(sceneId, keywords, results){
       <a href="${p.url}" target="_blank" style="display:block;text-decoration:none"><img src="${p.src.small}" style="width:100%;height:90px;object-fit:cover" loading="lazy"></a>
       <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center">
         <span>📷 ${src}</span>
-        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','jpg')" title="Tải ảnh về">⬇</button>
+        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','jpg','${sceneNum}')" title="Tải ảnh về (tên = số cảnh)">⬇</button>
       </div>
     </div>`;
   }
@@ -6120,7 +6123,7 @@ function renderSceneResults(sceneId, keywords, results){
       <div style="position:absolute;top:45px;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.65);color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px">▶</div></a>
       <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center">
         <span>🎬 ${v.duration}s ${src}</span>
-        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','mp4')" title="Tải video về">⬇</button>
+        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','mp4','${sceneNum}')" title="Tải video về (tên = số cảnh)">⬇</button>
       </div>
     </div>`;
   }
@@ -6128,25 +6131,26 @@ function renderSceneResults(sceneId, keywords, results){
   box.innerHTML = html;
 }
 
-async function downloadMedia(url, kind){
+async function downloadMedia(url, kind, sceneNum){
   if (!url) return setStatus5('Không có link tải.', 'error');
   setStatus5('Đang tải...', 'working');
-  // Xác định đuôi file đúng từ URL, fallback theo loại
   let ext = (url.split('?')[0].match(/\.(jpg|jpeg|png|webp|mp4|mov|webm)$/i) || [])[1];
   if (!ext) ext = (kind === 'mp4') ? 'mp4' : 'jpg';
   ext = ext.toLowerCase();
+  // Tên file = số cảnh (001, 002...) nếu có, fallback timestamp
+  const baseName = sceneNum ? String(sceneNum).padStart(3, '0') : `stock-${Date.now()}`;
   try {
     const r = await fetch(url);
     const blob = await r.blob();
     const a = document.createElement('a');
     const objUrl = URL.createObjectURL(blob);
     a.href = objUrl;
-    a.download = `stock-${Date.now()}.${ext}`;
+    a.download = `${baseName}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(objUrl);
-    setStatus5('✓ Đã tải về.', 'ok');
+    setStatus5(`✓ Đã tải về: ${baseName}.${ext}`, 'ok');
   } catch (e) {
     window.open(url, '_blank');
     setStatus5('Mở link ở tab mới để tải (CORS chặn tải trực tiếp).', 'info');
