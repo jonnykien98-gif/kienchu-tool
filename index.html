@@ -6107,7 +6107,7 @@ function renderSceneResults(sceneId, keywords, results){
       <a href="${p.url}" target="_blank" style="display:block;text-decoration:none"><img src="${p.src.small}" style="width:100%;height:90px;object-fit:cover" loading="lazy"></a>
       <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center">
         <span>📷 ${src}</span>
-        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','img')" title="Tải ảnh về">⬇</button>
+        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','jpg')" title="Tải ảnh về">⬇</button>
       </div>
     </div>`;
   }
@@ -6128,9 +6128,13 @@ function renderSceneResults(sceneId, keywords, results){
   box.innerHTML = html;
 }
 
-async function downloadMedia(url, ext){
+async function downloadMedia(url, kind){
   if (!url) return setStatus5('Không có link tải.', 'error');
   setStatus5('Đang tải...', 'working');
+  // Xác định đuôi file đúng từ URL, fallback theo loại
+  let ext = (url.split('?')[0].match(/\.(jpg|jpeg|png|webp|mp4|mov|webm)$/i) || [])[1];
+  if (!ext) ext = (kind === 'mp4') ? 'mp4' : 'jpg';
+  ext = ext.toLowerCase();
   try {
     const r = await fetch(url);
     const blob = await r.blob();
@@ -6144,7 +6148,6 @@ async function downloadMedia(url, ext){
     URL.revokeObjectURL(objUrl);
     setStatus5('✓ Đã tải về.', 'ok');
   } catch (e) {
-    // CORS có thể chặn fetch → mở link để tải tay
     window.open(url, '_blank');
     setStatus5('Mở link ở tab mới để tải (CORS chặn tải trực tiếp).', 'info');
   }
