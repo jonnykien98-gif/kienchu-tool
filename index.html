@@ -1602,7 +1602,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
     <div class="tool" id="tool-tool5">
       <div class="tool-head">
         <div class="tool-title">Tìm Ảnh & Video Stock</div>
-        <div class="tool-subtitle">Tìm ảnh và video thật từ Pexels phù hợp với từng cảnh. AI tự sinh từ khoá.</div>
+        <div class="tool-subtitle">Tìm ảnh và video thật từ Pexels + Pixabay phù hợp với từng cảnh. AI tự sinh từ khoá.</div>
       </div>
 
       <div class="info-box">
@@ -1611,12 +1611,19 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         → paste vào ô bên dưới → Load cảnh từ Tool 02 → Tìm tất cả. Bạn tự tải về từ link.
       </div>
 
-      <div class="grid-2 mb-24" style="grid-template-columns:1fr auto;align-items:end">
+      <div class="grid-2 mb-12" style="grid-template-columns:1fr auto;align-items:end">
         <div>
           <label class="label">PEXELS API KEY (miễn phí)</label>
           <input type="password" id="pexelsKey" placeholder="Paste Pexels API key...">
         </div>
         <button class="btn sm primary" onclick="savePexelsKey()">💾 Lưu key</button>
+      </div>
+      <div class="grid-2 mb-24" style="grid-template-columns:1fr auto;align-items:end">
+        <div>
+          <label class="label">PIXABAY API KEY (miễn phí — tuỳ chọn)</label>
+          <input type="password" id="pixabayKey" placeholder="Paste Pixabay API key... (pixabay.com/api/docs)">
+        </div>
+        <button class="btn sm primary" onclick="savePixabayKey()">💾 Lưu key</button>
       </div>
 
       <div class="actions mb-24">
@@ -5938,10 +5945,66 @@ async function generateSearchKeywords(voText){
   }
 }
 
+function savePixabayKey(){
+  const key = document.getElementById('pixabayKey').value.trim();
+  try { localStorage.setItem('pixabay-key', key); } catch (e) {}
+  setStatus5('✓ Đã lưu Pixabay API key.', 'ok');
+}
+function loadPixabayKey(){
+  try {
+    const k = localStorage.getItem('pixabay-key');
+    if (k && document.getElementById('pixabayKey')) document.getElementById('pixabayKey').value = k;
+  } catch (e) {}
+}
+function getPixabayKey(){
+  const el = document.getElementById('pixabayKey');
+  return el ? el.value.trim() : '';
+}
+
+async function searchPixabay(query, type = 'both'){
+  const key = getPixabayKey();
+  if (!key) return { photos: [], videos: [] };
+  const results = { photos: [], videos: [] };
+
+  if (type === 'both' || type === 'photos') {
+    try {
+      const r = await fetch(`https://pixabay.com/api/?key=${key}&q=${encodeURIComponent(query)}&per_page=4&orientation=horizontal&image_type=photo`);
+      if (r.ok) {
+        const d = await r.json();
+        // Chuẩn hoá về format giống Pexels
+        results.photos = (d.hits || []).map(h => ({
+          url: h.pageURL,
+          width: h.imageWidth, height: h.imageHeight,
+          src: { small: h.previewURL, large: h.largeImageURL, original: h.largeImageURL },
+          _source: 'pixabay',
+          _downloadUrl: h.largeImageURL
+        }));
+      }
+    } catch (e) { console.warn('Pixabay photo failed:', e); }
+  }
+
+  if (type === 'both' || type === 'videos') {
+    try {
+      const r = await fetch(`https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(query)}&per_page=4`);
+      if (r.ok) {
+        const d = await r.json();
+        results.videos = (d.hits || []).map(h => ({
+          url: h.pageURL,
+          duration: h.duration,
+          image: `https://i.vimeocdn.com/video/${h.picture_id}_295x166.jpg`,
+          _source: 'pixabay',
+          _downloadUrl: (h.videos?.large?.url || h.videos?.medium?.url || h.videos?.small?.url)
+        }));
+      }
+    } catch (e) { console.warn('Pixabay video failed:', e); }
+  }
+  return results;
+}
+
 async function searchPexels(query, type = 'both'){
   const key = getPexelsKey();
-  if (!key) throw new Error('Cần Pexels API key');
   const results = { photos: [], videos: [] };
+  if (!key) return results;
   const headers = { 'Authorization': key };
 
   if (type === 'both' || type === 'photos') {
@@ -5950,8 +6013,11 @@ async function searchPexels(query, type = 'both'){
         `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=4&orientation=landscape`,
         { headers }
       );
-      if (r.ok) { const d = await r.json(); results.photos = d.photos || []; }
-    } catch (e) { console.warn('Photo search failed:', e); }
+      if (r.ok) {
+        const d = await r.json();
+        results.photos = (d.photos || []).map(p => ({ ...p, _source: 'pexels', _downloadUrl: p.src?.original || p.src?.large2x || p.src?.large }));
+      }
+    } catch (e) { console.warn('Pexels photo failed:', e); }
   }
 
   if (type === 'both' || type === 'videos') {
@@ -5960,16 +6026,35 @@ async function searchPexels(query, type = 'both'){
         `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=4&orientation=landscape`,
         { headers }
       );
-      if (r.ok) { const d = await r.json(); results.videos = d.videos || []; }
-    } catch (e) { console.warn('Video search failed:', e); }
+      if (r.ok) {
+        const d = await r.json();
+        results.videos = (d.videos || []).map(v => {
+          // Lấy file video chất lượng cao nhất
+          const best = (v.video_files || []).sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+          return { ...v, _source: 'pexels', _downloadUrl: best?.link || '' };
+        });
+      }
+    } catch (e) { console.warn('Pexels video failed:', e); }
   }
   return results;
+}
+
+// Gộp kết quả từ cả 2 nguồn
+async function searchAllSources(query, type = 'both'){
+  const [pexels, pixabay] = await Promise.all([
+    searchPexels(query, type),
+    searchPixabay(query, type)
+  ]);
+  return {
+    photos: [...(pexels.photos || []), ...(pixabay.photos || [])],
+    videos: [...(pexels.videos || []), ...(pixabay.videos || [])]
+  };
 }
 
 async function searchForScene(sceneId){
   const scene = state.scenes.find(s => s.id === sceneId);
   if (!scene) return;
-  if (!getPexelsKey()) return setStatus5('Cần paste Pexels API key trước.', 'error');
+  if (!getPexelsKey() && !getPixabayKey()) return setStatus5('Cần ít nhất 1 API key (Pexels hoặc Pixabay).', 'error');
 
   const box = document.getElementById('media-results-' + sceneId);
   box.innerHTML = '<span class="spinner"></span> <span style="color:var(--violet);font-size:11.5px">Đang tìm...</span>';
@@ -5977,7 +6062,7 @@ async function searchForScene(sceneId){
   try {
     const keywords = await generateSearchKeywords(scene.text);
     const type = document.getElementById('mediaType').value;
-    const results = await searchPexels(keywords, type);
+    const results = await searchAllSources(keywords, type);
     renderSceneResults(sceneId, keywords, results);
   } catch (e) {
     box.innerHTML = '<span style="color:var(--red);font-size:11.5px">Lỗi: ' + escapeHtml(e.message) + '</span>';
@@ -5986,7 +6071,7 @@ async function searchForScene(sceneId){
 
 async function searchAllScenes(){
   if (state.scenes.length === 0) return setStatus5('Cần load cảnh trước.', 'error');
-  if (!getPexelsKey()) return setStatus5('Cần Pexels API key.', 'error');
+  if (!getPexelsKey() && !getPixabayKey()) return setStatus5('Cần ít nhất 1 API key (Pexels hoặc Pixabay).', 'error');
   setStatus5('Đang tìm media cho tất cả cảnh...', 'working');
   clearCancel();
 
@@ -6013,29 +6098,62 @@ function renderSceneResults(sceneId, keywords, results){
     box.innerHTML = `<span style="color:var(--text-dim);font-size:11.5px">Không tìm thấy kết quả cho "${escapeHtml(keywords)}"</span>`;
     return;
   }
-  let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Từ khoá: <strong>${escapeHtml(keywords)}</strong></div>`;
+  let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Từ khoá: <strong>${escapeHtml(keywords)}</strong> · ${photos.length} ảnh, ${videos.length} video</div>`;
   html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
   for (const p of photos) {
-    html += `<a href="${p.url}" target="_blank" style="display:block;width:150px;border-radius:6px;overflow:hidden;border:1px solid var(--border);text-decoration:none">
-      <img src="${p.src.small}" style="width:100%;height:90px;object-fit:cover" loading="lazy">
-      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2)">📷 ${p.width}×${p.height}</div>
-    </a>`;
+    const src = p._source === 'pixabay' ? '🟢 Pixabay' : '🔵 Pexels';
+    const dl = (p._downloadUrl || '').replace(/'/g, "\\'");
+    html += `<div style="width:150px;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+      <a href="${p.url}" target="_blank" style="display:block;text-decoration:none"><img src="${p.src.small}" style="width:100%;height:90px;object-fit:cover" loading="lazy"></a>
+      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center">
+        <span>📷 ${src}</span>
+        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','img')" title="Tải ảnh về">⬇</button>
+      </div>
+    </div>`;
   }
   for (const v of videos) {
     const thumb = v.image || v.video_pictures?.[0]?.picture || '';
-    html += `<a href="${v.url}" target="_blank" style="display:block;width:150px;border-radius:6px;overflow:hidden;border:1px solid var(--border);text-decoration:none;position:relative">
-      <img src="${thumb}" style="width:100%;height:90px;object-fit:cover" loading="lazy">
-      <div style="position:absolute;top:38px;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.65);color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px">▶</div>
-      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2)">🎬 ${v.duration}s</div>
-    </a>`;
+    const src = v._source === 'pixabay' ? '🟢 Pixabay' : '🔵 Pexels';
+    const dl = (v._downloadUrl || '').replace(/'/g, "\\'");
+    html += `<div style="width:150px;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+      <a href="${v.url}" target="_blank" style="display:block;text-decoration:none;position:relative"><img src="${thumb}" style="width:100%;height:90px;object-fit:cover" loading="lazy">
+      <div style="position:absolute;top:45px;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.65);color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px">▶</div></a>
+      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center">
+        <span>🎬 ${v.duration}s ${src}</span>
+        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','mp4')" title="Tải video về">⬇</button>
+      </div>
+    </div>`;
   }
   html += '</div>';
   box.innerHTML = html;
 }
 
+async function downloadMedia(url, ext){
+  if (!url) return setStatus5('Không có link tải.', 'error');
+  setStatus5('Đang tải...', 'working');
+  try {
+    const r = await fetch(url);
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    const objUrl = URL.createObjectURL(blob);
+    a.href = objUrl;
+    a.download = `stock-${Date.now()}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objUrl);
+    setStatus5('✓ Đã tải về.', 'ok');
+  } catch (e) {
+    // CORS có thể chặn fetch → mở link để tải tay
+    window.open(url, '_blank');
+    setStatus5('Mở link ở tab mới để tải (CORS chặn tải trực tiếp).', 'info');
+  }
+}
+
 // Load Pexels key on auth
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(loadPexelsKey, 200);
+  setTimeout(loadPixabayKey, 200);
 });
 
 /* ============================================================
