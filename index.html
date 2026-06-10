@@ -1082,7 +1082,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           📄 Chia từ SRT
           <input type="file" accept=".srt,.txt" style="display:none" onchange="splitFromSRTFile(this)">
         </label>
-        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)">
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)" title="Gợi ý độ dài — AI vẫn ưu tiên câu trọn nghĩa">
           ~<input type="number" id="srtTargetSec" value="5" min="2" max="15" style="width:48px;padding:5px 6px;text-align:center">s/cảnh
         </span>
         <button class="btn ghost" onclick="verifyScenesAgainstScript()" title="So sánh tất cả cảnh với kịch bản gốc — phát hiện mất từ / thêm từ">🔍 So Sánh</button>
@@ -4030,14 +4030,23 @@ async function splitFromSRTFile(input){
   const file = input.files[0];
   if (!file) return;
   input.value = '';
-  const text = await file.text();
-  const cues = parseSRT(text);
+  const srtText = await file.text();
+  const cues = parseSRT(srtText);
   if (!cues.length) return setStatus2('❌ File SRT không hợp lệ hoặc trống.', 'error');
 
-  setStatus2(`Đang phân tích ${cues.length} block SRT...`, 'working');
+  // Nếu có kịch bản gốc trong ô → dùng text gốc + timing SRT (an toàn)
+  const scriptText = (state.script || '').trim();
+  const useOriginal = scriptText.length > 50;
+
+  setStatus2(useOriginal
+    ? `Đang khớp kịch bản gốc với timing từ ${cues.length} block SRT...`
+    : `Đang phân tích ${cues.length} block SRT...`, 'working');
+
   try {
-    const scenes = await splitScenesFromSRT(cues);
-    if (!scenes.length) return setStatus2('❌ Không gộp được cảnh từ SRT.', 'error');
+    const scenes = useOriginal
+      ? await splitScenesFromScriptPlusSRT(scriptText, cues)
+      : await splitScenesFromSRT(cues);
+    if (!scenes.length) return setStatus2('❌ Không gộp được cảnh.', 'error');
 
     const maxScenes = getMaxScenes();
     let trimmedNotice = '';
@@ -4056,23 +4065,25 @@ async function splitFromSRTFile(input){
       character: '',
       background: '',
       camera: 'medium',
-      duration: s.duration // timing THẬT từ SRT
+      duration: s.duration
     }));
-    // Đưa text gộp vào ô kịch bản để tham chiếu
-    state.script = finalScenes.map(s => s.text).join('\n');
-    const scriptEl = document.getElementById('scriptInput');
-    if (scriptEl) scriptEl.value = state.script;
+    if (!useOriginal) {
+      state.script = finalScenes.map(s => s.text).join('\n');
+      const scriptEl = document.getElementById('scriptInput');
+      if (scriptEl) scriptEl.value = state.script;
+    }
 
     state.scenePrompts = {};
     state.scenePrompts2 = {};
     renderAllT2();
-    // Cảnh báo nếu có cảnh quá dài
+
     const longScenes = state.scenes.filter(s => (s.duration || 0) > 8);
     let warn = '';
     if (longScenes.length) {
-      warn = ` ⚠️ ${longScenes.length} cảnh vẫn dài >8s (do block SRT gốc dài) — dùng "Tự thêm ảnh B" ở tab Prompt để tách thành 2 ảnh.`;
+      warn = ` 💡 ${longScenes.length} cảnh dài >8s — sang tab "Prompt G-Labs" bấm "Tự thêm ảnh B".`;
     }
-    setStatus2(`✓ Đã chia ${state.scenes.length} cảnh từ SRT (timing thật từ giọng đọc).${trimmedNotice}${warn}`, longScenes.length ? 'info' : 'ok');
+    const srcNote = useOriginal ? 'text từ KỊCH BẢN GỐC + timing thật từ SRT' : 'text & timing từ SRT';
+    setStatus2(`✓ Đã chia ${state.scenes.length} cảnh (${srcNote}).${trimmedNotice}${warn}`, 'ok');
     saveState();
   } catch (e) {
     console.error(e);
@@ -4080,32 +4091,74 @@ async function splitFromSRTFile(input){
   }
 }
 
+// Khớp kịch bản gốc (chuẩn) với timing từ SRT
+async function splitScenesFromScriptPlusSRT(scriptText, cues){
+  const srtTimeline = cues.map((c, i) =>
+    `[${i}] ${c.start.toFixed(1)}-${c.end.toFixed(1)}s: ${c.text}`
+  ).join('\n');
+
+  const prompt = `Tôi có KỊCH BẢN GỐC (chuẩn, đúng chính tả) và file SRT (timing thật từ giọng đọc, nhưng chữ có thể SAI do nhận diện giọng nói).
+
+NHIỆM VỤ: Chia KỊCH BẢN GỐC thành các cảnh có ý nghĩa trọn vẹn (mỗi cảnh 1 câu/ý hoàn chỉnh), gán THỜI GIAN cho mỗi cảnh bằng cách đối chiếu với SRT timeline.
+
+QUY TẮC:
+- Text của cảnh LẤY TỪ KỊCH BẢN GỐC (đúng chính tả, đúng số, đúng tên riêng) — KHÔNG dùng chữ từ SRT
+- Thời gian (start/end) lấy từ SRT: tìm block SRT khớp nội dung với câu gốc → lấy timing
+- Mỗi cảnh là 1 câu/ý TRỌN VẸN, không cắt giữa câu
+- Câu dài có thể là 1 cảnh, không sao
+- Giữ ĐÚNG thứ tự, không bỏ sót nội dung kịch bản
+
+KỊCH BẢN GỐC:
+${scriptText}
+
+SRT TIMELINE:
+${srtTimeline}
+
+Trả về JSON array, mỗi phần tử: {"text": "câu từ kịch bản gốc", "start": số_giây, "end": số_giây}
+CHỈ trả JSON, không giải thích.`;
+
+  const raw = await callClaude(prompt, 4000);
+  let arr;
+  try {
+    const clean = raw.replace(/```json|```/g, '').trim();
+    arr = JSON.parse(clean);
+  } catch (e) {
+    return splitScenesFromSRT(cues);
+  }
+  if (!Array.isArray(arr) || !arr.length) return splitScenesFromSRT(cues);
+
+  return arr.map(s => {
+    const start = +s.start || 0;
+    const end = +s.end || start + 3;
+    const dur = +(end - start).toFixed(1);
+    return { text: (s.text || '').trim(), duration: dur > 0 ? dur : 3 };
+  }).filter(s => s.text);
+}
+
 async function splitScenesFromSRT(cues){
-  // Đánh số block + timestamp để AI gộp theo nghĩa
+  const targetSec = Math.max(2, parseInt(document.getElementById('srtTargetSec')?.value) || 5);
+
+  // Đánh số block + timestamp để AI gộp theo NGHĨA (câu trọn vẹn)
   const blockList = cues.map((c, i) =>
     `[${i}] (${c.start.toFixed(1)}s-${c.end.toFixed(1)}s) ${c.text}`
   ).join('\n');
 
-  // Độ dài cảnh mong muốn (từ ô input, mặc định 5)
-  const targetSec = Math.max(2, parseInt(document.getElementById('srtTargetSec')?.value) || 5);
-  const maxSec = targetSec + 2; // ngưỡng tối đa trước khi buộc tách
+  const prompt = `Dưới đây là các block phụ đề (SRT) từ giọng đọc. Block được chia theo nhịp đọc nên NHIỀU BLOCK BỊ CẮT GIỮA CÂU (kết thúc bằng từ cụt như "the", "and", "a"...).
 
-  const prompt = `Dưới đây là các block phụ đề (SRT) từ giọng đọc, mỗi block có index và thời gian. Block được chia theo nhịp đọc.
+Nhiệm vụ: GỘP các block thành các CẢNH có Ý NGHĨA TRỌN VẸN. Mỗi cảnh phải là 1 câu hoàn chỉnh hoặc 1 ý trọn vẹn — KHÔNG được cụt nghĩa, KHÔNG kết thúc giữa câu.
 
-Nhiệm vụ: NHÓM các block thành các CẢNH NGẮN để làm video. Mỗi cảnh khoảng ${targetSec} giây (TỐI ĐA ${maxSec}s).
-
-Quy tắc QUAN TRỌNG:
-- Mỗi cảnh KHOẢNG ${targetSec} giây — KHÔNG được để cảnh dài hơn ${maxSec}s
-- Nếu một câu dài hơn ${maxSec}s → TÁCH thành nhiều cảnh ở chỗ ngắt ý tự nhiên (sau dấu phẩy, sau mệnh đề, sau cụm ý)
-- Ưu tiên giữ cụm từ có nghĩa, nhưng KHÔNG ưu tiên câu trọn vẹn hơn việc giữ cảnh ngắn
-- Mỗi cảnh nên gộp 1-3 block, hiếm khi 4
+Quy tắc:
+- Gộp các block liên tiếp cho tới khi tạo thành 1 câu/ý HOÀN CHỈNH (kết thúc tự nhiên ở dấu chấm, hoặc hết 1 ý trọn vẹn)
+- Ưu tiên NGHĨA TRỌN VẸN là quan trọng nhất — KHÔNG cắt giữa câu chỉ để cảnh ngắn
+- Không cần lo cảnh dài (sẽ xử lý sau bằng cách tách ảnh) — chỉ cần mỗi cảnh trọn nghĩa
+- Mỗi cảnh lý tưởng 1 câu. Câu rất dài (nhiều mệnh đề) có thể tách ở dấu chấm/chấm phẩy giữa các câu độc lập
 - KHÔNG bỏ sót block nào, KHÔNG đổi thứ tự
 
 Các block:
 ${blockList}
 
 Trả về JSON array, mỗi phần tử là 1 cảnh: {"from": index_block_đầu, "to": index_block_cuối}
-CHỈ trả JSON, không giải thích. VD: [{"from":0,"to":1},{"from":2,"to":2}]`;
+CHỈ trả JSON. VD: [{"from":0,"to":0},{"from":1,"to":2},{"from":3,"to":4}]`;
 
   const raw = await callClaude(prompt, 3000);
   let groups;
