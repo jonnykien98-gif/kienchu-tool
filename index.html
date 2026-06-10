@@ -1729,7 +1729,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
     <div class="tool" id="tool-tool8">
       <div class="tool-head">
         <div class="tool-title">Căn Timing & Phụ Đề</div>
-        <div class="tool-subtitle">Khớp duration mỗi cảnh với giọng đọc THẬT bằng Whisper. Fix lỗi giọng nhanh/chậm lệch ảnh. Xuất SRT chuẩn luôn.</div>
+        <div class="tool-subtitle">Khớp duration mỗi cảnh với giọng đọc THẬT bằng Whisper. Fix lỗi giọng nhanh/chậm lệch ảnh. Hoặc bỏ audio bất kỳ → ra file SRT độc lập.</div>
       </div>
 
       <div class="info-box">
@@ -1818,6 +1818,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn" style="background:#0d9488;border-color:#0d9488;color:#fff" onclick="t8AlignBySRT()">📄 Căn theo SRT</button>
         <button class="btn" onclick="t8ApplyTimings()">✓ Áp dụng timing vào cảnh</button>
         <button class="btn ghost" onclick="t8ExportSRT()">↓ Xuất SRT</button>
+        <button class="btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff" onclick="t8AudioToSRT()" title="Bỏ audio bất kỳ → ra file SRT (không cần cảnh ở Tool 02)">🎙 Audio → SRT (độc lập)</button>
         <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t8Reset()">🗑 Xoá kết quả</button>
       </div>
 
@@ -7617,6 +7618,74 @@ function t8ApplyTimings(){
   syncStateToCurrentProfile();
   saveState(true);
   setStatus8(`✓ Đã áp dụng timing thật cho ${applied} cảnh. Qua Tool 02 / Dựng Clip để kiểm tra.`, 'ok');
+}
+
+// Transcribe audio → segments (mỗi segment = 1 dòng SRT). Độc lập, không cần cảnh.
+async function t8TranscribeSegments(prov, file){
+  const cfg = T8_PROVIDERS[prov];
+  const key = t8GetKey(prov) || document.getElementById('t8ApiKey').value.trim();
+  if (!key) throw new Error(`Chưa có ${cfg.name} key. Nhập + Lưu key trước.`);
+  const lang = document.getElementById('t8Language')?.value ?? 'en';
+  const model = t8PickModel(prov, lang);
+  setStatus8(`Đang gửi audio lên ${cfg.name} (${model})...`, 'working');
+  const form = new FormData();
+  form.append('file', file);
+  form.append('model', model);
+  form.append('response_format', 'verbose_json');
+  if (lang) form.append('language', lang);
+  const r = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key },
+    body: form
+  });
+  if (!r.ok) { const txt = await r.text(); throw new Error(`${cfg.name} HTTP ${r.status}: ${txt.slice(0, 200)}`); }
+  const data = await r.json();
+  if (data.segments && data.segments.length) {
+    return data.segments.map(s => ({ start: s.start, end: s.end, text: (s.text || '').trim() }));
+  }
+  // Fallback: nếu chỉ có text → 1 segment
+  if (data.text) return [{ start: 0, end: t8State.audioDuration || 5, text: data.text.trim() }];
+  throw new Error('Không có segments trong response.');
+}
+
+async function t8AudioToSRT(){
+  if (!t8State.audioFile) return setStatus8('Cần upload file audio trước (ô Audio Voiceover).', 'error');
+  const prov = t8GetProvider();
+  if (prov === 'local') return setStatus8('Chế độ này cần Groq/OpenAI (không dùng local). Đổi provider.', 'error');
+
+  try {
+    setStatus8('Đang transcribe audio → SRT...', 'working');
+    const segments = await t8TranscribeSegments(prov, t8State.audioFile);
+    if (!segments.length) return setStatus8('Không nhận được nội dung từ audio.', 'error');
+
+    const fmt = sec => {
+      if (sec == null) sec = 0;
+      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+      const s = String(Math.floor(sec % 60)).padStart(2, '0');
+      const ms = String(Math.floor((sec % 1) * 1000)).padStart(3, '0');
+      return `${h}:${m}:${s},${ms}`;
+    };
+    let srt = '';
+    segments.forEach((seg, i) => {
+      srt += `${i + 1}\n${fmt(seg.start)} --> ${fmt(seg.end)}\n${seg.text}\n\n`;
+    });
+
+    const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const baseName = (t8State.audioFile.name || 'audio').replace(/\.[^.]+$/, '');
+    a.href = url;
+    a.download = `${baseName}.srt`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const total = segments[segments.length - 1]?.end || 0;
+    setStatus8(`✓ Đã tải SRT từ audio (${segments.length} dòng, ${Math.round(total)}s). File: ${baseName}.srt`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus8('Lỗi transcribe: ' + e.message, 'error');
+  }
 }
 
 function t8ExportSRT(){
