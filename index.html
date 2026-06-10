@@ -1078,6 +1078,10 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <option value="smart" selected>Chia thông minh (AI) ★</option>
         </select>
         <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
+        <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Chia cảnh theo file SRT — timing chính xác từ giọng đọc, AI gộp theo nghĩa">
+          📄 Chia từ SRT
+          <input type="file" accept=".srt,.txt" style="display:none" onchange="splitFromSRTFile(this)">
+        </label>
         <button class="btn ghost" onclick="verifyScenesAgainstScript()" title="So sánh tất cả cảnh với kịch bản gốc — phát hiện mất từ / thêm từ">🔍 So Sánh</button>
         <button class="btn violet" onclick="doPrescan()">⚡ Quét Trước (AI)</button>
         <button class="btn teal" onclick="doAssign()">◈ Gán Tài Nguyên</button>
@@ -4013,6 +4017,121 @@ function verifyScenesAgainstScript(){
   if (extraN) msg += ` THỪA ${extraN} từ.`;
   msg += ` (Mở Console F12 xem chi tiết — vị trí lệch + danh sách từ).`;
   setStatus2(msg, missN > 0 ? 'error' : 'info');
+}
+
+async function splitFromSRTFile(input){
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  const text = await file.text();
+  const cues = parseSRT(text);
+  if (!cues.length) return setStatus2('❌ File SRT không hợp lệ hoặc trống.', 'error');
+
+  setStatus2(`Đang phân tích ${cues.length} block SRT...`, 'working');
+  try {
+    const scenes = await splitScenesFromSRT(cues);
+    if (!scenes.length) return setStatus2('❌ Không gộp được cảnh từ SRT.', 'error');
+
+    const maxScenes = getMaxScenes();
+    let trimmedNotice = '';
+    let finalScenes = scenes;
+    if (scenes.length > maxScenes) {
+      const cut = scenes.length - maxScenes;
+      finalScenes = scenes.slice(0, maxScenes);
+      trimmedNotice = ` (Đã cắt ${cut} cảnh vượt giới hạn gói Free)`;
+      setTimeout(() => showUpgradeModal(`SRT chia ra ${scenes.length} cảnh, gói Free giữ ${maxScenes}.`), 500);
+    }
+
+    state.scenes = finalScenes.map((s, i) => ({
+      id: String(i + 1).padStart(3, '0'),
+      text: s.text,
+      level: 'L1',
+      character: '',
+      background: '',
+      camera: 'medium',
+      duration: s.duration // timing THẬT từ SRT
+    }));
+    // Đưa text gộp vào ô kịch bản để tham chiếu
+    state.script = finalScenes.map(s => s.text).join('\n');
+    const scriptEl = document.getElementById('scriptInput');
+    if (scriptEl) scriptEl.value = state.script;
+
+    state.scenePrompts = {};
+    state.scenePrompts2 = {};
+    renderAllT2();
+    setStatus2(`✓ Đã chia ${state.scenes.length} cảnh từ SRT (timing thật từ giọng đọc).${trimmedNotice}`, 'ok');
+    saveState();
+  } catch (e) {
+    console.error(e);
+    setStatus2('Lỗi chia SRT: ' + e.message, 'error');
+  }
+}
+
+async function splitScenesFromSRT(cues){
+  // Đánh số block + timestamp để AI gộp theo nghĩa
+  const blockList = cues.map((c, i) =>
+    `[${i}] (${c.start.toFixed(1)}s-${c.end.toFixed(1)}s) ${c.text}`
+  ).join('\n');
+
+  const targetSec = 5; // độ dài cảnh mong muốn
+
+  const prompt = `Dưới đây là các block phụ đề (SRT) từ giọng đọc, mỗi block có index và thời gian. Block được chia theo nhịp đọc nên nhiều block không trọn nghĩa.
+
+Nhiệm vụ: GỘP các block liên tiếp thành các CẢNH có ý nghĩa hoàn chỉnh (1 ý / 1 câu trọn vẹn). Mỗi cảnh nên dài khoảng ${targetSec} giây (gộp 1-3 block), KHÔNG cắt giữa câu, KHÔNG để cảnh cụt nghĩa.
+
+Quy tắc:
+- Gộp block cho tới khi thành 1 ý hoàn chỉnh
+- Ưu tiên nghĩa hơn độ dài: 1 câu trọn vẹn quan trọng hơn đủ ${targetSec}s
+- Câu quá dài (>8s) có thể tách ở chỗ ngắt ý tự nhiên
+- KHÔNG bỏ sót block nào, KHÔNG đổi thứ tự
+
+Các block:
+${blockList}
+
+Trả về JSON array, mỗi phần tử là 1 cảnh: {"from": index_block_đầu, "to": index_block_cuối}
+CHỈ trả JSON, không giải thích. VD: [{"from":0,"to":2},{"from":3,"to":4}]`;
+
+  const raw = await callClaude(prompt, 2000);
+  let groups;
+  try {
+    const clean = raw.replace(/```json|```/g, '').trim();
+    groups = JSON.parse(clean);
+  } catch (e) {
+    // Fallback: gộp theo giây nếu AI trả sai format
+    return fallbackGroupByTime(cues, targetSec);
+  }
+  if (!Array.isArray(groups) || !groups.length) return fallbackGroupByTime(cues, targetSec);
+
+  // Tạo scene từ group, timing thật từ SRT
+  const scenes = [];
+  for (const g of groups) {
+    const from = Math.max(0, g.from | 0);
+    const to = Math.min(cues.length - 1, g.to | 0);
+    if (to < from) continue;
+    const slice = cues.slice(from, to + 1);
+    const text = slice.map(c => c.text).join(' ').replace(/\s+/g, ' ').trim();
+    const dur = +(cues[to].end - cues[from].start).toFixed(1);
+    if (text) scenes.push({ text, duration: dur > 0 ? dur : 1 });
+  }
+  return scenes.length ? scenes : fallbackGroupByTime(cues, targetSec);
+}
+
+function fallbackGroupByTime(cues, targetSec){
+  const scenes = [];
+  let buf = [], startT = null;
+  for (const c of cues) {
+    if (startT == null) startT = c.start;
+    buf.push(c.text);
+    if (c.end - startT >= targetSec) {
+      scenes.push({ text: buf.join(' ').trim(), duration: +(c.end - startT).toFixed(1) });
+      buf = []; startT = null;
+    }
+  }
+  if (buf.length) {
+    const last = cues[cues.length - 1];
+    scenes.push({ text: buf.join(' ').trim(), duration: +(last.end - startT).toFixed(1) });
+  }
+  return scenes;
 }
 
 async function doSplit(){
