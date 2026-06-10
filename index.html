@@ -4424,19 +4424,19 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
       // Detect animation/cartoon style → inject formula block
       const styleStr = (p.sceneStyle || '').toLowerCase();
       const isCartoon2D = /cartoon|flat|2d|animation|hand.drawn|stick|explainer|educational/.test(styleStr);
+      // Lấy mô tả nhân vật NGẮN GỌN từ characterStyle của Profile (không hardcode)
+      const charStyleShort = (p.characterStyle || '').replace(/\s+/g, ' ').trim().slice(0, 280);
       const animFormulaBlock = isCartoon2D ? `
-🎬 ANIMATION STYLE RULES (BẮT BUỘC áp dụng cho mọi cảnh — đây là style kênh):
-Visual style: flat 2D animation, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors --ar 16:9
+🎬 STYLE RULES (BẮT BUỘC áp dụng cho MỌI cảnh — đây là style cố định của kênh):
+Scene aesthetic: ${p.sceneStyle || 'consistent flat 2D style'} --ar 16:9
 
-📐 Nhân vật phải là: simple cartoon stick/round-head figure, thick black outlines, round white/light head, small dot eyes, simple curved mouth, flat-colored clothing. KHÔNG vẽ người realistic, KHÔNG màu da.
-${dm === 'tag' ? `- Nhân vật chính: ghi tag [tên-nhân-vật]. Nhân vật phụ chưa có reference: tả tự do nhưng PHẢI cùng style (stick figure / flat 2D như nhân vật chính).` : '- Tả nhân vật theo stick figure formula: "a simple cartoon stick figure with round white head, [hành động], [trang phục màu đơn]"'}
+📐 ĐẶC ĐIỂM NHÂN VẬT BẮT BUỘC (lấy từ Character Style của kênh — phải LẶP LẠI trong MỖI prompt, KHÔNG được bỏ qua hay tự ý đổi):
+"${charStyleShort || 'giữ đúng style nhân vật của kênh'}"
+- Mỗi khi nhắc nhân vật trong prompt, PHẢI kèm các đặc điểm nhận dạng chính ở trên (hình dạng đầu, kiểu tay chân, tỉ lệ cơ thể, nét vẽ)
+- TUYỆT ĐỐI giữ nhất quán với Character Style — KHÔNG tự ý vẽ khác kiểu (VD nếu kênh dùng người que thì giữ người que, KHÔNG đổi sang người thật; nếu kênh dùng chibi thì giữ chibi)
+${dm === 'tag' ? `- Nhân vật chính: ghi tag [tên-nhân-vật] + kèm cụm đặc điểm nhận dạng chính ngay sau tag. Nhân vật phụ: tả tự do nhưng cùng style.` : '- Tả nhân vật kèm đầy đủ đặc điểm style của kênh ở trên.'}
 
-🎨 Môi trường phải là: simple flat shapes (teal/blue waves = ocean, green hills = countryside, orange flames = fire, grey rocks = cave), muted warm palette, simple details (V-shape seagulls, puffy cloud shapes, wavy lines = water). KHÔNG vẽ cảnh 3D hay photorealistic.
-
-📦 Ví dụ mẫu (CHỈ dùng khi KHÔNG có reference tag — chế độ inline):
-- Biển/thuyền: "...on calm ocean, simple 2D flat, thick black outlines, teal blue water with simple wave lines, pale sky, V-shape seagulls"
-- Hang động: "...inside cave, flat 2D cartoon, dark cave walls with simple animal drawings, orange firelight glow"
-- Đồng ruộng: "...in flooded rice paddy, flat 2D, lush green terraced hills, pale blue sky, calm water reflection"
+🎨 Môi trường: giữ đúng tông màu và phong cách của kênh, nhất quán mọi cảnh.
 ` : '';
 
       const prompt = `Bạn là prompt engineer G-Labs (Imagen / Nano Banana). Tạo prompt cảnh cho mỗi cảnh bên dưới.
