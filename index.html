@@ -1082,6 +1082,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           📄 Chia từ SRT
           <input type="file" accept=".srt,.txt" style="display:none" onchange="splitFromSRTFile(this)">
         </label>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)">
+          ~<input type="number" id="srtTargetSec" value="5" min="2" max="15" style="width:48px;padding:5px 6px;text-align:center">s/cảnh
+        </span>
         <button class="btn ghost" onclick="verifyScenesAgainstScript()" title="So sánh tất cả cảnh với kịch bản gốc — phát hiện mất từ / thêm từ">🔍 So Sánh</button>
         <button class="btn violet" onclick="doPrescan()">⚡ Quét Trước (AI)</button>
         <button class="btn teal" onclick="doAssign()">◈ Gán Tài Nguyên</button>
@@ -1819,6 +1822,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <button class="btn" onclick="t8ApplyTimings()">✓ Áp dụng timing vào cảnh</button>
         <button class="btn ghost" onclick="t8ExportSRT()">↓ Xuất SRT</button>
         <button class="btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff" onclick="t8AudioToSRT()" title="Bỏ audio bất kỳ → ra file SRT (không cần cảnh ở Tool 02)">🎙 Audio → SRT (độc lập)</button>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)">
+          ~<input type="number" id="srtLineSec" value="4" min="2" max="10" style="width:48px;padding:5px 6px;text-align:center">s/dòng
+        </span>
         <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t8Reset()">🗑 Xoá kết quả</button>
       </div>
 
@@ -4060,7 +4066,13 @@ async function splitFromSRTFile(input){
     state.scenePrompts = {};
     state.scenePrompts2 = {};
     renderAllT2();
-    setStatus2(`✓ Đã chia ${state.scenes.length} cảnh từ SRT (timing thật từ giọng đọc).${trimmedNotice}`, 'ok');
+    // Cảnh báo nếu có cảnh quá dài
+    const longScenes = state.scenes.filter(s => (s.duration || 0) > 8);
+    let warn = '';
+    if (longScenes.length) {
+      warn = ` ⚠️ ${longScenes.length} cảnh vẫn dài >8s (do block SRT gốc dài) — dùng "Tự thêm ảnh B" ở tab Prompt để tách thành 2 ảnh.`;
+    }
+    setStatus2(`✓ Đã chia ${state.scenes.length} cảnh từ SRT (timing thật từ giọng đọc).${trimmedNotice}${warn}`, longScenes.length ? 'info' : 'ok');
     saveState();
   } catch (e) {
     console.error(e);
@@ -4074,36 +4086,37 @@ async function splitScenesFromSRT(cues){
     `[${i}] (${c.start.toFixed(1)}s-${c.end.toFixed(1)}s) ${c.text}`
   ).join('\n');
 
-  const targetSec = 5; // độ dài cảnh mong muốn
+  // Độ dài cảnh mong muốn (từ ô input, mặc định 5)
+  const targetSec = Math.max(2, parseInt(document.getElementById('srtTargetSec')?.value) || 5);
+  const maxSec = targetSec + 2; // ngưỡng tối đa trước khi buộc tách
 
-  const prompt = `Dưới đây là các block phụ đề (SRT) từ giọng đọc, mỗi block có index và thời gian. Block được chia theo nhịp đọc nên nhiều block không trọn nghĩa.
+  const prompt = `Dưới đây là các block phụ đề (SRT) từ giọng đọc, mỗi block có index và thời gian. Block được chia theo nhịp đọc.
 
-Nhiệm vụ: GỘP các block liên tiếp thành các CẢNH có ý nghĩa hoàn chỉnh (1 ý / 1 câu trọn vẹn). Mỗi cảnh nên dài khoảng ${targetSec} giây (gộp 1-3 block), KHÔNG cắt giữa câu, KHÔNG để cảnh cụt nghĩa.
+Nhiệm vụ: NHÓM các block thành các CẢNH NGẮN để làm video. Mỗi cảnh khoảng ${targetSec} giây (TỐI ĐA ${maxSec}s).
 
-Quy tắc:
-- Gộp block cho tới khi thành 1 ý hoàn chỉnh
-- Ưu tiên nghĩa hơn độ dài: 1 câu trọn vẹn quan trọng hơn đủ ${targetSec}s
-- Câu quá dài (>8s) có thể tách ở chỗ ngắt ý tự nhiên
+Quy tắc QUAN TRỌNG:
+- Mỗi cảnh KHOẢNG ${targetSec} giây — KHÔNG được để cảnh dài hơn ${maxSec}s
+- Nếu một câu dài hơn ${maxSec}s → TÁCH thành nhiều cảnh ở chỗ ngắt ý tự nhiên (sau dấu phẩy, sau mệnh đề, sau cụm ý)
+- Ưu tiên giữ cụm từ có nghĩa, nhưng KHÔNG ưu tiên câu trọn vẹn hơn việc giữ cảnh ngắn
+- Mỗi cảnh nên gộp 1-3 block, hiếm khi 4
 - KHÔNG bỏ sót block nào, KHÔNG đổi thứ tự
 
 Các block:
 ${blockList}
 
 Trả về JSON array, mỗi phần tử là 1 cảnh: {"from": index_block_đầu, "to": index_block_cuối}
-CHỈ trả JSON, không giải thích. VD: [{"from":0,"to":2},{"from":3,"to":4}]`;
+CHỈ trả JSON, không giải thích. VD: [{"from":0,"to":1},{"from":2,"to":2}]`;
 
-  const raw = await callClaude(prompt, 2000);
+  const raw = await callClaude(prompt, 3000);
   let groups;
   try {
     const clean = raw.replace(/```json|```/g, '').trim();
     groups = JSON.parse(clean);
   } catch (e) {
-    // Fallback: gộp theo giây nếu AI trả sai format
     return fallbackGroupByTime(cues, targetSec);
   }
   if (!Array.isArray(groups) || !groups.length) return fallbackGroupByTime(cues, targetSec);
 
-  // Tạo scene từ group, timing thật từ SRT
   const scenes = [];
   for (const g of groups) {
     const from = Math.max(0, g.from | 0);
@@ -7620,7 +7633,7 @@ function t8ApplyTimings(){
   setStatus8(`✓ Đã áp dụng timing thật cho ${applied} cảnh. Qua Tool 02 / Dựng Clip để kiểm tra.`, 'ok');
 }
 
-// Transcribe audio → segments (mỗi segment = 1 dòng SRT). Độc lập, không cần cảnh.
+// Transcribe audio → word-level rồi gộp thành dòng SRT ngắn (theo maxSec).
 async function t8TranscribeSegments(prov, file){
   const cfg = T8_PROVIDERS[prov];
   const key = t8GetKey(prov) || document.getElementById('t8ApiKey').value.trim();
@@ -7632,6 +7645,7 @@ async function t8TranscribeSegments(prov, file){
   form.append('file', file);
   form.append('model', model);
   form.append('response_format', 'verbose_json');
+  form.append('timestamp_granularities[]', 'word');  // lấy word-level
   if (lang) form.append('language', lang);
   const r = await fetch(cfg.url, {
     method: 'POST',
@@ -7640,12 +7654,42 @@ async function t8TranscribeSegments(prov, file){
   });
   if (!r.ok) { const txt = await r.text(); throw new Error(`${cfg.name} HTTP ${r.status}: ${txt.slice(0, 200)}`); }
   const data = await r.json();
+
+  // Độ dài dòng mong muốn
+  const maxSec = Math.max(2, parseInt(document.getElementById('srtLineSec')?.value) || 4);
+
+  // Nếu có word-level → gộp thành dòng ngắn
+  if (data.words && data.words.length) {
+    return groupWordsIntoLines(data.words, maxSec);
+  }
+  // Fallback segment
   if (data.segments && data.segments.length) {
     return data.segments.map(s => ({ start: s.start, end: s.end, text: (s.text || '').trim() }));
   }
-  // Fallback: nếu chỉ có text → 1 segment
   if (data.text) return [{ start: 0, end: t8State.audioDuration || 5, text: data.text.trim() }];
-  throw new Error('Không có segments trong response.');
+  throw new Error('Không có word/segment timestamps trong response.');
+}
+
+// Gộp words thành dòng SRT: cắt khi đủ maxSec HOẶC gặp dấu kết câu
+function groupWordsIntoLines(words, maxSec){
+  const lines = [];
+  let buf = [], start = null;
+  for (const w of words) {
+    if (start == null) start = w.start;
+    buf.push(w.word);
+    const dur = w.end - start;
+    const endsSentence = /[.!?]$/.test(w.word.trim());
+    // Cắt dòng khi: đủ thời gian, hoặc kết câu mà đã đủ ~2s
+    if (dur >= maxSec || (endsSentence && dur >= maxSec * 0.5)) {
+      lines.push({ start, end: w.end, text: buf.join(' ').replace(/\s+/g, ' ').trim() });
+      buf = []; start = null;
+    }
+  }
+  if (buf.length) {
+    const last = words[words.length - 1];
+    lines.push({ start, end: last.end, text: buf.join(' ').replace(/\s+/g, ' ').trim() });
+  }
+  return lines;
 }
 
 async function t8AudioToSRT(){
