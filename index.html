@@ -4515,6 +4515,17 @@ ${prevSceneCtx ? '\n📍 CẢNH NGAY TRƯỚC (cảnh đầu tiên bên dưới 
 ${dm === 'tag' ? '- LUÔN dùng [tên-nhân-vật] và [tên-bối-cảnh] cho MỌI cảnh có nhân vật — KHÔNG tả inline\n- VD đúng: "[narrator-male] walks in [outdoor-nature-daytime]" | VD SAI: "a cartoon stick figure walks in a green field"\n' : '- KHÔNG dùng ngoặc vuông [] cho tên nhân vật/bối cảnh — TẢ THẲNG bằng chữ tiếng Anh\n'}- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
 - Prompt trả về phải BẮT ĐẦU NGAY bằng mô tả visual (vd: "Medium shot of...", "Split layout showing...", "Wide angle of..."), KHÔNG có prefix nào khác
 
+🛡 AN TOÀN NỘI DUNG (BẮT BUỘC — để qua bộ lọc của tool tạo ảnh):
+Tool tạo ảnh (G-Labs) TỪ CHỐI các prompt có nội dung chết chóc/bạo lực/thương vong trực tiếp. Khi VO nhắc đến chết, chìm, đóng băng, thi thể, nạn nhân, máu, đau đớn... PHẢI viết prompt theo cách GIÁN TIẾP, ẩn dụ, tập trung KHÔNG KHÍ thay vì hành động:
+- "drowning / chết đuối" → "floating in dark water looking up, peaceful, eyes closed"
+- "dead body / thi thể" → "figure drifting gently in deep water, calm, distant"
+- "freezing to death / chết cóng" → "shivering, breath visible, wrapped in cold blue tones"
+- "1,500 victims died / hàng nghìn người chết" → "vast empty dark ocean, scattered distant lights, somber mood" (KHÔNG vẽ người chết, KHÔNG số liệu thương vong)
+- "blood / máu, gore" → bỏ hoàn toàn, thay bằng không khí u tối
+- TUYỆT ĐỐI KHÔNG dùng các từ: dead, death, dying, corpse, drowning, blood, gore, victim, suffering trong prompt tiếng Anh
+- Thay bằng: peaceful, drifting, floating, cold, somber, quiet, still, distant, fading
+- Giữ ĐÚNG cảm xúc và không khí của cảnh, chỉ đổi cách diễn đạt để không vi phạm
+
 Ngôn ngữ prompt: TIẾNG ANH (cho image gen). ${shortMode ? '35-70 từ/prompt (NGẮN).' : '60-120 từ/prompt.'}
 ${shortMode ? `
 ⚡ CHẾ ĐỘ PROMPT NGẮN (người dùng sẽ ĐÍNH ẢNH REFERENCE của nhân vật khi gen):
@@ -4571,6 +4582,39 @@ async function genSingleScenePrompt(id){
 }
 
 // ---- PROMPT B (ảnh thứ 2 cho cảnh dài) ----
+async function makeSafePrompt(id, which){
+  const p = getProfile();
+  if (!p) return setStatus2('Cần Profile.', 'error');
+  const store = which === 'B' ? state.scenePrompts2 : state.scenePrompts;
+  const original = store && store[id];
+  if (!original) return setStatus2('Chưa có prompt để sửa.', 'error');
+
+  setStatus2(`Đang làm mềm prompt [${id}${which === 'B' ? 'b' : ''}]...`, 'working');
+  try {
+    const prompt = `Prompt tạo ảnh dưới đây bị bộ lọc nội dung TỪ CHỐI (vì có nội dung chết chóc/bạo lực/thương vong). Hãy VIẾT LẠI để qua được bộ lọc mà GIỮ NGUYÊN ý nghĩa, bối cảnh, style, góc máy.
+
+QUY TẮC viết lại:
+- Bỏ hết từ: dead, death, dying, corpse, drowning, blood, gore, victim, suffering, kill, die
+- Thay bằng cách diễn đạt gián tiếp: peaceful, drifting, floating, eyes closed, cold, somber, quiet, still, distant, fading, motionless
+- Cảnh người chết/chìm → "figure drifting peacefully in dark water, eyes closed, calm"
+- Cảnh thương vong số đông → "vast empty dark scene, somber mood, distant scattered lights" (KHÔNG vẽ người)
+- Giữ nguyên: tên nhân vật [trong ngoặc], tên bối cảnh [trong ngoặc], style, ánh sáng, góc máy, tông màu
+- Giữ độ dài tương đương
+
+PROMPT GỐC (bị chặn):
+${original}
+
+Trả về CHỈ prompt đã viết lại (tiếng Anh), không giải thích.`;
+    const safe = await callClaude(prompt, 600);
+    store[id] = safe.trim();
+    renderPromptsV();
+    saveState(true);
+    setStatus2(`✓ Đã làm mềm prompt [${id}${which === 'B' ? 'b' : ''}] — thử gen lại trong G-Labs.`, 'ok');
+  } catch (e) {
+    setStatus2('Lỗi: ' + e.message, 'error');
+  }
+}
+
 function addPromptB(id){
   if (!state.scenePrompts2) state.scenePrompts2 = {};
   state.scenePrompts2[id] = '';
@@ -5027,6 +5071,7 @@ function renderPromptsV(){
              ${p ? `<button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)">📋 Sao chép</button>
              <button class="btn ghost sm" onclick="startEditPrompt('scene','${s.id}')">✏️ Sửa</button>` : ''}
              <button class="btn ghost sm" style="border-color:#d97706;color:#d97706" onclick="genSingleScenePrompt('${s.id}')" title="Tạo lại prompt A">🔧 ${p ? 'Tạo lại' : 'Tạo prompt'}</button>
+             ${p ? `<button class="btn ghost sm" style="border-color:#dc2626;color:#dc2626" onclick="makeSafePrompt('${s.id}','A')" title="Làm mềm prompt bị G-Labs chặn — đổi từ nhạy cảm thành an toàn">🛡 Sửa vi phạm</button>` : ''}
              ${p && !hasB ? `<button class="btn ghost sm" style="border-color:#0d9488;color:#0d9488" onclick="addPromptB('${s.id}')">✂️ Thêm ảnh B</button>` : ''}
            </div>`
       }
@@ -5043,6 +5088,7 @@ function renderPromptsV(){
                ${p2 ? `<button class="btn ghost sm" onclick="copyText(\`${prompt2Esc}\`)">📋 Sao chép</button>
                <button class="btn ghost sm" onclick="startEditPrompt('scene2','${s.id}')">✏️ Sửa</button>` : ''}
                <button class="btn ghost sm" style="border-color:#d97706;color:#d97706" onclick="genSingleScenePromptB('${s.id}')">🔧 ${p2 ? 'Tạo lại B' : 'Tạo prompt B'}</button>
+               ${p2 ? `<button class="btn ghost sm" style="border-color:#dc2626;color:#dc2626" onclick="makeSafePrompt('${s.id}','B')" title="Làm mềm prompt B bị chặn">🛡 Sửa vi phạm</button>` : ''}
              </div>`
         }
       </div>` : ''}
