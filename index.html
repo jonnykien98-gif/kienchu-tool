@@ -1094,6 +1094,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <option value="inline_bible">📋 Tả inline + hồ sơ (nhất quán)</option>
         </select>
         <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer" title="Bật khi bạn ĐÍNH ẢNH REFERENCE trong G-Labs — prompt sẽ bỏ mô tả ngoại hình chi tiết, để ảnh reference quyết định nhân vật">
+          <input type="checkbox" id="shortPromptMode" style="width:auto;margin:0"> Prompt ngắn (kèm reference)
+        </label>
         <button class="btn ghost" style="border-color:var(--rose);color:var(--rose);font-weight:600" onclick="regenAllScenePrompts()" title="Xoá toàn bộ prompt cũ và tạo lại từ đầu">🔄 Tạo lại tất cả</button>
         <button class="btn ghost" id="t2FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="doGenerateScenePrompts()" title="Chỉ tạo các cảnh chưa có prompt">🔧 Tạo nốt cảnh thiếu <span id="t2MissingCount"></span></button>
         <button class="btn ghost" onclick="exportVideo()">↓ Xuất JSON</button>
@@ -4387,6 +4390,7 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
 }
 
 function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
+  const shortMode = document.getElementById('shortPromptMode')?.checked;
   // ---- Mode-aware: Tag / Inline / Inline+bible ----
       const dm = state.descMode || 'tag';
       let charCtx, bgCtx, charHeader, bgHeader, mode1Rule;
@@ -4426,7 +4430,7 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
       const isCartoon2D = /cartoon|flat|2d|animation|hand.drawn|stick|explainer|educational/.test(styleStr);
       // Lấy mô tả nhân vật NGẮN GỌN từ characterStyle của Profile (không hardcode)
       const charStyleShort = (p.characterStyle || '').replace(/\s+/g, ' ').trim().slice(0, 280);
-      const animFormulaBlock = isCartoon2D ? `
+      const animFormulaBlock = (isCartoon2D && !shortMode) ? `
 🎬 STYLE RULES (BẮT BUỘC áp dụng cho MỌI cảnh — đây là style cố định của kênh):
 Scene aesthetic: ${p.sceneStyle || 'consistent flat 2D style'} --ar 16:9
 
@@ -4511,7 +4515,15 @@ ${prevSceneCtx ? '\n📍 CẢNH NGAY TRƯỚC (cảnh đầu tiên bên dưới 
 ${dm === 'tag' ? '- LUÔN dùng [tên-nhân-vật] và [tên-bối-cảnh] cho MỌI cảnh có nhân vật — KHÔNG tả inline\n- VD đúng: "[narrator-male] walks in [outdoor-nature-daytime]" | VD SAI: "a cartoon stick figure walks in a green field"\n' : '- KHÔNG dùng ngoặc vuông [] cho tên nhân vật/bối cảnh — TẢ THẲNG bằng chữ tiếng Anh\n'}- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
 - Prompt trả về phải BẮT ĐẦU NGAY bằng mô tả visual (vd: "Medium shot of...", "Split layout showing...", "Wide angle of..."), KHÔNG có prefix nào khác
 
-Ngôn ngữ prompt: TIẾNG ANH (cho image gen). 60-120 từ/prompt.
+Ngôn ngữ prompt: TIẾNG ANH (cho image gen). ${shortMode ? '35-70 từ/prompt (NGẮN).' : '60-120 từ/prompt.'}
+${shortMode ? `
+⚡ CHẾ ĐỘ PROMPT NGẮN (người dùng sẽ ĐÍNH ẢNH REFERENCE của nhân vật khi gen):
+- KHÔNG mô tả ngoại hình nhân vật chi tiết (KHÔNG tả đầu tròn, mắt, tay chân, tóc, quần áo, tỉ lệ cơ thể) — ảnh reference đã lo việc đó
+- CHỈ ghi: [tên-nhân-vật] + HÀNH ĐỘNG + TƯ THẾ + cảm xúc (vd: "[passenger-bunk] lying on bunk staring at ceiling, worried")
+- TẬP TRUNG mô tả: bối cảnh, ánh sáng, góc máy, tông màu, không khí
+- KHÔNG nhắc lại đặc điểm style nhân vật — để reference image quyết định
+- Vẫn giữ mô tả style chung cho MÔI TRƯỜNG (flat 2D, màu sắc, outline) nhưng KHÔNG áp lên nhân vật
+` : ''}
 
 Trả về CHỈ JSON array:
 [{"id":"001","prompt":"..."}, ...]
