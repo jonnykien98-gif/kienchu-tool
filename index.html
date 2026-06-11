@@ -1078,13 +1078,10 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <option value="smart" selected>Chia thông minh (AI) ★</option>
         </select>
         <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
-        <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Chia cảnh theo file SRT — timing chính xác từ giọng đọc, AI gộp theo nghĩa">
-          📄 Chia từ SRT
-          <input type="file" accept=".srt,.txt" style="display:none" onchange="splitFromSRTFile(this)">
+        <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Đính file SRT để lấy ĐỘ DÀI THẬT từ giọng đọc — thay cho độ dài ước lượng. Chia cảnh trước, rồi bấm nút này.">
+          ⏱ Căn độ dài từ SRT
+          <input type="file" accept=".srt,.txt" style="display:none" onchange="applySRTTiming(this)">
         </label>
-        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)" title="Gợi ý độ dài — AI vẫn ưu tiên câu trọn nghĩa">
-          ~<input type="number" id="srtTargetSec" value="5" min="2" max="15" style="width:48px;padding:5px 6px;text-align:center">s/cảnh
-        </span>
         <button class="btn ghost" onclick="verifyScenesAgainstScript()" title="So sánh tất cả cảnh với kịch bản gốc — phát hiện mất từ / thêm từ">🔍 So Sánh</button>
         <button class="btn violet" onclick="doPrescan()">⚡ Quét Trước (AI)</button>
         <button class="btn teal" onclick="doAssign()">◈ Gán Tài Nguyên</button>
@@ -4028,6 +4025,79 @@ function verifyScenesAgainstScript(){
   if (extraN) msg += ` THỪA ${extraN} từ.`;
   msg += ` (Mở Console F12 xem chi tiết — vị trí lệch + danh sách từ).`;
   setStatus2(msg, missN > 0 ? 'error' : 'info');
+}
+
+// Căn ĐỘ DÀI THẬT cho các cảnh đã chia, bằng cách khớp với file SRT (giọng đọc thật).
+async function applySRTTiming(input){
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  if (!state.scenes || !state.scenes.length) {
+    return setStatus2('❌ Chưa có cảnh nào. Bấm "Chia Cảnh" trước, rồi mới căn độ dài từ SRT.', 'error');
+  }
+  const srtText = await file.text();
+  const cues = parseSRT(srtText);
+  if (!cues.length) return setStatus2('❌ File SRT không hợp lệ hoặc trống.', 'error');
+
+  setStatus2(`Đang căn độ dài ${state.scenes.length} cảnh theo SRT (${cues.length} block)...`, 'working');
+
+  // Tạo timeline SRT có timestamp
+  const srtTimeline = cues.map((c, i) =>
+    `[${i}] ${c.start.toFixed(1)}-${c.end.toFixed(1)}s: ${c.text}`
+  ).join('\n');
+
+  // Danh sách cảnh hiện tại
+  const sceneList = state.scenes.map((s, i) =>
+    `[${i}] ${s.text}`
+  ).join('\n');
+
+  const prompt = `Tôi có DANH SÁCH CẢNH (mỗi cảnh 1 câu) và file SRT (timing thật từ giọng đọc, chữ có thể hơi khác do nhận diện giọng nói).
+
+NHIỆM VỤ: Với MỖI cảnh, tìm đoạn tương ứng trong SRT timeline và tính ĐỘ DÀI THẬT (giây) mà câu đó được đọc.
+
+QUY TẮC:
+- Khớp theo NỘI DUNG (nghĩa giống nhau), không cần khớp từng chữ
+- start = thời điểm bắt đầu đọc câu đó trong SRT; end = thời điểm kết thúc
+- Cảnh nối tiếp nhau: end của cảnh trước ≈ start của cảnh sau
+- Nếu 1 cảnh khớp nhiều block SRT → lấy start của block đầu, end của block cuối
+- Giữ ĐÚNG thứ tự và số lượng cảnh (mỗi cảnh đầu vào = 1 kết quả ra)
+
+DANH SÁCH CẢNH:
+${sceneList}
+
+SRT TIMELINE:
+${srtTimeline}
+
+Trả về JSON array, mỗi phần tử ứng với 1 cảnh theo thứ tự: {"i": index_cảnh, "start": số_giây, "end": số_giây}
+CHỈ trả JSON, không giải thích.`;
+
+  try {
+    const raw = await callClaude(prompt, 4000);
+    let arr;
+    const clean = raw.replace(/```json|```/g, '').trim();
+    arr = JSON.parse(clean);
+    if (!Array.isArray(arr) || !arr.length) throw new Error('parse rỗng');
+
+    let updated = 0;
+    arr.forEach(item => {
+      const i = item.i | 0;
+      if (i < 0 || i >= state.scenes.length) return;
+      const start = +item.start;
+      const end = +item.end;
+      if (isFinite(start) && isFinite(end) && end > start) {
+        state.scenes[i].duration = +(end - start).toFixed(1);
+        updated++;
+      }
+    });
+
+    renderAllT2();
+    saveState();
+    const totalDur = state.scenes.reduce((sum, s) => sum + (s.duration || 0), 0);
+    setStatus2(`✓ Đã căn độ dài thật cho ${updated}/${state.scenes.length} cảnh theo SRT. Tổng: ${fmtDur(totalDur)}.`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus2('Lỗi căn độ dài: ' + e.message + '. Thử lại hoặc kiểm tra file SRT.', 'error');
+  }
 }
 
 async function splitFromSRTFile(input){
