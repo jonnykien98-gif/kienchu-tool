@@ -4103,14 +4103,17 @@ async function splitScenesFromScriptPlusSRT(scriptText, cues){
 
   const prompt = `Tôi có KỊCH BẢN GỐC (chuẩn, đúng chính tả) và file SRT (timing thật từ giọng đọc, nhưng chữ có thể SAI do nhận diện giọng nói).
 
-NHIỆM VỤ: Chia KỊCH BẢN GỐC thành các cảnh, gán THỜI GIAN cho mỗi cảnh bằng cách đối chiếu với SRT timeline. Mỗi cảnh = 1 Ý VẼ ĐƯỢC 1 HÌNH, độ dài 4-10 giây.
+NHIỆM VỤ: Chia KỊCH BẢN GỐC thành các cảnh NGẮN, gán THỜI GIAN cho mỗi cảnh bằng cách đối chiếu với SRT timeline.
 
-QUY TẮC:
+QUY TẮC CHIA CẢNH (quan trọng nhất):
+- Mỗi cảnh = 1 CÂU (kết thúc ở dấu chấm/?/!). 1 dấu chấm = 1 cảnh
+- Đoạn văn nhiều câu → TÁCH thành nhiều cảnh, mỗi câu 1 cảnh riêng
+- Câu DÀI (>12s, nhiều mệnh đề ngăn bằng dấu phẩy) → TÁCH tiếp ở dấu phẩy/chấm phẩy thành 2-3 cảnh ngắn
+- Câu RẤT NGẮN (<2s, vd "Not snow.", "Hold that.") → gộp với câu liền kề
+- TUYỆT ĐỐI KHÔNG để 1 cảnh dài quá 12s, KHÔNG gộp cả đoạn 3-4 câu thành 1 cảnh
+
+QUY TẮC TEXT & TIMING:
 - Text của cảnh LẤY TỪ KỊCH BẢN GỐC (đúng chính tả, đúng số, đúng tên riêng) — KHÔNG dùng chữ từ SRT
-- Mỗi cảnh phải VẼ ĐƯỢC 1 HÌNH rõ ràng (nhân vật/hành động/cảnh vật cụ thể)
-- Câu KHÔNG có hình ảnh (câu hỏi tu từ, câu chuyển ý ngắn) → GỘP với câu liền kề có hình, KHÔNG để đứng riêng
-- Đoạn DÀI nhiều hình (>10s) → TÁCH theo từng hình ảnh chuyển cảnh
-- Tránh cảnh <3s và >12s
 - Thời gian (start/end) lấy từ SRT: tìm đoạn SRT khớp nội dung câu gốc → lấy timing
 - Giữ ĐÚNG thứ tự, không bỏ sót nội dung kịch bản
 
