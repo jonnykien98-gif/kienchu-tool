@@ -4103,13 +4103,15 @@ async function splitScenesFromScriptPlusSRT(scriptText, cues){
 
   const prompt = `Tôi có KỊCH BẢN GỐC (chuẩn, đúng chính tả) và file SRT (timing thật từ giọng đọc, nhưng chữ có thể SAI do nhận diện giọng nói).
 
-NHIỆM VỤ: Chia KỊCH BẢN GỐC thành các cảnh có ý nghĩa trọn vẹn (mỗi cảnh 1 câu/ý hoàn chỉnh), gán THỜI GIAN cho mỗi cảnh bằng cách đối chiếu với SRT timeline.
+NHIỆM VỤ: Chia KỊCH BẢN GỐC thành các cảnh, gán THỜI GIAN cho mỗi cảnh bằng cách đối chiếu với SRT timeline. Mỗi cảnh = 1 Ý VẼ ĐƯỢC 1 HÌNH, độ dài 4-10 giây.
 
 QUY TẮC:
 - Text của cảnh LẤY TỪ KỊCH BẢN GỐC (đúng chính tả, đúng số, đúng tên riêng) — KHÔNG dùng chữ từ SRT
-- Thời gian (start/end) lấy từ SRT: tìm block SRT khớp nội dung với câu gốc → lấy timing
-- Mỗi cảnh là 1 câu/ý TRỌN VẸN, không cắt giữa câu
-- Câu dài có thể là 1 cảnh, không sao
+- Mỗi cảnh phải VẼ ĐƯỢC 1 HÌNH rõ ràng (nhân vật/hành động/cảnh vật cụ thể)
+- Câu KHÔNG có hình ảnh (câu hỏi tu từ, câu chuyển ý ngắn) → GỘP với câu liền kề có hình, KHÔNG để đứng riêng
+- Đoạn DÀI nhiều hình (>10s) → TÁCH theo từng hình ảnh chuyển cảnh
+- Tránh cảnh <3s và >12s
+- Thời gian (start/end) lấy từ SRT: tìm đoạn SRT khớp nội dung câu gốc → lấy timing
 - Giữ ĐÚNG thứ tự, không bỏ sót nội dung kịch bản
 
 KỊCH BẢN GỐC:
@@ -4147,22 +4149,25 @@ async function splitScenesFromSRT(cues){
     `[${i}] (${c.start.toFixed(1)}s-${c.end.toFixed(1)}s) ${c.text}`
   ).join('\n');
 
-  const prompt = `Dưới đây là các block phụ đề (SRT) từ giọng đọc. Block được chia theo nhịp đọc nên NHIỀU BLOCK BỊ CẮT GIỮA CÂU (kết thúc bằng từ cụt như "the", "and", "a"...).
+  const prompt = `Dưới đây là các block phụ đề (SRT) từ giọng đọc. Block bị cắt theo nhịp đọc nên nhiều block cụt giữa câu.
 
-Nhiệm vụ: GỘP các block thành các CẢNH có Ý NGHĨA TRỌN VẸN. Mỗi cảnh phải là 1 câu hoàn chỉnh hoặc 1 ý trọn vẹn — KHÔNG được cụt nghĩa, KHÔNG kết thúc giữa câu.
+Nhiệm vụ: GỘP block thành các CẢNH để làm video. Mỗi cảnh = 1 Ý CÓ THỂ VẼ ĐƯỢC 1 HÌNH (một khoảnh khắc/hành động/cảnh vật cụ thể). Độ dài lý tưởng 4-10 giây.
 
-Quy tắc:
-- Gộp các block liên tiếp cho tới khi tạo thành 1 câu/ý HOÀN CHỈNH (kết thúc tự nhiên ở dấu chấm, hoặc hết 1 ý trọn vẹn)
-- Ưu tiên NGHĨA TRỌN VẸN là quan trọng nhất — KHÔNG cắt giữa câu chỉ để cảnh ngắn
-- Không cần lo cảnh dài (sẽ xử lý sau bằng cách tách ảnh) — chỉ cần mỗi cảnh trọn nghĩa
-- Mỗi cảnh lý tưởng 1 câu. Câu rất dài (nhiều mệnh đề) có thể tách ở dấu chấm/chấm phẩy giữa các câu độc lập
+Quy tắc QUAN TRỌNG:
+- Mỗi cảnh phải VẼ ĐƯỢC 1 HÌNH rõ ràng (có nhân vật/hành động/cảnh vật cụ thể)
+- Câu kể chuyện có hình ảnh rõ (cảnh vật, hành động) → 1 cảnh riêng
+- Câu KHÔNG có hình ảnh (câu hỏi tu từ "what does it feel like?", câu chuyển ý ngắn "Hold that.", "But here's the thing.") → GỘP với câu liền kề có hình ảnh, KHÔNG để đứng riêng
+- Đoạn DÀI nhiều ý/nhiều hình khác nhau (>10s) → TÁCH theo từng hình ảnh chuyển cảnh (mỗi hình mới = 1 cảnh)
+- Tránh cảnh quá ngắn (<3s) và quá dài (>12s)
 - KHÔNG bỏ sót block nào, KHÔNG đổi thứ tự
+
+Ví dụ tách đoạn dài: "You know that cold-pool feeling, your chest seizes // Now imagine it ten times stronger, everywhere // The water is black, no edge to grab" → 3 cảnh (3 hình khác nhau)
 
 Các block:
 ${blockList}
 
 Trả về JSON array, mỗi phần tử là 1 cảnh: {"from": index_block_đầu, "to": index_block_cuối}
-CHỈ trả JSON. VD: [{"from":0,"to":0},{"from":1,"to":2},{"from":3,"to":4}]`;
+CHỈ trả JSON. VD: [{"from":0,"to":1},{"from":2,"to":2},{"from":3,"to":4}]`;
 
   const raw = await callClaude(prompt, 3000);
   let groups;
@@ -4390,7 +4395,7 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
   }
 }
 
-function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext){
+function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO){
   const shortMode = document.getElementById('shortPromptMode')?.checked;
   // ---- Mode-aware: Tag / Inline / Inline+bible ----
       const dm = state.descMode || 'tag';
@@ -4509,6 +4514,8 @@ QUY TẮC CHUNG:
 - Đổi góc máy CÓ CHỦ ĐÍCH (vd wide → medium → close để dẫn dắt), KHÔNG nhảy góc ngẫu nhiên giữa các cảnh.
 - Cùng 1 phân đoạn nội dung → tông màu + ánh sáng + bố cục phải nối tiếp mượt với cảnh trước, không đổi đột ngột.
 ${prevSceneCtx ? '\n📍 CẢNH NGAY TRƯỚC (cảnh đầu tiên bên dưới phải nối tiếp mượt với cảnh này):\n"' + prevSceneCtx + '"\n' : ''}
+${neighborVO ? `\n🔗 NGỮ CẢNH LÂN CẬN (lời thoại cảnh trước & sau — DÙNG để hiểu bối cảnh nếu cảnh hiện tại thiếu hình ảnh):\n${neighborVO}\n
+⚠️ Nếu lời thoại của cảnh hiện tại KHÔNG có hình ảnh cụ thể (câu hỏi tu từ, câu chuyển ý, câu trừu tượng như "what does it feel like?", "hold that feeling", "here's the thing") → HÃY mượn bối cảnh/nhân vật/không khí từ cảnh trước hoặc cảnh sau để vẽ 1 hình hợp lý, liền mạch. KHÔNG để prompt trống rỗng hay quá chung chung. Hình phải nối tiếp tự nhiên với mạch truyện.` : ''}
 ⚠️ TUYỆT ĐỐI KHÔNG:
 - KHÔNG ghi "LOẠI 1", "LOẠI 2", "LOẠI 3", "LOẠI 4", "LOẠI 5" vào prompt output
 - KHÔNG ghi "Type 1", "Type 2", ... hay bất kỳ label phân loại nào
@@ -4560,9 +4567,15 @@ async function genSingleScenePrompt(id){
     const pp = state.scenePrompts[prev.id];
     if (pp) prevSceneCtx = `[${prev.id}] ${pp.slice(0, 220)}`;
   }
+  // Lời thoại cảnh trước + sau (để mượn bối cảnh nếu cảnh này thiếu hình)
+  let neighborVO = '';
+  const prevS = state.scenes[idx - 1];
+  const nextS = state.scenes[idx + 1];
+  if (prevS) neighborVO += `Cảnh trước [${prevS.id}]: "${(prevS.text || '').slice(0, 200)}"\n`;
+  if (nextS) neighborVO += `Cảnh sau [${nextS.id}]: "${(nextS.text || '').slice(0, 200)}"`;
   setStatus2(`Đang tạo lại prompt cảnh [${id}]...`, 'working');
   try {
-    const prompt = buildSceneGenPrompt([scene], prevSceneCtx, p, profileContext);
+    const prompt = buildSceneGenPrompt([scene], prevSceneCtx, p, profileContext, neighborVO);
     let reply = await callClaude(prompt, 1000);
     let parsed = safeParseJSON(reply);
     if (!parsed.length) { reply = await callClaude(prompt, 1000); parsed = safeParseJSON(reply); }
@@ -4747,7 +4760,15 @@ async function doGenerateScenePrompts(){
         return;
       }
       const batch = todo.slice(i, i + bs);
-      const prompt = buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext);
+      // Lời thoại cảnh trước batch + sau batch (mượn bối cảnh cho cảnh thiếu hình)
+      let neighborVO = '';
+      const fi = state.scenes.findIndex(s => s.id === batch[0].id);
+      const li = state.scenes.findIndex(s => s.id === batch[batch.length - 1].id);
+      const bPrev = fi > 0 ? state.scenes[fi - 1] : null;
+      const bNext = li >= 0 && li < state.scenes.length - 1 ? state.scenes[li + 1] : null;
+      if (bPrev) neighborVO += `Cảnh trước batch [${bPrev.id}]: "${(bPrev.text || '').slice(0, 180)}"\n`;
+      if (bNext) neighborVO += `Cảnh sau batch [${bNext.id}]: "${(bNext.text || '').slice(0, 180)}"`;
+      const prompt = buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO);
       let reply = await callClaude(prompt, 4000);
       let parsed = safeParseJSON(reply);
       // Retry 1 lần nếu batch trả về rỗng (parse lỗi)
