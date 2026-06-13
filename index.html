@@ -4728,22 +4728,76 @@ async function autoAddPromptBForLongScenes(){
     return setStatus2(`Không có cảnh nào dài hơn ${THRESHOLD}s cần thêm ảnh B (hoặc đã có B rồi).`, 'info');
   }
 
-  if (!confirm(`Tìm thấy ${targets.length} cảnh dài hơn ${THRESHOLD}s.\nTự động tạo Prompt B cho tất cả?\n\n(Mỗi cảnh tốn 1 lần gọi AI)`)) return;
+  const BATCH = 8;
+  const numCalls = Math.ceil(targets.length / BATCH);
+  if (!confirm(`Tìm thấy ${targets.length} cảnh dài hơn ${THRESHOLD}s.\nTạo Prompt B cho tất cả?\n\n(Gọi AI ${numCalls} lần, mỗi lần ${BATCH} cảnh — tiết kiệm hơn gọi từng cảnh)`)) return;
 
   if (!state.scenePrompts2) state.scenePrompts2 = {};
+  clearCancel();
 
   let done = 0;
-  for (const scene of targets) {
+  for (let i = 0; i < targets.length; i += BATCH) {
     if (state.cancelRequested) { clearCancel(); break; }
-    state.scenePrompts2[scene.id] = ''; // tạo slot
-    setStatus2(`Đang tạo Prompt B: ${done + 1}/${targets.length} (cảnh [${scene.id}], ${scene.duration}s)...`, 'working');
-    await genSingleScenePromptB(scene.id);
-    done++;
+    const batch = targets.slice(i, i + BATCH);
+    setStatus2(`Đang tạo Prompt B: ${done + 1}-${Math.min(done + batch.length, targets.length)}/${targets.length}...`, 'working');
+    try {
+      await genBatchPromptB(batch, p);
+      done += batch.length;
+      renderPromptsV();
+      saveState(true);
+    } catch (e) {
+      console.error(e);
+      setStatus2('Lỗi batch: ' + e.message + '. Đã lưu phần xong.', 'error');
+      break;
+    }
   }
 
   renderPromptsV();
   saveState(true);
-  setStatus2(`✓ Đã thêm Prompt B cho ${done}/${targets.length} cảnh dài hơn ${THRESHOLD}s.`, 'ok');
+  setStatus2(`✓ Đã thêm Prompt B cho ${done}/${targets.length} cảnh dài hơn ${THRESHOLD}s (gọi AI ${Math.ceil(done / BATCH)} lần).`, 'ok');
+}
+
+// Tạo Prompt B cho NHIỀU cảnh trong 1 lần gọi API (tiết kiệm chi phí)
+async function genBatchPromptB(batch, p){
+  const sceneBlocks = batch.map(s => {
+    const promptA = cleanPrompt(state.scenePrompts[s.id] || '');
+    return `[${s.id}] (${s.duration}s)\nVO: "${s.text}"\nPrompt A: "${promptA}"`;
+  }).join('\n\n');
+
+  const sysPrompt = `Bạn là prompt engineer G-Labs. Với MỖI cảnh dưới đây, tạo Prompt B cho NỬA SAU của cảnh (hành động/trạng thái tiếp theo sau khi Prompt A kết thúc).
+
+Mỗi Prompt B phải:
+- Cùng nhân vật, bối cảnh, style với Prompt A của cảnh đó
+- Thể hiện khoảnh khắc/hành động TIẾP THEO trong cùng cảnh
+- Cùng độ dài & format với Prompt A (~60-100 từ)
+- Tiếng Anh, bắt đầu ngay bằng mô tả visual
+
+CÁC CẢNH:
+${sceneBlocks}
+
+Trả về JSON object, key là id cảnh, value là prompt B (tiếng Anh). VD: {"007":"...","012":"..."}
+CHỈ trả JSON, không giải thích.`;
+
+  const reply = await callClaude(sysPrompt, 2500);
+  let obj;
+  try {
+    const clean = reply.replace(/```json|```/g, '').trim();
+    obj = JSON.parse(clean);
+  } catch (e) {
+    for (const s of batch) {
+      if (state.cancelRequested) break;
+      await genSingleScenePromptB(s.id);
+    }
+    return;
+  }
+
+  if (!state.scenePrompts2) state.scenePrompts2 = {};
+  for (const s of batch) {
+    const b = obj[s.id];
+    if (b && typeof b === 'string' && b.trim()) {
+      state.scenePrompts2[s.id] = cleanPrompt(b.trim());
+    }
+  }
 }
 
 function removePromptB(id){
@@ -5688,18 +5742,11 @@ Yêu cầu:
       setStatus3(`Nhân vật ${Object.keys(state.assetCharPrompts).length}/${chars.length}...`, 'working');
     }
 
-    // Background prompts (check Library first)
+    // Background prompts — GỘP tất cả vào 1 lần gọi API (tiết kiệm chi phí)
     let libPulledBgs = 0;
+    const bgsToGen = []; // bối cảnh cần AI tạo (chưa có prompt, không trong Library)
     for (const name of bgs) {
-      if (state.cancelRequested) {
-        clearCancel();
-        setStatus3(`⏸ Đã dừng. ${Object.keys(state.assetCharPrompts).length} prompt nhân vật + ${Object.keys(state.assetBgPrompts).length}/${bgs.length} prompt bối cảnh. Bấm lại để chạy tiếp.`, 'info');
-        saveState();
-        return;
-      }
-      // Đã có prompt rồi → bỏ qua
       if (state.assetBgPrompts[name] && state.assetBgPrompts[name].trim()) continue;
-      // 📚 LIBRARY CHECK
       const libEntry = checkLibraryFor('bg', name);
       if (libEntry) {
         state.assetBgPrompts[name] = libEntry.prompt;
@@ -5708,7 +5755,50 @@ Yêu cầu:
         setStatus3(`📚 ${name}: pull từ Library (${libPulledBgs} bg đã pull)`, 'info');
         continue;
       }
-      const promptText = `Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
+      bgsToGen.push(name);
+    }
+
+    if (bgsToGen.length && !state.cancelRequested) {
+      setStatus3(`Đang tạo ${bgsToGen.length} prompt bối cảnh (1 lần gọi)...`, 'working');
+      const bgListStr = bgsToGen.map(n => `[${n}]`).join('\n');
+      const batchBgPrompt = `Tạo prompt G-Labs chi tiết cho NHIỀU background reference location dưới đây.
+
+Style template:
+"""
+${bgStyle}
+"""
+
+NEGATIVE/RULES: ${rules}
+Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
+
+Danh sách bối cảnh:
+${bgListStr}
+
+Với MỖI bối cảnh, tạo 1 prompt:
+- Mô tả chi tiết môi trường, đồ vật, ánh sáng
+- Ghi tên bối cảnh [tên] trong prompt
+- NO characters NO people
+- LAYOUT BẮT BUỘC: background reference sheet split into 4 panels (2x2 grid) showing the SAME location from 4 different angles and lighting moods — panel 1 wide establishing shot, panel 2 medium angle from opposite side, panel 3 high isometric overview, panel 4 low close detail angle with dramatic lighting. All 4 panels same location, consistent objects and architecture.
+- 100-150 từ tiếng Anh mỗi prompt
+
+Trả về JSON object, key là tên bối cảnh (không có ngoặc vuông), value là prompt text. VD: {"ship-cabin-night":"...","ship-deck-night":"..."}
+CHỈ trả JSON, không giải thích.`;
+      try {
+        const reply = await callClaude(batchBgPrompt, 3000);
+        const clean = reply.replace(/```json|```/g, '').trim();
+        const obj = JSON.parse(clean);
+        for (const name of bgsToGen) {
+          if (obj[name] && typeof obj[name] === 'string') {
+            state.assetBgPrompts[name] = obj[name].trim();
+          }
+        }
+        renderAssetBgPrompts(bgs);
+      } catch (e) {
+        // Fallback: JSON lỗi → gọi từng cái
+        console.warn('Batch BG lỗi, fallback từng cái:', e.message);
+        for (const name of bgsToGen) {
+          if (state.cancelRequested) break;
+          const promptText = `Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
 
 Style template:
 """
@@ -5725,9 +5815,10 @@ Yêu cầu:
 - LAYOUT BẮT BUỘC: background reference sheet split into 4 panels (2x2 grid) showing the SAME location from 4 different angles and lighting moods — panel 1 wide establishing shot, panel 2 medium angle from opposite side, panel 3 high isometric overview, panel 4 low close detail angle with dramatic lighting. All 4 panels same location, consistent objects and architecture.
 - 100-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
-      state.assetBgPrompts[name] = await callClaude(promptText, 500);
-      renderAssetBgPrompts(bgs);
-      setStatus3(`Bối cảnh ${Object.keys(state.assetBgPrompts).length}/${bgs.length}...`, 'working');
+          state.assetBgPrompts[name] = await callClaude(promptText, 500);
+          renderAssetBgPrompts(bgs);
+        }
+      }
     }
 
     setStatus3(`✓ Đã tạo ${chars.length} prompt nhân vật + ${bgs.length} prompt bối cảnh.`, 'ok');
