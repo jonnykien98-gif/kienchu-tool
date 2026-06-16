@@ -850,24 +850,6 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <textarea id="pBgStyle" style="min-height:100px" placeholder="Chọn preset, upload ảnh mẫu, hoặc tự viết..."></textarea>
       </div>
     </div>
-    <div class="mb-12">
-      <label class="label green">CHARACTER STYLE B <span style="font-weight:400;opacity:.7">— nhân vật có tag bất kỳ VD: [stick], [b], [realistic] trong Tool 3 → dùng style này</span></label>
-      <textarea id="pCharStyleB" style="min-height:80px;background:var(--surface-2)" placeholder="VD: Simple stick figure, round white head, thin black lines... (để trống nếu không dùng)"></textarea>
-    </div>
-    <div class="mb-12">
-      <label class="label" style="color:var(--teal)">NHÂN VẬT MẶC ĐỊNH KÊNH
-        <span style="font-weight:400;opacity:.7">— tự động điền vào Tool 3 mỗi video mới</span>
-      </label>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Mỗi dòng 1 nhân vật. Thêm tag nếu muốn dùng Style B. VD: <code>captain-narrator [b]</code></div>
-      <textarea id="pDefaultChars" style="min-height:80px;font-family:monospace;font-size:12px" placeholder="captain-narrator [b]&#10;host-character"></textarea>
-    </div>
-    <div class="mb-12">
-      <label class="label" style="color:var(--blue)">BỐI CẢNH MẶC ĐỊNH KÊNH
-        <span style="font-weight:400;opacity:.7">— tự động điền vào Tool 3 mỗi video mới</span>
-      </label>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Mỗi dòng 1 bối cảnh dùng lại xuyên suốt kênh (studio, backdrop thương hiệu...)</div>
-      <textarea id="pDefaultBgs" style="min-height:60px;font-family:monospace;font-size:12px" placeholder="studio-background&#10;brand-backdrop"></textarea>
-    </div>
     <div class="grid-2 mb-12">
       <div>
         <label class="label rose">SCENE STYLE / AESTHETIC (~40 từ, cố định cả video)</label>
@@ -3536,9 +3518,6 @@ function openProfile(){
   document.getElementById('pTargetPhut').value = p.targetPhut || 12;
   document.getElementById('pCharStyle').value = p.characterStyle || '';
   if (document.getElementById('pCharIdentity')) document.getElementById('pCharIdentity').value = p.charIdentity || '';
-  document.getElementById('pCharStyleB').value = p.characterStyleB || '';
-  document.getElementById('pDefaultChars').value = (p.defaultChars || []).join('\n');
-  document.getElementById('pDefaultBgs').value   = (p.defaultBgs   || []).join('\n');
   document.getElementById('pBgStyle').value = p.backgroundStyle || '';
   document.getElementById('pSceneStyle').value = p.sceneStyle || '';
   document.getElementById('pPromptRules').value = p.promptRules || '';
@@ -3565,9 +3544,6 @@ function saveProfile(){
   p.targetPhut = parseInt(document.getElementById('pTargetPhut').value) || 12;
   p.characterStyle  = document.getElementById('pCharStyle').value;
   if (document.getElementById('pCharIdentity')) p.charIdentity = document.getElementById('pCharIdentity').value;
-  p.characterStyleB = document.getElementById('pCharStyleB').value;
-  p.defaultChars = document.getElementById('pDefaultChars').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  p.defaultBgs   = document.getElementById('pDefaultBgs').value.split('\n').map(s=>s.trim()).filter(Boolean);
   p.backgroundStyle = document.getElementById('pBgStyle').value;
   p.sceneStyle = document.getElementById('pSceneStyle').value;
   p.promptRules = document.getElementById('pPromptRules').value;
@@ -3671,6 +3647,29 @@ function syncTool2FromProfile(){
   el.value = p ? p.visualStyle : '';
 }
 
+// 1 card style ở trang Profile — sửa trực tiếp inline, không cần mở modal
+function _profileStyleCard(field, label, ledColor){
+  const p = getProfile();
+  const val = p?.[field] || '';
+  const editing = state.editingProfileStyle === field;
+  const head = `<div class="panel-head"><span><span class="led" style="background:var(--${ledColor});box-shadow:0 0 8px var(--${ledColor})"></span>${label}</span>` +
+    (editing ? '' : `<div style="display:flex;gap:6px">
+          <button class="btn ghost sm" onclick="editProfileStyle('${field}')" title="Sửa trực tiếp tại đây">✏️ Sửa</button>
+          <button class="btn ghost sm" onclick="copyText(getProfile().${field}||'')">📋 Sao chép</button>
+        </div>`) + `</div>`;
+  const body = editing
+    ? `<div class="panel-body">
+        <textarea id="editProfileStyleTA" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();saveProfileStyle('${field}')}else if(event.key==='Escape'){cancelProfileStyle()}" style="width:100%;min-height:160px;font-size:12.5px;line-height:1.6;background:var(--surface);border:2px solid var(--accent);padding:10px;border-radius:6px">${escapeHtml(val)}</textarea>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn primary sm" onclick="saveProfileStyle('${field}')">✓ Lưu</button>
+          <button class="btn ghost sm" onclick="cancelProfileStyle()">✗ Huỷ</button>
+          <span style="font-size:11px;color:var(--text-muted);align-self:center;margin-left:8px">Ctrl+Enter để lưu nhanh</span>
+        </div>
+      </div>`
+    : `<div class="panel-body" style="white-space:pre-wrap;line-height:1.7;color:var(--text);font-size:12.5px">${escapeHtml(val || '(trống)')}</div>`;
+  return `<div class="panel ${editing ? 'editing' : ''}">${head}${body}</div>`;
+}
+
 function renderProfileStyles(){
   const box = document.getElementById('profileStylesDisplay');
   if (!box) return;
@@ -3681,37 +3680,48 @@ function renderProfileStyles(){
   }
   box.innerHTML = `
     <div class="grid-2 mb-16">
-      <div class="panel">
-        <div class="panel-head"><span><span class="led" style="background:var(--teal);box-shadow:0 0 8px var(--teal)"></span>CHARACTER STYLE</span>
-          <button class="btn ghost sm" onclick="copyText(getProfile().characterStyle||'')">📋 Sao chép</button>
-        </div>
-        <div class="panel-body" style="white-space:pre-wrap;line-height:1.7;color:var(--text);font-size:12.5px">${escapeHtml(p.characterStyle || '(trống)')}</div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><span><span class="led" style="background:var(--blue);box-shadow:0 0 8px var(--blue)"></span>BACKGROUND STYLE</span>
-          <button class="btn ghost sm" onclick="copyText(getProfile().backgroundStyle||'')">📋 Sao chép</button>
-        </div>
-        <div class="panel-body" style="white-space:pre-wrap;line-height:1.7;color:var(--text);font-size:12.5px">${escapeHtml(p.backgroundStyle || '(trống)')}</div>
-      </div>
+      ${_profileStyleCard('characterStyle', 'CHARACTER STYLE', 'teal')}
+      ${_profileStyleCard('backgroundStyle', 'BACKGROUND STYLE', 'blue')}
     </div>
     <div class="grid-2 mb-16">
-      <div class="panel">
-        <div class="panel-head"><span><span class="led" style="background:var(--rose);box-shadow:0 0 8px var(--rose)"></span>SCENE STYLE / AESTHETIC</span>
-          <button class="btn ghost sm" onclick="copyText(getProfile().sceneStyle||'')">📋 Sao chép</button>
-        </div>
-        <div class="panel-body" style="white-space:pre-wrap;line-height:1.7;color:var(--text);font-size:12.5px">${escapeHtml(p.sceneStyle || '(trống)')}</div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><span><span class="led" style="background:var(--red);box-shadow:0 0 8px var(--red)"></span>PROMPT RULES / NEGATIVE</span>
-          <button class="btn ghost sm" onclick="copyText(getProfile().promptRules||'')">📋 Sao chép</button>
-        </div>
-        <div class="panel-body" style="white-space:pre-wrap;line-height:1.7;color:var(--text);font-size:12.5px">${escapeHtml(p.promptRules || '(trống)')}</div>
-      </div>
+      ${_profileStyleCard('sceneStyle', 'SCENE STYLE / AESTHETIC', 'rose')}
+      ${_profileStyleCard('promptRules', 'PROMPT RULES / NEGATIVE', 'red')}
     </div>
     <div class="info-box teal" style="margin-top:16px">
       <span class="lbl">📺 ${escapeHtml(p.tenKenh || 'Untitled')}</span> · ${escapeHtml(p.ngach || '')} · ${escapeHtml(p.visualStyle || '')} · ${escapeHtml(p.povStyle || '')} · Số phần: ${p.soPhan} · Target: ${p.targetPhut}p
     </div>
   `;
+}
+
+function editProfileStyle(field){
+  if (!getProfile()) return;
+  state.editingProfileStyle = field;
+  renderProfileStyles();
+  setTimeout(() => {
+    const ta = document.getElementById('editProfileStyleTA');
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }, 50);
+}
+
+function cancelProfileStyle(){
+  state.editingProfileStyle = null;
+  renderProfileStyles();
+}
+
+function saveProfileStyle(field){
+  const ta = document.getElementById('editProfileStyleTA');
+  const p = getProfile();
+  if (!ta || !p) return;
+  p[field] = ta.value;
+  state.editingProfileStyle = null;
+  renderProfileStyles();
+  if (typeof syncTool2FromProfile === 'function') syncTool2FromProfile();
+  // Đồng bộ sang ô style của Tool 3
+  const mirror = { characterStyle: 't3CharStyle', backgroundStyle: 't3BgStyle', sceneStyle: 't3SceneStyle', promptRules: 't3PromptRules' };
+  const el = document.getElementById(mirror[field]);
+  if (el) el.value = p[field] || '';
+  saveState(true);
+  setStatus1('✓ Đã lưu style: ' + field, 'ok');
 }
 
 /* ============================================================
@@ -5955,23 +5965,13 @@ const ASSET_BG_LAYOUT = 'LAYOUT: one background/location reference sheet as a cl
 
 const ASSET_BG_LAYOUT_SINGLE = 'LAYOUT: ONE single full-frame cinematic image of this one location — NOT a grid, NOT multiple panels, NOT split into cells, just ONE clean wide establishing shot that clearly shows the architecture, key props and lighting of the place, with strong perspective and layered depth, 16:9. CRISPNESS: razor-sharp clean bold linework with precise edges, rich environmental detail (individual bricks, props, textures, ornament), high resolution, deep sharp focus across the whole frame, punchy — keep the lighting moody and atmospheric but NEVER soft, blurry, hazy or washed out. No people, no characters. ' + ASSET_NO_TEXT_RULE;
 
-async function genAllAssetPrompts(){
-  const chars = document.getElementById('t3Characters').value.split('\n').map(s => s.trim()).filter(Boolean);
-  const bgs = document.getElementById('t3Backgrounds').value.split('\n').map(s => s.trim()).filter(Boolean);
-  if (chars.length === 0 && bgs.length === 0) return setStatus3('Cần load nhân vật/bối cảnh trước.', 'error');
-
+// Dựng ngữ cảnh style + thời đại cho Tool 3 (dùng chung cho gen-all & tạo-lại từng asset)
+function _t3StyleCtx(){
   const p = getProfile();
   const charStyle  = document.getElementById('t3CharStyle').value  || p?.characterStyle  || '';
   const charStyleB = document.getElementById('t3CharStyleB')?.value || p?.characterStyleB || '';
   const bgStyle    = document.getElementById('t3BgStyle').value    || p?.backgroundStyle  || '';
   const rules = document.getElementById('t3PromptRules').value || p?.promptRules || '';
-  if (!charStyle && !bgStyle) return setStatus3('Cần có Style Prompts trong Profile.', 'error');
-
-  setStatus3('AI đang tạo prompt reference sheets...', 'working');
-  if (!state.assetCharPrompts) state.assetCharPrompts = {};
-  if (!state.assetBgPrompts) state.assetBgPrompts = {};
-  clearCancel();
-
   // 🏺 Ngữ cảnh THỜI ĐẠI cho trang phục: ưu tiên ô "Bối cảnh & thời đại", nếu trống → trích kịch bản Tool 02
   const eraInput = (document.getElementById('t3Era')?.value || state.t3Era || '').trim();
   const scriptHint = (state.script || '').replace(/\s+/g, ' ').trim().slice(0, 700);
@@ -5981,69 +5981,59 @@ async function genAllAssetPrompts(){
   const eraRule = (eraInput || scriptHint)
     ? `\n- TRANG PHỤC + KIỂU TÓC/ĐỘI ĐẦU + phụ kiện phải ĐÚNG thời đại/bối cảnh ở trên (vd Ai Cập cổ → khố/váy lanh, áo choàng lanh, vòng cổ wesekh, dép cói; TÓC: đầu cạo trọc, tóc giả đen kiểu bob, hoặc khăn nemes — KHÔNG tóc rẽ ngôi/chải gọn kiểu hiện đại; KHÔNG vest/sơ mi/cà vạt/tạp dề hiện đại). CHỈ giữ nguyên phần thuộc art-style: mặt off-white phẳng + đặc điểm mặt, tay chân là nét que đen, bàn tay mitten — mọi thứ còn lại (quần áo, tóc, kiểu đầu, đội đầu, trang sức) đổi theo đúng thời đại.`
     : '';
-
   // 🏺 Luật thời đại cho BỐI CẢNH (kiến trúc/vật liệu/đồ vật/ánh sáng theo đúng thời)
   const eraRuleBg = (eraInput || scriptHint)
     ? `\n- Kiến trúc, vật liệu, đồ vật và nguồn sáng của bối cảnh phải ĐÚNG thời đại/nơi chốn ở trên — KHÔNG để lẫn yếu tố hiện đại sai thời (vd Ai Cập cổ → tường gạch bùn/đá, cột khắc chữ tượng hình, đèn dầu/đuốc; KHÔNG bóng đèn điện, kính, kim loại/nhựa hiện đại).`
     : '';
-
   // 🖼 Kiểu ảnh bối cảnh: 'single' = 1 ảnh/mỗi bối cảnh (nét, ít lỗi) | 'grid' = 4 góc trong 1 ảnh
   const bgLayoutMode = (document.getElementById('t3BgLayout')?.value || state.t3BgLayout || 'single');
   const bgLayout = (bgLayoutMode === 'grid') ? ASSET_BG_LAYOUT : ASSET_BG_LAYOUT_SINGLE;
+  return { p, charStyle, charStyleB, bgStyle, rules, eraInput, scriptHint, eraCtx, eraRule, eraRuleBg, bgLayout };
+}
 
-  try {
-    // Character prompts (check Library first → skip AI if exists)
-    let libPulledChars = 0;
-    for (const rawName of chars) {
-      // Parse tag: "passenger-narrator [stick]" → name="passenger-narrator", tag="stick"
-      const tagMatch = rawName.match(/^(.*?)\s*\[\s*(\w+)\s*\]\s*$/);
-      const name    = tagMatch ? tagMatch[1].trim() : rawName.trim();
-      const charTag  = tagMatch ? tagMatch[2].toLowerCase() : '';
-      // Bất kỳ tag nào → dùng Style B (nếu có); không tag → Style chính
-      const useStyle = (charTag && charStyleB) ? charStyleB : charStyle;
+// Gen prompt cho 1 nhân vật. opts.forceAI=true → bỏ qua Library, luôn gọi AI (dùng cho 🎲 tạo lại).
+// Trả về { name, pulled } — pulled=true nếu lấy từ Library thay vì gọi AI. Caller tự render + set status.
+async function genOneCharPrompt(rawName, ctx, opts = {}){
+  const tagMatch = rawName.match(/^(.*?)\s*\[\s*(\w+)\s*\]\s*$/);
+  const name    = tagMatch ? tagMatch[1].trim() : rawName.trim();
+  const charTag = tagMatch ? tagMatch[2].toLowerCase() : '';
+  // Bất kỳ tag nào → dùng Style B (nếu có); không tag → Style chính
+  const useStyle = (charTag && ctx.charStyleB) ? ctx.charStyleB : ctx.charStyle;
+  if (!state.assetCharPrompts) state.assetCharPrompts = {};
 
-      if (state.cancelRequested) {
-        clearCancel();
-        setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật. Bấm lại để chạy tiếp.`, 'info');
-        saveState();
-        return;
-      }
-      // Đã có prompt rồi → bỏ qua (chạy tiếp sau khi Dừng, không làm lại)
-      if (state.assetCharPrompts[name] && state.assetCharPrompts[name].trim()) continue;
-      // 📚 LIBRARY CHECK — nếu nhân vật đã có trong Library thì pull, skip AI gen
-      const libEntry = checkLibraryFor('char', name);
-      if (libEntry) {
-        state.assetCharPrompts[name] = libEntry.prompt;
-        // Pull image từ IDB nếu có
-        if (libEntry.hasImage) {
-          const uid = window.currentUser?.uid;
-          if (uid) {
-            try {
-              const img = await IDB.get(uid + '/libraryImages/' + name);
-              if (img) {
-                if (!state.characterImages) state.characterImages = {};
-                state.characterImages[name] = img;
-              }
-            } catch(e) {}
-          }
+  // 📚 LIBRARY CHECK — nếu nhân vật đã có trong Library thì pull, skip AI gen (trừ khi forceAI)
+  if (!opts.forceAI){
+    const libEntry = checkLibraryFor('char', name);
+    if (libEntry) {
+      state.assetCharPrompts[name] = libEntry.prompt;
+      if (libEntry.hasImage) {
+        const uid = window.currentUser?.uid;
+        if (uid) {
+          try {
+            const img = await IDB.get(uid + '/libraryImages/' + name);
+            if (img) {
+              if (!state.characterImages) state.characterImages = {};
+              state.characterImages[name] = img;
+            }
+          } catch(e) {}
         }
-        libPulledChars++;
-        renderAssetCharPrompts(chars);
-        setStatus3(`📚 ${name}: pull từ Library (${libPulledChars} char đã pull, đỡ gọi AI)`, 'info');
-        continue;
       }
-      const img = state.characterImages?.[name];
-      const anchor = (state.styleRefImages && state.styleRefImages[0]) || null;
-      let promptText;
-      if (img) {
-        promptText = `Phân tích ảnh reference của nhân vật [${name}] và tạo 1 prompt G-Labs chi tiết cho character reference sheet.
+      return { name, pulled: true };
+    }
+  }
+
+  const img = state.characterImages?.[name];
+  const anchor = (state.styleRefImages && state.styleRefImages[0]) || null;
+  let promptText;
+  if (img) {
+    promptText = `Phân tích ảnh reference của nhân vật [${name}] và tạo 1 prompt G-Labs chi tiết cho character reference sheet.
 
 Style template PHẢI tuân theo:
 """
 ${useStyle}
 """
 
-NEGATIVE/RULES: ${rules}
+NEGATIVE/RULES: ${ctx.rules}
 
 Yêu cầu:
 - Mô tả CHÍNH XÁC visual của nhân vật trong ảnh (hình dạng đầu, mắt, miệng, tỷ lệ cơ thể, quần áo, màu sắc)
@@ -6051,46 +6041,151 @@ Yêu cầu:
 - ${ASSET_CHAR_LAYOUT}
 - 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text, không giải thích.`;
-        state.assetCharPrompts[name] = await callClaudeWithImage(promptText, img.base64, img.mediaType, 700);
-      } else if (anchor) {
-        // 📌 STYLE ANCHOR — không có ảnh riêng của nhân vật, nhưng có ảnh anchor của kênh → cho Claude nhìn anchor để bám cách dựng cơ thể
-        promptText = `Đây là ẢNH STYLE ANCHOR của kênh. Hãy bám CHÍNH XÁC cách dựng cơ thể và nét vẽ trong ảnh này (vd tay/chân là nét que đen mảnh, bàn tay mitten trắng, mặt off-white có đổ khối nhẹ — tuỳ ảnh). Tạo 1 prompt G-Labs cho character reference sheet nhân vật [${name}] theo ĐÚNG style đó.
+    state.assetCharPrompts[name] = await callClaudeWithImage(promptText, img.base64, img.mediaType, 700);
+  } else if (anchor) {
+    // 📌 STYLE ANCHOR — không có ảnh riêng của nhân vật, nhưng có ảnh anchor của kênh → cho Claude nhìn anchor để bám cách dựng cơ thể
+    promptText = `Đây là ẢNH STYLE ANCHOR của kênh. Hãy bám CHÍNH XÁC cách dựng cơ thể và nét vẽ trong ảnh này (vd tay/chân là nét que đen mảnh, bàn tay mitten trắng, mặt off-white có đổ khối nhẹ — tuỳ ảnh). Tạo 1 prompt G-Labs cho character reference sheet nhân vật [${name}] theo ĐÚNG style đó.
 
 Style template (chữ, để tham chiếu thêm):
 """
 ${useStyle}
 """
 
-NEGATIVE/RULES: ${rules}
-Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}${eraCtx}
+NEGATIVE/RULES: ${ctx.rules}
+Kênh: ${ctx.p?.tenKenh || ''} — ${ctx.p?.ngach || ''}${ctx.eraCtx}
 
 Yêu cầu:
-- Suy luận đặc điểm RIÊNG của [${name}] (tuổi, giới, trang phục, tóc) từ tên + context kênh — NHƯNG cách dựng cơ thể, tay/chân, bàn tay và mặt PHẢI giống y ảnh anchor, KHÔNG vẽ thành người cartoon tỉ lệ thường${eraRule}
+- Suy luận đặc điểm RIÊNG của [${name}] (tuổi, giới, trang phục, tóc) từ tên + context kênh — NHƯNG cách dựng cơ thể, tay/chân, bàn tay và mặt PHẢI giống y ảnh anchor, KHÔNG vẽ thành người cartoon tỉ lệ thường${ctx.eraRule}
 - Ghi tên nhân vật [${name}] trong prompt
 - ${ASSET_CHAR_LAYOUT}
 - 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
-        state.assetCharPrompts[name] = await callClaudeWithImage(promptText, anchor.base64, anchor.mediaType, 700);
-      } else {
-        promptText = `Tạo 1 prompt G-Labs chi tiết cho character reference sheet nhân vật [${name}].
+    state.assetCharPrompts[name] = await callClaudeWithImage(promptText, anchor.base64, anchor.mediaType, 700);
+  } else {
+    promptText = `Tạo 1 prompt G-Labs chi tiết cho character reference sheet nhân vật [${name}].
 
 Style template:
 """
 ${useStyle}
 """
 
-NEGATIVE/RULES: ${rules}
-Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}${eraCtx}
+NEGATIVE/RULES: ${ctx.rules}
+Kênh: ${ctx.p?.tenKenh || ''} — ${ctx.p?.ngach || ''}${ctx.eraCtx}
 
 Yêu cầu:
-- Suy luận đặc điểm nhân vật từ tên và context kênh${eraRule}
+- Suy luận đặc điểm nhân vật từ tên và context kênh${ctx.eraRule}
 - Ghi tên nhân vật [${name}] trong prompt
 - ${ASSET_CHAR_LAYOUT}
 - 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
-        state.assetCharPrompts[name] = await callClaude(promptText, 500);
+    state.assetCharPrompts[name] = await callClaude(promptText, 500);
+  }
+  return { name, pulled: false };
+}
+
+// Gen prompt cho 1 bối cảnh (single). opts.forceAI=true → bỏ qua Library. Trả về { name, pulled }.
+async function genOneBgPrompt(name, ctx, opts = {}){
+  if (!state.assetBgPrompts) state.assetBgPrompts = {};
+  if (!opts.forceAI){
+    const libEntry = checkLibraryFor('bg', name);
+    if (libEntry) { state.assetBgPrompts[name] = libEntry.prompt; return { name, pulled: true }; }
+  }
+  const promptText = `Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
+
+Style template:
+"""
+${ctx.bgStyle}
+"""
+
+NEGATIVE/RULES: ${ctx.rules}
+Kênh: ${ctx.p?.tenKenh || ''} — ${ctx.p?.ngach || ''}${ctx.eraCtx}
+
+Yêu cầu:
+- Mô tả chi tiết môi trường, đồ vật, ánh sáng
+- Ghi tên bối cảnh [${name}] trong prompt
+- NO characters NO people${ctx.eraRuleBg}
+- ${ctx.bgLayout}
+- 100-150 từ tiếng Anh
+- Trả về CHỈ prompt text.`;
+  state.assetBgPrompts[name] = await callClaude(promptText, 500);
+  return { name, pulled: false };
+}
+
+// 🎲 Tạo lại prompt cho 1 nhân vật mà không đụng các asset khác
+async function regenOneCharPrompt(rawName){
+  const ctx = _t3StyleCtx();
+  if (!ctx.charStyle && !ctx.charStyleB) return setStatus3('Cần có Character Style trong Profile.', 'error');
+  const name = rawName.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+  if (!state.assetCharPrompts) state.assetCharPrompts = {};
+  delete state.assetCharPrompts[name];
+  const chars = document.getElementById('t3Characters').value.split('\n').map(s => s.trim()).filter(Boolean);
+  renderAssetCharPrompts(chars);
+  setStatus3(`🎲 Đang tạo lại nhân vật [${name}]...`, 'working');
+  try {
+    await genOneCharPrompt(rawName, ctx, { forceAI: true });
+    renderAssetCharPrompts(chars);
+    setStatus3(`✓ Đã tạo lại nhân vật [${name}].`, 'ok');
+    saveState();
+  } catch (e) {
+    console.error(e);
+    setStatus3('Lỗi tạo lại: ' + e.message, 'error');
+  }
+}
+
+// 🎲 Tạo lại prompt cho 1 bối cảnh mà không đụng các asset khác
+async function regenOneBgPrompt(name){
+  const ctx = _t3StyleCtx();
+  if (!ctx.bgStyle) return setStatus3('Cần có Background Style trong Profile.', 'error');
+  if (!state.assetBgPrompts) state.assetBgPrompts = {};
+  delete state.assetBgPrompts[name];
+  const bgs = document.getElementById('t3Backgrounds').value.split('\n').map(s => s.trim()).filter(Boolean);
+  renderAssetBgPrompts(bgs);
+  setStatus3(`🎲 Đang tạo lại bối cảnh [${name}]...`, 'working');
+  try {
+    await genOneBgPrompt(name, ctx, { forceAI: true });
+    renderAssetBgPrompts(bgs);
+    setStatus3(`✓ Đã tạo lại bối cảnh [${name}].`, 'ok');
+    saveState();
+  } catch (e) {
+    console.error(e);
+    setStatus3('Lỗi tạo lại: ' + e.message, 'error');
+  }
+}
+
+async function genAllAssetPrompts(){
+  const chars = document.getElementById('t3Characters').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const bgs = document.getElementById('t3Backgrounds').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (chars.length === 0 && bgs.length === 0) return setStatus3('Cần load nhân vật/bối cảnh trước.', 'error');
+
+  const ctx = _t3StyleCtx();
+  const { p, charStyle, charStyleB, bgStyle, rules, eraCtx, eraRule, eraRuleBg, bgLayout } = ctx;
+  if (!charStyle && !bgStyle) return setStatus3('Cần có Style Prompts trong Profile.', 'error');
+
+  setStatus3('AI đang tạo prompt reference sheets...', 'working');
+  if (!state.assetCharPrompts) state.assetCharPrompts = {};
+  if (!state.assetBgPrompts) state.assetBgPrompts = {};
+  clearCancel();
+
+  try {
+    // Character prompts (check Library first → skip AI if exists)
+    let libPulledChars = 0;
+    for (const rawName of chars) {
+      if (state.cancelRequested) {
+        clearCancel();
+        setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật. Bấm lại để chạy tiếp.`, 'info');
+        saveState();
+        return;
       }
+      // Đã có prompt rồi → bỏ qua (chạy tiếp sau khi Dừng, không làm lại)
+      const name = rawName.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+      if (state.assetCharPrompts[name] && state.assetCharPrompts[name].trim()) continue;
+      const res = await genOneCharPrompt(rawName, ctx);
       renderAssetCharPrompts(chars);
+      if (res.pulled) {
+        libPulledChars++;
+        setStatus3(`📚 ${res.name}: pull từ Library (${libPulledChars} char đã pull, đỡ gọi AI)`, 'info');
+        continue;
+      }
       setStatus3(`Nhân vật ${Object.keys(state.assetCharPrompts).length}/${chars.length}...`, 'working');
     }
 
@@ -6150,24 +6245,7 @@ CHỈ trả JSON, không giải thích.`;
         console.warn('Batch BG lỗi, fallback từng cái:', e.message);
         for (const name of bgsToGen) {
           if (state.cancelRequested) break;
-          const promptText = `Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
-
-Style template:
-"""
-${bgStyle}
-"""
-
-NEGATIVE/RULES: ${rules}
-Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}${eraCtx}
-
-Yêu cầu:
-- Mô tả chi tiết môi trường, đồ vật, ánh sáng
-- Ghi tên bối cảnh [${name}] trong prompt
-- NO characters NO people${eraRuleBg}
-- ${bgLayout}
-- 100-150 từ tiếng Anh
-- Trả về CHỈ prompt text.`;
-          state.assetBgPrompts[name] = await callClaude(promptText, 500);
+          await genOneBgPrompt(name, ctx, { forceAI: true });
           renderAssetBgPrompts(bgs);
         }
       }
@@ -6230,12 +6308,14 @@ function renderAssetCharPrompts(chars){
     const promptEsc = pr ? pr.replace(/`/g, "'").replace(/\\/g, '\\\\') : '';
     const editing = isEditingPrompt('char', name);
     const nameEsc = name.replace(/'/g, "\\'");
+    const rawNameEsc = rawName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const inLib = !!_getLib().chars[name];
     const tagBadge = tag ? `<span style="font-size:10px;background:rgba(13,148,136,.15);color:var(--teal);padding:1px 6px;border-radius:6px;margin-left:4px">[${tag}] Style B</span>` : '';
     return `<div class="ref-sheet-card ${pr ? '' : 'empty'} ${editing ? 'editing' : ''}">
       <div class="ref-sheet-card-head">
         <span class="ref-sheet-card-name">${escapeHtml(name)}${tagBadge} ${inLib ? '<span style="font-size:10px;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:6px;margin-left:4px">📚 Library</span>' : ''}</span>
         ${editing ? '' : (pr ? `<div style="display:flex;gap:6px">
+          <button class="btn ghost sm" onclick="regenOneCharPrompt('${rawNameEsc}')" title="🎲 Tạo lại prompt nhân vật này" style="color:var(--teal)">🎲</button>
           <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)" title="Sao chép">📋</button>
           <button class="btn ghost sm" onclick="startEditPrompt('char','${nameEsc}')" title="Sửa prompt">✏️</button>
           <button class="btn ghost sm" onclick="saveToLibraryUI('char','${nameEsc}')" title="Lưu vào Library để dùng cho video sau" style="color:var(--accent)">💾</button>
@@ -6261,6 +6341,7 @@ function renderAssetBgPrompts(bgs){
       <div class="ref-sheet-card-head">
         <span class="ref-sheet-card-name">${escapeHtml(name)} ${inLib ? '<span style="font-size:10px;background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:6px;margin-left:4px">📚 Library</span>' : ''}</span>
         ${editing ? '' : (pr ? `<div style="display:flex;gap:6px">
+          <button class="btn ghost sm" onclick="regenOneBgPrompt('${nameEsc}')" title="🎲 Tạo lại prompt bối cảnh này" style="color:var(--rose)">🎲</button>
           <button class="btn ghost sm" onclick="copyText(\`${promptEsc}\`)" title="Sao chép">📋</button>
           <button class="btn ghost sm" onclick="startEditPrompt('bg','${nameEsc}')" title="Sửa prompt">✏️</button>
           <button class="btn ghost sm" onclick="saveToLibraryUI('bg','${nameEsc}')" title="Lưu vào Library để dùng cho video sau" style="color:var(--accent)">💾</button>
