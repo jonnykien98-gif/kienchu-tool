@@ -1300,6 +1300,14 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </div>
       </div>
 
+      <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1px solid #fed7aa;border-radius:10px;padding:11px 13px;margin-bottom:14px">
+        <label class="label" style="color:#9a3412">🏺 BỐI CẢNH & THỜI ĐẠI <span style="font-weight:400;opacity:.75">— để AI chọn TRANG PHỤC đúng thời (tự điền từ kịch bản; sửa lại nếu cần)</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="t3Era" oninput="state.t3Era=this.value" placeholder="VD: Ancient Egypt, New Kingdom (~1300 BCE) — linen, kilts, no modern clothes" style="flex:1">
+          <button class="btn ghost sm" style="white-space:nowrap;border-color:#9a3412;color:#9a3412" onclick="autoFillEra(true)" title="Đọc kịch bản Tool 02 và tự suy bối cảnh + thời đại">✨ Tự điền</button>
+        </div>
+      </div>
+
       <div class="actions">
         <button class="btn primary" onclick="genAllAssetPrompts()">⚡ Generate All Prompts</button>
         <button class="btn violet" onclick="genStyleReference()">🎨 Style Reference</button>
@@ -5747,7 +5755,43 @@ console.log('Chu Kiên Media Pipeline Builder — Phase 2 loaded (Profile + Phâ
 ============================================================ */
 const setStatus3 = (m, t) => setStatusBar('status3', m, t);
 
+// 🏺 Tự suy BỐI CẢNH + THỜI ĐẠI từ kịch bản (để chọn trang phục đúng thời)
+async function autoFillEra(force){
+  const el = document.getElementById('t3Era');
+  if (!el) return;
+  if (!force && el.value.trim()) return;            // đã có giá trị → không đè (trừ khi bấm nút)
+  const script = (state.script || '').trim();
+  if (!script) { if (force) setStatus3('Tool 02 chưa có kịch bản để suy bối cảnh.', 'info'); return; }
+  const prevPh = el.placeholder;
+  el.placeholder = '⏳ Đang suy bối cảnh & thời đại từ kịch bản...';
+  try {
+    const prompt = `Đọc đoạn kịch bản dưới đây và trả về DUY NHẤT 1 dòng tiếng Anh ngắn gọn mô tả BỐI CẢNH + THỜI ĐẠI + VĂN HOÁ để chọn TRANG PHỤC nhân vật cho đúng thời: gồm nơi chốn, thời kỳ (kèm năm/thời đại nếu suy được) và vài món trang phục đặc trưng. KHÔNG giải thích, KHÔNG xuống dòng, KHÔNG ngoặc kép.
+Định dạng mẫu: Ancient Egypt, New Kingdom (~1300 BCE) — linen kilts, linen robes, wesekh collars, sandals; no modern clothing
+
+KỊCH BẢN:
+"""
+${script.slice(0, 2500)}
+"""`;
+    let reply = (await callClaude(prompt, 150)) || '';
+    reply = reply.trim().split('\n')[0].replace(/^["'\s]+|["'\s]+$/g, '');
+    if (!reply) throw new Error('AI trả về rỗng');
+    el.value = reply;
+    state.t3Era = reply;
+    setStatus3('✓ Đã tự điền Bối cảnh & thời đại từ kịch bản — kiểm tra/sửa nếu cần rồi Generate.', 'ok');
+    saveState();
+  } catch (e) {
+    console.warn('autoFillEra:', e);
+    if (force) setStatus3('Không suy được bối cảnh: ' + e.message, 'error');
+  } finally {
+    el.placeholder = prevPh;
+  }
+}
+
 function loadAssetsFromTool2(){
+  // Khôi phục bối cảnh/thời đại đã nhập (giữ trong phiên)
+  const eraEl = document.getElementById('t3Era');
+  if (eraEl && state.t3Era) eraEl.value = state.t3Era;
+  autoFillEra(false);   // tự suy từ kịch bản nếu ô đang trống (fire-and-forget)
   if (state.charactersV.length === 0 && state.backgroundsV.length === 0)
     return setStatus3('Tool 02 chưa có nhân vật/bối cảnh. Chạy Quét Trước ở Tool 02.', 'error');
 
@@ -5872,6 +5916,16 @@ async function genAllAssetPrompts(){
   if (!state.assetBgPrompts) state.assetBgPrompts = {};
   clearCancel();
 
+  // 🏺 Ngữ cảnh THỜI ĐẠI cho trang phục: ưu tiên ô "Bối cảnh & thời đại", nếu trống → trích kịch bản Tool 02
+  const eraInput = (document.getElementById('t3Era')?.value || state.t3Era || '').trim();
+  const scriptHint = (state.script || '').replace(/\s+/g, ' ').trim().slice(0, 700);
+  const eraCtx = eraInput
+    ? `\nBỐI CẢNH & THỜI ĐẠI (suy TRANG PHỤC đúng thời từ đây): ${eraInput}`
+    : (scriptHint ? `\nTRÍCH KỊCH BẢN (suy thời đại + trang phục từ đây): "${scriptHint}"` : '');
+  const eraRule = (eraInput || scriptHint)
+    ? `\n- TRANG PHỤC phải ĐÚNG thời đại/bối cảnh ở trên — KHÔNG dùng quần áo hiện đại sai thời (vd Ai Cập cổ → khố/váy lanh, áo choàng lanh, vòng cổ wesekh, chân trần/dép cói; TUYỆT ĐỐI không vest, sơ mi, cà vạt, tạp dề hiện đại). Chỉ phần thân/trang phục đổi theo thời đại; tay chân vẫn là que đen, mặt off-white như style.`
+    : '';
+
   try {
     // Character prompts (check Library first → skip AI if exists)
     let libPulledChars = 0;
@@ -5943,10 +5997,10 @@ ${useStyle}
 """
 
 NEGATIVE/RULES: ${rules}
-Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
+Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}${eraCtx}
 
 Yêu cầu:
-- Suy luận đặc điểm RIÊNG của [${name}] (tuổi, giới, trang phục, tóc) từ tên + context kênh — NHƯNG cách dựng cơ thể, tay/chân, bàn tay và mặt PHẢI giống y ảnh anchor, KHÔNG vẽ thành người cartoon tỉ lệ thường
+- Suy luận đặc điểm RIÊNG của [${name}] (tuổi, giới, trang phục, tóc) từ tên + context kênh — NHƯNG cách dựng cơ thể, tay/chân, bàn tay và mặt PHẢI giống y ảnh anchor, KHÔNG vẽ thành người cartoon tỉ lệ thường${eraRule}
 - Ghi tên nhân vật [${name}] trong prompt
 - ${ASSET_CHAR_LAYOUT}
 - 90-150 từ tiếng Anh
@@ -5961,10 +6015,10 @@ ${useStyle}
 """
 
 NEGATIVE/RULES: ${rules}
-Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
+Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}${eraCtx}
 
 Yêu cầu:
-- Suy luận đặc điểm nhân vật từ tên và context kênh
+- Suy luận đặc điểm nhân vật từ tên và context kênh${eraRule}
 - Ghi tên nhân vật [${name}] trong prompt
 - ${ASSET_CHAR_LAYOUT}
 - 90-150 từ tiếng Anh
