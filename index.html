@@ -1314,6 +1314,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       </div>
 
       <div class="actions">
+        <button class="btn" id="autoT3Btn" style="background:linear-gradient(135deg,#f97316,#c2410c);border:none;color:#fff;font-weight:700" onclick="runAutoTool3()" title="1 bấm: Load Assets từ Tool 02 → tự điền thời đại → tạo tất cả prompt">🚀 Auto</button>
         <button class="btn primary" onclick="genAllAssetPrompts()">⚡ Generate All Prompts</button>
         <button class="btn violet" onclick="genStyleReference()">🎨 Style Reference</button>
         <button class="btn" onclick="copyAllAssetPrompts()">📋 Sao chép tất cả</button>
@@ -5809,13 +5810,42 @@ ${script.slice(0, 2500)}
   }
 }
 
-function loadAssetsFromTool2(){
+// 🚀 Auto Tool 3: Load Assets → tự điền thời đại → Generate All Prompts (1 bấm)
+let _autoT3Running = false;
+async function runAutoTool3(){
+  if (_autoT3Running) return;
+  const p = getProfile();
+  if (!p) return setStatus3('Cần tạo Profile (Tool 1) trước khi chạy Auto.', 'error');
+  const btn = document.getElementById('autoT3Btn');
+  _autoT3Running = true;
+  if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = '⏳ Đang chạy...'; }
+  try {
+    setStatus3('🚀 Auto: đang load nhân vật/bối cảnh từ Tool 02...', 'working');
+    loadAssetsFromTool2(true);   // load assets, bỏ qua auto-era ở bước này
+    if (state.charactersV.length === 0 && state.backgroundsV.length === 0) {
+      setStatus3('Tool 02 chưa có nhân vật/bối cảnh — chạy Quét Trước ở Tool 02 trước đã.', 'error');
+      return;
+    }
+    setStatus3('🚀 Auto: đang suy bối cảnh & thời đại từ kịch bản...', 'working');
+    await autoFillEra(false);    // điền thời đại (chờ xong để Generate dùng được)
+    setStatus3('🚀 Auto: đang tạo prompt nhân vật + bối cảnh...', 'working');
+    await genAllAssetPrompts();  // tạo tất cả prompt (tự set status khi xong)
+  } catch (e) {
+    console.error('[AutoT3]', e);
+    setStatus3('Auto lỗi: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    _autoT3Running = false;
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || '🚀 Auto'; }
+  }
+}
+
+function loadAssetsFromTool2(skipEra){
   // Khôi phục bối cảnh/thời đại đã nhập (giữ trong phiên)
   const eraEl = document.getElementById('t3Era');
   if (eraEl && state.t3Era) eraEl.value = state.t3Era;
   const bgLayoutEl = document.getElementById('t3BgLayout');
   if (bgLayoutEl && state.t3BgLayout) bgLayoutEl.value = state.t3BgLayout;
-  autoFillEra(false);   // tự suy từ kịch bản nếu ô đang trống (fire-and-forget)
+  if (!skipEra) autoFillEra(false);   // tự suy từ kịch bản nếu ô đang trống (fire-and-forget)
   if (state.charactersV.length === 0 && state.backgroundsV.length === 0)
     return setStatus3('Tool 02 chưa có nhân vật/bối cảnh. Chạy Quét Trước ở Tool 02.', 'error');
 
@@ -5952,6 +5982,11 @@ async function genAllAssetPrompts(){
     ? `\n- TRANG PHỤC + KIỂU TÓC/ĐỘI ĐẦU + phụ kiện phải ĐÚNG thời đại/bối cảnh ở trên (vd Ai Cập cổ → khố/váy lanh, áo choàng lanh, vòng cổ wesekh, dép cói; TÓC: đầu cạo trọc, tóc giả đen kiểu bob, hoặc khăn nemes — KHÔNG tóc rẽ ngôi/chải gọn kiểu hiện đại; KHÔNG vest/sơ mi/cà vạt/tạp dề hiện đại). CHỈ giữ nguyên phần thuộc art-style: mặt off-white phẳng + đặc điểm mặt, tay chân là nét que đen, bàn tay mitten — mọi thứ còn lại (quần áo, tóc, kiểu đầu, đội đầu, trang sức) đổi theo đúng thời đại.`
     : '';
 
+  // 🏺 Luật thời đại cho BỐI CẢNH (kiến trúc/vật liệu/đồ vật/ánh sáng theo đúng thời)
+  const eraRuleBg = (eraInput || scriptHint)
+    ? `\n- Kiến trúc, vật liệu, đồ vật và nguồn sáng của bối cảnh phải ĐÚNG thời đại/nơi chốn ở trên — KHÔNG để lẫn yếu tố hiện đại sai thời (vd Ai Cập cổ → tường gạch bùn/đá, cột khắc chữ tượng hình, đèn dầu/đuốc; KHÔNG bóng đèn điện, kính, kim loại/nhựa hiện đại).`
+    : '';
+
   // 🖼 Kiểu ảnh bối cảnh: 'single' = 1 ảnh/mỗi bối cảnh (nét, ít lỗi) | 'grid' = 4 góc trong 1 ảnh
   const bgLayoutMode = (document.getElementById('t3BgLayout')?.value || state.t3BgLayout || 'single');
   const bgLayout = (bgLayoutMode === 'grid') ? ASSET_BG_LAYOUT : ASSET_BG_LAYOUT_SINGLE;
@@ -6086,7 +6121,7 @@ ${bgStyle}
 """
 
 NEGATIVE/RULES: ${rules}
-Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
+Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}${eraCtx}
 
 Danh sách bối cảnh:
 ${bgListStr}
@@ -6094,7 +6129,7 @@ ${bgListStr}
 Với MỖI bối cảnh, tạo 1 prompt:
 - Mô tả chi tiết môi trường, đồ vật, ánh sáng
 - Ghi tên bối cảnh [tên] trong prompt
-- NO characters NO people
+- NO characters NO people${eraRuleBg}
 - ${bgLayout}
 - 100-150 từ tiếng Anh mỗi prompt
 
@@ -6123,12 +6158,12 @@ ${bgStyle}
 """
 
 NEGATIVE/RULES: ${rules}
-Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
+Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}${eraCtx}
 
 Yêu cầu:
 - Mô tả chi tiết môi trường, đồ vật, ánh sáng
 - Ghi tên bối cảnh [${name}] trong prompt
-- NO characters NO people
+- NO characters NO people${eraRuleBg}
 - ${bgLayout}
 - 100-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
