@@ -544,6 +544,40 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
 }
 .batch-control input{width:60px;padding:6px 8px;text-align:center}
 
+/* ============ AUTO PIPELINE (1 nút chạy hết Tool 2) ============ */
+.auto-wrap{
+  flex-basis:100%;width:100%;display:flex;flex-direction:column;gap:10px;
+  background:linear-gradient(135deg,#fff7ed,#ffedd5);
+  border:1px solid #fed7aa;border-radius:12px;padding:13px 15px;margin-bottom:4px;
+}
+.auto-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.auto-btn{
+  background:linear-gradient(135deg,#f97316,#c2410c);border:none;color:#fff;
+  font-weight:700;font-size:14px;padding:11px 22px;border-radius:10px;cursor:pointer;
+  box-shadow:0 2px 8px rgba(194,65,12,.28);transition:filter .15s,transform .05s;
+}
+.auto-btn:hover{filter:brightness(1.06)}
+.auto-btn:active{transform:translateY(1px)}
+.auto-stop{
+  background:#fff;border:1.5px solid var(--red,#dc2626);color:var(--red,#dc2626);
+  font-weight:600;font-size:13px;padding:10px 18px;border-radius:10px;cursor:pointer;
+}
+.auto-hint{font-size:11.5px;color:#9a3412;line-height:1.45}
+#autoBar{display:none;align-items:center;gap:5px;flex-wrap:wrap;font-size:11.5px}
+.auto-step{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;
+  background:#fff;border:1px solid #e7e2d9;color:#94918a;white-space:nowrap;transition:all .2s;
+}
+.auto-step b{font-weight:700}
+.auto-step.active{background:#c2410c;border-color:#c2410c;color:#fff;animation:autopulse 1s ease-in-out infinite}
+.auto-step.done{background:#dcfce7;border-color:#86efac;color:#15803d}
+.auto-step.done::after{content:'✓';font-weight:700}
+.auto-step.skip{opacity:.5;text-decoration:line-through}
+.auto-step.fail{background:#fee2e2;border-color:#fca5a5;color:#b91c1c}
+.auto-step.fail::after{content:'✕';font-weight:700}
+.auto-arrow{color:#d6cfc2;font-size:11px}
+@keyframes autopulse{0%,100%{opacity:1}50%{opacity:.55}}
+
 /* ============ SUBTABS ============ */
 .subtabs{display:flex;border-bottom:1px solid var(--border)}
 .subtab{
@@ -1072,6 +1106,14 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       </div>
 
       <div class="actions">
+        <div class="auto-wrap">
+          <div class="auto-row">
+            <button class="auto-btn" id="autoRunBtn" onclick="runAutoTool2()">🚀 Auto: Chạy hết Tool 2</button>
+            <button class="auto-stop" id="autoStopBtn" style="display:none" onclick="stopAutoTool2()">⏸ Dừng</button>
+            <span class="auto-hint">Một nút: Lọc → Chia cảnh → Quét → Gán → Prompt G-Labs → Ảnh B.<br>Dừng giữa chừng vẫn giữ tiến độ — bấm lại để chạy tiếp (không làm lại từ đầu).</span>
+          </div>
+          <div id="autoBar"></div>
+        </div>
         <button class="btn ghost" onclick="cleanScript()">✂ Lọc Kịch Bản</button>
         <select id="splitMode" style="width:auto;padding:8px 12px">
           <option value="fast">Chia nhanh (regex, tức thì)</option>
@@ -4711,7 +4753,7 @@ function addPromptB(id){
   genSingleScenePromptB(id);
 }
 
-async function autoAddPromptBForLongScenes(){
+async function autoAddPromptBForLongScenes(autoMode = false){
   const p = getProfile();
   if (!p) return setStatus2('Cần Profile trước.', 'error');
   const THRESHOLD = 6; // giây
@@ -4730,7 +4772,7 @@ async function autoAddPromptBForLongScenes(){
 
   const BATCH = 8;
   const numCalls = Math.ceil(targets.length / BATCH);
-  if (!confirm(`Tìm thấy ${targets.length} cảnh dài hơn ${THRESHOLD}s.\nTạo Prompt B cho tất cả?\n\n(Gọi AI ${numCalls} lần, mỗi lần ${BATCH} cảnh — tiết kiệm hơn gọi từng cảnh)`)) return;
+  if (!autoMode && !confirm(`Tìm thấy ${targets.length} cảnh dài hơn ${THRESHOLD}s.\nTạo Prompt B cho tất cả?\n\n(Gọi AI ${numCalls} lần, mỗi lần ${BATCH} cảnh — tiết kiệm hơn gọi từng cảnh)`)) return;
 
   if (!state.scenePrompts2) state.scenePrompts2 = {};
   clearCancel();
@@ -4940,6 +4982,159 @@ function regenAllScenePrompts(){
   renderPromptsV();
   saveState(true);
   doGenerateScenePrompts();
+}
+
+/* ============================================================
+   AUTO PIPELINE — 1 nút chạy hết Tool 2 (resume-được)
+   Lọc → Chia cảnh → Quét trước → Gán → Prompt G-Labs → Ảnh B
+   Mỗi bước tái dùng hàm lẻ sẵn có; tự bỏ qua bước đã xong.
+============================================================ */
+let _autoRunning = false;
+let _autoStopFlag = false;
+
+const AUTO_STEPS = [
+  { label: 'Lọc' },
+  { label: 'Chia cảnh' },
+  { label: 'Quét trước' },
+  { label: 'Gán tài nguyên' },
+  { label: 'Prompt G-Labs' },
+  { label: 'Ảnh B (cảnh dài)' }
+];
+
+function _autoRenderSteps(){
+  const bar = document.getElementById('autoBar');
+  if (!bar) return;
+  bar.innerHTML = AUTO_STEPS.map((s, i) =>
+    `<span class="auto-step" id="autoStep-${i}"><b>${i + 1}</b>&nbsp;${s.label}</span>`
+  ).join('<span class="auto-arrow">→</span>');
+}
+function _autoSetStep(idx, status){
+  const el = document.getElementById('autoStep-' + idx);
+  if (!el) return;
+  el.classList.remove('active', 'done', 'skip', 'fail');
+  if (status) el.classList.add(status);
+}
+function _toggleAutoUI(running){
+  const auto = document.getElementById('autoRunBtn');
+  const stop = document.getElementById('autoStopBtn');
+  const bar  = document.getElementById('autoBar');
+  if (auto) auto.style.display = running ? 'none' : 'inline-flex';
+  if (stop) stop.style.display = running ? 'inline-flex' : 'none';
+  if (bar && running) bar.style.display = 'flex';  // hiện khi chạy, GIỮ lại sau khi xong để thấy ✓
+}
+
+function stopAutoTool2(){
+  if (!_autoRunning) return;
+  _autoStopFlag = true;
+  requestCancel();  // báo cho các vòng lặp AI (Prompt G-Labs / Ảnh B) dừng
+  setStatus2('⏸ Đang dừng sau bước hiện tại...', 'info');
+}
+
+async function runAutoTool2(){
+  if (_autoRunning) return;
+  syncTool2();
+
+  // --- Tiền kiểm tra ---
+  const p = getProfile();
+  if (!p) return setStatus2('Cần tạo Profile (Tool 1) trước khi chạy Auto.', 'error');
+  if (!state.script.trim()) return setStatus2('Dán kịch bản vào ô bên trên trước đã.', 'error');
+
+  _autoRunning = true;
+  _autoStopFlag = false;
+  clearCancel();
+  _toggleAutoUI(true);
+  _autoRenderSteps();
+  AUTO_STEPS.forEach((_, i) => _autoSetStep(i, null));
+
+  const t0 = Date.now();
+  const stopped = () => _autoStopFlag;  // inner funcs tự clearCancel, nên dựa vào cờ riêng
+
+  try {
+    // BƯỚC 1+2 — Lọc + Chia cảnh (CHỈ khi chưa có cảnh → tránh xoá prompt cũ khi chạy tiếp)
+    if (state.scenes.length === 0){
+      _autoSetStep(0, 'active');
+      cleanScript(); syncTool2();
+      _autoSetStep(0, 'done');
+      if (stopped()) throw 'STOP';
+
+      _autoSetStep(1, 'active');
+      await doSplit();
+      if (!state.scenes.length){ _autoSetStep(1, 'fail'); throw new Error('Chia cảnh không ra cảnh nào — kiểm tra lại kịch bản.'); }
+      _autoSetStep(1, 'done');
+    } else {
+      _autoSetStep(0, 'skip');
+      _autoSetStep(1, 'skip');
+    }
+    if (stopped()) throw 'STOP';
+
+    // BƯỚC 3 — Quét trước nhân vật/bối cảnh (bỏ qua nếu đã quét)
+    if (!(state.charactersV.length || state.backgroundsV.length)){
+      _autoSetStep(2, 'active');
+      clearCancel();
+      await doPrescan();
+      _autoSetStep(2, 'done');
+    } else {
+      _autoSetStep(2, 'skip');
+    }
+    if (stopped()) throw 'STOP';
+
+    // BƯỚC 4 — Gán tài nguyên (bỏ qua nếu đã gán hoặc không có nhân vật/bối cảnh)
+    if (state.charactersV.length || state.backgroundsV.length){
+      const alreadyAssigned = state.scenes.some(s => s.character || s.background);
+      if (!alreadyAssigned){
+        _autoSetStep(3, 'active');
+        clearCancel();
+        await doAssign();
+        _autoSetStep(3, 'done');
+      } else {
+        _autoSetStep(3, 'skip');
+      }
+    } else {
+      _autoSetStep(3, 'skip');
+    }
+    if (stopped()) throw 'STOP';
+
+    // BƯỚC 5 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
+    _autoSetStep(4, 'active');
+    clearCancel();
+    await doGenerateScenePrompts();
+    const promptCount = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
+    if (promptCount === 0){ _autoSetStep(4, 'fail'); throw new Error('AI chưa tạo được prompt nào — thử giảm Batch xuống 2-3.'); }
+    _autoSetStep(4, 'done');
+    if (stopped()) throw 'STOP';  // user bấm Dừng trong lúc gen prompt
+
+    // BƯỚC 6 — Tự thêm ảnh B cho cảnh dài (autoMode = bỏ confirm)
+    _autoSetStep(5, 'active');
+    clearCancel();
+    await autoAddPromptBForLongScenes(true);
+    _autoSetStep(5, 'done');
+
+    // --- Tổng kết ---
+    const secs = Math.round((Date.now() - t0) / 1000);
+    const missing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
+    setStatus2(
+      missing > 0
+        ? `✓ Auto xong (${secs}s) — còn ${missing} cảnh prompt lỗi. Bấm "🔧 Tạo nốt cảnh thiếu", rồi sang tab "🎨 Prompt G-Labs" để copy.`
+        : `🎉 Auto xong toàn bộ ${state.scenes.length} cảnh trong ${secs}s! Mở tab "🎨 Prompt G-Labs" → "📋 Sao chép tất cả" → paste sang G-Labs/Flow để gen ảnh.`,
+      missing > 0 ? 'info' : 'ok'
+    );
+    saveState(true);
+
+  } catch (err){
+    if (err === 'STOP'){
+      const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
+      setStatus2(`⏸ Đã dừng Auto. Tiến độ được giữ (đã có ${done}/${state.scenes.length} prompt). Bấm "🚀 Auto" lần nữa để chạy tiếp từ chỗ còn thiếu.`, 'info');
+    } else {
+      console.error('[Auto] lỗi:', err);
+      setStatus2('Auto lỗi: ' + (err && err.message ? err.message : err), 'error');
+    }
+    saveState(true);
+  } finally {
+    _autoRunning = false;
+    _autoStopFlag = false;
+    clearCancel();
+    _toggleAutoUI(false);
+  }
 }
 
 function syncTool2(){
