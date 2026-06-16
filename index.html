@@ -794,7 +794,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
     </div>
 
     <h3>📷 Phân tích ảnh mẫu (Vision AI)</h3>
-    <p>Upload 1-4 ảnh mẫu style của kênh → AI sẽ phân tích và tự điền Character/Background/Scene Style bên dưới.</p>
+    <p>Upload 1-4 ảnh mẫu style của kênh → AI sẽ phân tích và tự điền Character/Background/Scene Style bên dưới. <strong style="color:var(--accent)">📌 Ảnh ĐẦU TIÊN còn là Style Anchor</strong> — Tool 3 sẽ đính ảnh này khi tạo prompt nhân vật để AI bám đúng cách dựng cơ thể (người-que, tay chân mảnh, bàn tay mitten...).</p>
     <div class="grid-2 mb-12" style="grid-template-columns:auto 1fr;gap:14px;align-items:center">
       <div>
         <input type="file" id="pStyleImgInput" accept="image/png,image/jpeg,image/webp" multiple style="display:none">
@@ -842,6 +842,8 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
       <div>
         <label class="label green">CHARACTER STYLE <span style="font-weight:400;opacity:.7">(chính)</span></label>
         <textarea id="pCharStyle" style="min-height:100px" placeholder="Chọn preset, upload ảnh mẫu, hoặc tự viết..."></textarea>
+        <label class="label" style="margin-top:8px">ĐẶC ĐIỂM NHẬN DẠNG (1 dòng) <span style="font-weight:400;opacity:.7">— lặp ở MỖI prompt cảnh để giữ nhất quán; giữ thật ngắn gọn</span></label>
+        <input type="text" id="pCharIdentity" placeholder="VD: clothed-torso stickman, thin black stick limbs, white mitten hands, pale shaded face">
       </div>
       <div>
         <label class="label" style="color:var(--blue)">BACKGROUND STYLE</label>
@@ -3249,6 +3251,7 @@ function makeEmptyProfile(){
     cauTruc: 'Levels / Escalation / POV',
     soPhan: 8, targetPhut: 12,
     characterStyle: '', backgroundStyle: '', sceneStyle: '',
+    charIdentity: '',
     promptRules: 'No text, no watermark, consistent character design, avoid gore',
     styleGuide: '', dnaKenh: '', chuDe: '',
     characters: [], backgrounds: [],
@@ -3508,6 +3511,7 @@ function openProfile(){
   document.getElementById('pSoPhan').value = p.soPhan || 8;
   document.getElementById('pTargetPhut').value = p.targetPhut || 12;
   document.getElementById('pCharStyle').value = p.characterStyle || '';
+  if (document.getElementById('pCharIdentity')) document.getElementById('pCharIdentity').value = p.charIdentity || '';
   document.getElementById('pCharStyleB').value = p.characterStyleB || '';
   document.getElementById('pDefaultChars').value = (p.defaultChars || []).join('\n');
   document.getElementById('pDefaultBgs').value   = (p.defaultBgs   || []).join('\n');
@@ -3536,6 +3540,7 @@ function saveProfile(){
   p.soPhan = parseInt(document.getElementById('pSoPhan').value) || 8;
   p.targetPhut = parseInt(document.getElementById('pTargetPhut').value) || 12;
   p.characterStyle  = document.getElementById('pCharStyle').value;
+  if (document.getElementById('pCharIdentity')) p.charIdentity = document.getElementById('pCharIdentity').value;
   p.characterStyleB = document.getElementById('pCharStyleB').value;
   p.defaultChars = document.getElementById('pDefaultChars').value.split('\n').map(s=>s.trim()).filter(Boolean);
   p.defaultBgs   = document.getElementById('pDefaultBgs').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -4550,7 +4555,11 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO)
       const styleStr = (p.sceneStyle || '').toLowerCase();
       const isCartoon2D = /cartoon|flat|2d|animation|hand.drawn|stick|explainer|educational/.test(styleStr);
       // Lấy mô tả nhân vật NGẮN GỌN từ characterStyle của Profile (không hardcode)
-      const charStyleShort = (p.characterStyle || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+      // Ưu tiên "Đặc điểm nhận dạng" (1 dòng do user đặt) → lặp gọn mỗi cảnh, không bloat prompt.
+      // Nếu trống → lấy 600 ký tự đầu Character Style (đủ chứa đặc điểm cốt lõi như stick-limb; trước đây cắt 280 nên mất).
+      const charStyleShort = ((p.charIdentity && p.charIdentity.trim())
+        ? p.charIdentity.trim()
+        : (p.characterStyle || '').replace(/\s+/g, ' ').trim().slice(0, 600));
       const animFormulaBlock = (isCartoon2D && !shortMode) ? `
 🎬 STYLE RULES (BẮT BUỘC áp dụng cho MỌI cảnh — đây là style cố định của kênh):
 Scene aesthetic: ${p.sceneStyle || 'consistent flat 2D style'} --ar 16:9
@@ -5905,6 +5914,7 @@ async function genAllAssetPrompts(){
         continue;
       }
       const img = state.characterImages?.[name];
+      const anchor = (state.styleRefImages && state.styleRefImages[0]) || null;
       let promptText;
       if (img) {
         promptText = `Phân tích ảnh reference của nhân vật [${name}] và tạo 1 prompt G-Labs chi tiết cho character reference sheet.
@@ -5923,6 +5933,25 @@ Yêu cầu:
 - 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text, không giải thích.`;
         state.assetCharPrompts[name] = await callClaudeWithImage(promptText, img.base64, img.mediaType, 700);
+      } else if (anchor) {
+        // 📌 STYLE ANCHOR — không có ảnh riêng của nhân vật, nhưng có ảnh anchor của kênh → cho Claude nhìn anchor để bám cách dựng cơ thể
+        promptText = `Đây là ẢNH STYLE ANCHOR của kênh. Hãy bám CHÍNH XÁC cách dựng cơ thể và nét vẽ trong ảnh này (vd tay/chân là nét que đen mảnh, bàn tay mitten trắng, mặt off-white có đổ khối nhẹ — tuỳ ảnh). Tạo 1 prompt G-Labs cho character reference sheet nhân vật [${name}] theo ĐÚNG style đó.
+
+Style template (chữ, để tham chiếu thêm):
+"""
+${useStyle}
+"""
+
+NEGATIVE/RULES: ${rules}
+Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
+
+Yêu cầu:
+- Suy luận đặc điểm RIÊNG của [${name}] (tuổi, giới, trang phục, tóc) từ tên + context kênh — NHƯNG cách dựng cơ thể, tay/chân, bàn tay và mặt PHẢI giống y ảnh anchor, KHÔNG vẽ thành người cartoon tỉ lệ thường
+- Ghi tên nhân vật [${name}] trong prompt
+- ${ASSET_CHAR_LAYOUT}
+- 90-150 từ tiếng Anh
+- Trả về CHỈ prompt text.`;
+        state.assetCharPrompts[name] = await callClaudeWithImage(promptText, anchor.base64, anchor.mediaType, 700);
       } else {
         promptText = `Tạo 1 prompt G-Labs chi tiết cho character reference sheet nhân vật [${name}].
 
