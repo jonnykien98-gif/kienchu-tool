@@ -5837,6 +5837,15 @@ function clearAllCharImages(){
 }
 
 /* --- Generate asset prompts (with Vision for images) --- */
+/* Luật CẤM CHỮ + layout sạch dùng chung cho mọi prompt asset.
+   Trước đây prompt liệt kê "panel 1...", "neutral, sad..." → G-Labs vẽ luôn chữ vào ảnh.
+   3 hằng số dưới buộc AI mô tả bố cục mà KHÔNG sinh chữ/nhãn trên ảnh. */
+const ASSET_NO_TEXT_RULE = 'NO-TEXT RULE (bắt buộc, ưu tiên cao nhất): ảnh cuối cùng KHÔNG được chứa bất kỳ chữ nào — không tiêu đề, không header, không số thứ tự panel, không nhãn, không tên cảm xúc, không caption, không watermark, không chữ ký. TUYỆT ĐỐI không ghi nhãn cho các góc nhìn hay biểu cảm. Prompt bạn viết ra PHẢI kết thúc bằng đúng câu: "no text, no title, no labels, no captions, no numbers, no watermark anywhere in the image, pure artwork only".';
+
+const ASSET_CHAR_LAYOUT = 'LAYOUT: one clean character reference sheet on a plain off-white background. Upper section = the SAME character full-body from five angles (front, three-quarter front, side profile, three-quarter back, full back). Lower section = seven head-and-shoulders close-ups of the same character with these expressions — calm/neutral, sad, angry, surprised, shouting, worried, tired — drawn as faces ONLY, with NO words beside them. Identical character design, proportions and outfit in every pose. ' + ASSET_NO_TEXT_RULE;
+
+const ASSET_BG_LAYOUT = 'LAYOUT: one background/location reference sheet as a clean 2x2 grid of four views of the SAME place — wide establishing view, medium view from the opposite side, high isometric overview, and a low close-up detail with dramatic lighting. Consistent architecture, props and color palette across all four cells. No people, no characters. ' + ASSET_NO_TEXT_RULE;
+
 async function genAllAssetPrompts(){
   const chars = document.getElementById('t3Characters').value.split('\n').map(s => s.trim()).filter(Boolean);
   const bgs = document.getElementById('t3Backgrounds').value.split('\n').map(s => s.trim()).filter(Boolean);
@@ -5910,7 +5919,7 @@ NEGATIVE/RULES: ${rules}
 Yêu cầu:
 - Mô tả CHÍNH XÁC visual của nhân vật trong ảnh (hình dạng đầu, mắt, miệng, tỷ lệ cơ thể, quần áo, màu sắc)
 - Ghi tên nhân vật [${name}] trong prompt
-- LAYOUT BẮT BUỘC: character reference sheet, TOP ROW shows 5 full-body views (front view, 3/4 front view, side profile, 3/4 back view, full back view), BOTTOM ROW shows 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), clean white background, consistent character design across all poses
+- ${ASSET_CHAR_LAYOUT}
 - 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text, không giải thích.`;
         state.assetCharPrompts[name] = await callClaudeWithImage(promptText, img.base64, img.mediaType, 700);
@@ -5928,7 +5937,7 @@ Kênh: ${p?.tenKenh || ''} — ${p?.ngach || ''}
 Yêu cầu:
 - Suy luận đặc điểm nhân vật từ tên và context kênh
 - Ghi tên nhân vật [${name}] trong prompt
-- LAYOUT BẮT BUỘC: character reference sheet, TOP ROW shows 5 full-body views (front view, 3/4 front view, side profile, 3/4 back view, full back view), BOTTOM ROW shows 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), clean white background, consistent character design across all poses
+- ${ASSET_CHAR_LAYOUT}
 - 90-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
         state.assetCharPrompts[name] = await callClaude(promptText, 500);
@@ -5973,7 +5982,7 @@ Với MỖI bối cảnh, tạo 1 prompt:
 - Mô tả chi tiết môi trường, đồ vật, ánh sáng
 - Ghi tên bối cảnh [tên] trong prompt
 - NO characters NO people
-- LAYOUT BẮT BUỘC: background reference sheet split into 4 panels (2x2 grid) showing the SAME location from 4 different angles and lighting moods — panel 1 wide establishing shot, panel 2 medium angle from opposite side, panel 3 high isometric overview, panel 4 low close detail angle with dramatic lighting. All 4 panels same location, consistent objects and architecture.
+- ${ASSET_BG_LAYOUT}
 - 100-150 từ tiếng Anh mỗi prompt
 
 Trả về JSON object, key là tên bối cảnh (không có ngoặc vuông), value là prompt text. VD: {"ship-cabin-night":"...","ship-deck-night":"..."}
@@ -6007,7 +6016,7 @@ Yêu cầu:
 - Mô tả chi tiết môi trường, đồ vật, ánh sáng
 - Ghi tên bối cảnh [${name}] trong prompt
 - NO characters NO people
-- LAYOUT BẮT BUỘC: background reference sheet split into 4 panels (2x2 grid) showing the SAME location from 4 different angles and lighting moods — panel 1 wide establishing shot, panel 2 medium angle from opposite side, panel 3 high isometric overview, panel 4 low close detail angle with dramatic lighting. All 4 panels same location, consistent objects and architecture.
+- ${ASSET_BG_LAYOUT}
 - 100-150 từ tiếng Anh
 - Trả về CHỈ prompt text.`;
           state.assetBgPrompts[name] = await callClaude(promptText, 500);
@@ -6033,20 +6042,20 @@ async function genStyleReference(){
 
 Kênh: ${p.tenKenh} — ${p.ngach}
 Visual Style: ${p.visualStyle}
-Character Style: ${(p.characterStyle || '').slice(0, 250)}
-Background Style: ${(p.backgroundStyle || '').slice(0, 250)}
-Scene Style: ${(p.sceneStyle || '').slice(0, 150)}
+Character Style (ÁP DỤNG ĐẦY ĐỦ — đặc biệt cách dựng cơ thể, tay/chân, bàn tay và mặt): ${p.characterStyle || ''}
+Background Style: ${(p.backgroundStyle || '').slice(0, 700)}
+Scene Style: ${(p.sceneStyle || '').slice(0, 400)}
 
 LAYOUT BẮT BUỘC — ảnh chia 3 hàng ngang rõ ràng, phân cách bằng đường kẻ mảnh:
 - HÀNG 1 (trên cùng): color palette — 8 ô vuông màu đại diện cho bảng màu chủ đạo của kênh (lấy từ style), xếp ngang đều nhau
-- HÀNG 2 (giữa): line-up 8 nhân vật mẫu đa dạng (nam/nữ, già/trẻ, các nghề khác nhau phù hợp ngách kênh) — TẤT CẢ cùng art style nhất quán, đứng full-body front view, nền trắng, có bóng đổ nhẹ dưới chân
+- HÀNG 2 (giữa): line-up 8 nhân vật mẫu đa dạng (nam/nữ, già/trẻ, các nghề khác nhau phù hợp ngách kênh) — TẤT CẢ cùng art style nhất quán, đứng full-body front view, nền trắng, có bóng đổ nhẹ dưới chân. CÁCH DỰNG CƠ THỂ của cả 8 nhân vật PHẢI đúng y hệt Character Style ở trên (vd nếu Character Style yêu cầu tay/chân là nét que đen mảnh + bàn tay mitten trắng + mặt off-white thì cả 8 đều phải vậy) — TUYỆT ĐỐI không vẽ thành người cartoon tỉ lệ thường
 - HÀNG 3 (dưới cùng): 3 ô bối cảnh mẫu (3 môi trường tiêu biểu của kênh) với lighting và mood khác nhau, bo góc nhẹ
 
 Prompt phải:
-- Mô tả CHÍNH XÁC art style (nét vẽ, outline, màu sắc, tỉ lệ nhân vật) theo Character Style ở trên
+- Mô tả CHÍNH XÁC art style VÀ cách dựng cơ thể nhân vật (tay, chân, bàn tay, mặt) đúng theo Character Style ở trên — copy nguyên đặc điểm nhận diện, KHÔNG thay bằng tỉ lệ người cartoon thường
 - Áp dụng đúng bảng màu và mood theo Visual Style
 - 130-180 từ tiếng Anh
-- Kết thúc bằng: "channel style reference sheet, consistent art style throughout, clean layout, no text labels"
+- Kết thúc bằng: "channel style reference sheet, consistent art style throughout, clean layout, no text, no title, no labels, no captions, no numbers, no watermark anywhere in the image, pure artwork only"
 - Trả về CHỈ prompt text.`;
     state.styleRefPrompt = await callClaude(prompt, 600);
     document.getElementById('styleRefPanel').style.display = 'block';
