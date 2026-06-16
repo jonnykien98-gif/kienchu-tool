@@ -3199,8 +3199,8 @@ window.addEventListener('beforeunload', () => {
    PROFILE — Quản lý
 ============================================================ */
 const PRESET = {
-  characterStyleB: "Simple stick figure character, large round white circle head (pure white no fill), two small black dot eyes, simple curved smile, thin single black line body arms legs, minimal clothing suggestion with flat color fill, NO detailed features, hand-drawn cartoon style, professional white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words",
-  characterStyle: "2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words",
+  characterStyleB: "Simple stick figure character, large round white circle head (pure white no fill), two small black dot eyes, simple curved smile, thin single black line body arms legs, minimal clothing suggestion with flat color fill, NO detailed features, hand-drawn cartoon style, professional white background",
+  characterStyle: "2D cartoon character, bold thick black ink outlines, perfectly round WHITE circle head (pure white, NOT skin-colored), small simple black dot eyes, thin simple eyebrow lines, simple small curved mouth, body with detailed era-appropriate clothing (visible folds layers buttons collars), THIN single black line arms with small round black circle hands, THIN single black line legs ending in X-crossed feet, clothing has warm muted dark colors browns grays dark greens navy, flat color fills no gradients, hand-drawn cartoon style, professional white background",
   backgroundStyle: "2D cartoon background illustration, bold black outlines, detailed interior or exterior environment with depth and atmosphere, muted dark color palette browns grays dark greens warm shadows, visible furniture props architectural details environmental storytelling elements, cinematic moody lighting with warm practical light sources, flat color fills with subtle tone variation, hand-drawn illustration style, NO characters NO people NO figures NO text NO words, 16:9 ratio",
   sceneStyle: "simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors"
 };
@@ -3210,42 +3210,42 @@ const STYLE_PRESETS = {
   '': { label: '— Chọn preset style —' },
   cartoon2d: {
     label: '🎨 Cartoon 2D (flat vector)',
-    characterStyle: 'Flat 2D cartoon character, bold clean black outlines, simple expressive face with dot eyes and curved mouth, simple body proportions, flat color fills no gradients, era/role-appropriate clothing, hand-drawn vector illustration style, professional white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
+    characterStyle: 'Flat 2D cartoon character, bold clean black outlines, simple expressive face with dot eyes and curved mouth, simple body proportions, flat color fills no gradients, era/role-appropriate clothing, hand-drawn vector illustration style, professional white background',
     backgroundStyle: 'Flat 2D cartoon background illustration, clean black outlines, environment with depth and props, muted color palette with soft shading, flat color fills, hand-drawn vector style, NO characters NO people NO figures NO text NO words, 16:9 ratio',
     sceneStyle: 'simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors',
     promptRules: 'No text overlay, no watermark, no photorealism, no gradients, no 3D shading, consistent character design across all scenes, thick black outlines on every element, flat color fills only, simple hand-drawn shapes'
   },
   realistic: {
     label: '📷 Ảnh thực (photorealistic)',
-    characterStyle: 'Photorealistic person, natural realistic skin texture and pores, realistic hair, accurate human proportions and anatomy, detailed realistic clothing with fabric texture, soft natural studio lighting, sharp focus, professional photography, neutral grey backdrop, TOP ROW 4 full-body views front 45-degree side back, BOTTOM ROW 6 facial expression close-ups, NO text NO words',
+    characterStyle: 'Photorealistic person, natural realistic skin texture and pores, realistic hair, accurate human proportions and anatomy, detailed realistic clothing with fabric texture, soft natural studio lighting, sharp focus, professional photography, neutral grey backdrop',
     backgroundStyle: 'Photorealistic environment, realistic materials and textures, accurate perspective and depth, natural or practical lighting with realistic shadows, cinematic photography, high detail, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: 'photorealistic, cinematic photography, natural lighting, realistic textures, sharp focus, shallow depth of field',
     promptRules: 'No text, no watermark, no cartoon or illustration look, no distorted anatomy, no extra fingers, consistent character appearance'
   },
   anime: {
     label: '🌸 Anime / Manga',
-    characterStyle: 'Anime style character, clean cel-shaded coloring, large expressive eyes with highlights, detailed stylized hair, slim anime proportions, sharp clean lineart, vibrant colors, detailed costume, white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
+    characterStyle: 'Anime style character, clean cel-shaded coloring, large expressive eyes with highlights, detailed stylized hair, slim anime proportions, sharp clean lineart, vibrant colors, detailed costume, white background',
     backgroundStyle: 'Anime background art, detailed painterly environment, soft gradient skies, cel-shaded lighting, vibrant saturated colors, depth and atmosphere, Studio-anime quality, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: 'anime style, cel-shaded, clean lineart, vibrant colors, expressive, detailed background art',
     promptRules: 'No text, no watermark, consistent character design, no photorealism, maintain anime cel-shaded look'
   },
   render3d: {
     label: '🧊 3D Render (Pixar-like)',
-    characterStyle: '3D rendered character, stylized Pixar-like proportions, smooth subsurface-scattering skin, soft rounded forms, detailed textured clothing, soft global illumination, subtle ambient occlusion, clean studio render, neutral background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
+    characterStyle: '3D rendered character, stylized Pixar-like proportions, smooth subsurface-scattering skin, soft rounded forms, detailed textured clothing, soft global illumination, subtle ambient occlusion, clean studio render, neutral background',
     backgroundStyle: '3D rendered environment, stylized props with smooth surfaces, soft global illumination and ambient occlusion, depth of field, cinematic 3D render, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: '3D render, stylized Pixar-like, soft global illumination, smooth surfaces, cinematic lighting, ambient occlusion',
     promptRules: 'No text, no watermark, consistent character model, no 2D flat look, maintain 3D rendered style'
   },
   watercolor: {
     label: '🖌 Màu nước (watercolor)',
-    characterStyle: 'Watercolor illustration character, soft hand-painted washes, visible paper texture, gentle bleeding edges, loose expressive brushwork, soft muted palette, delicate linework, white paper background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
+    characterStyle: 'Watercolor illustration character, soft hand-painted washes, visible paper texture, gentle bleeding edges, loose expressive brushwork, soft muted palette, delicate linework, white paper background',
     backgroundStyle: 'Watercolor painted environment, soft washes and bleeding colors, visible paper grain, loose brushwork, gentle muted palette, airy atmosphere, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: 'watercolor illustration, soft hand-painted washes, paper texture, loose brushwork, muted gentle palette',
     promptRules: 'No text, no watermark, keep soft watercolor look, no hard digital edges, no photorealism'
   },
   lineart: {
     label: '✏️ Line art tối giản',
-    characterStyle: 'Minimalist line art character, clean single-weight black lines on white, minimal or no fill, simple geometric shapes, lots of negative space, modern editorial illustration, white background, TOP ROW 5 full-body views (front, 3/4 front, side profile, 3/4 back, full back), BOTTOM ROW 7 facial expression close-ups (neutral, sad, angry, surprised, shouting, worried, tired), NO text NO words',
+    characterStyle: 'Minimalist line art character, clean single-weight black lines on white, minimal or no fill, simple geometric shapes, lots of negative space, modern editorial illustration, white background',
     backgroundStyle: 'Minimalist line art environment, clean thin black lines on white, minimal detail, lots of negative space, modern editorial style, NO characters NO people NO text NO words, 16:9 ratio',
     sceneStyle: 'minimalist line art, clean thin black lines, white background, lots of negative space, modern editorial',
     promptRules: 'No text, no watermark, keep minimalist clean lines, avoid heavy shading, avoid clutter'
@@ -3287,7 +3287,9 @@ function createEmptyWorkData(){
     pexelsResults: {},
     descMode: 'tag',
     charBible: {},
-    bgBible: {}
+    bgBible: {},
+    t3Era: '',
+    t3BgLayout: 'single'
   };
 }
 
@@ -3310,6 +3312,8 @@ function syncStateToCurrentProfile(){
   p.workData.descMode = state.descMode || 'tag';
   p.workData.charBible = state.charBible || {};
   p.workData.bgBible = state.bgBible || {};
+  p.workData.t3Era = state.t3Era || '';
+  p.workData.t3BgLayout = state.t3BgLayout || 'single';
 }
 
 // Pull profile's workData → state.{script,scenes,...} (gọi sau khi switch / load)
@@ -3329,6 +3333,12 @@ function loadStateFromProfile(p){
   state.descMode = wd.descMode || 'tag';
   state.charBible = wd.charBible || {};
   state.bgBible = wd.bgBible || {};
+  state.t3Era = wd.t3Era || '';
+  state.t3BgLayout = wd.t3BgLayout || 'single';
+  const eraEl2 = document.getElementById('t3Era');
+  if (eraEl2) eraEl2.value = state.t3Era;
+  const bgLayoutEl2 = document.getElementById('t3BgLayout');
+  if (bgLayoutEl2) bgLayoutEl2.value = state.t3BgLayout;
   const dm = document.getElementById('t2DescMode');
   if (dm) dm.value = state.descMode;
   // Images sẽ load từ IDB theo profileId — clear trước
@@ -3758,7 +3768,7 @@ async function analyzeStyleImages(){
 
 Trả về CHÍNH XÁC 1 JSON object (không markdown, không giải thích):
 {
-  "characterStyle": "MÔ TẢ CHÍNH XÁC style nhân vật trong ảnh: hình dạng đầu, mắt, miệng, tỉ lệ cơ thể, nét vẽ, tay chân, quần áo, màu da, style tóc. 80-130 từ tiếng Anh cho G-Labs. Kết thúc: TOP ROW 4 full-body views, BOTTOM ROW 6 expression close-ups, professional white background",
+  "characterStyle": "MÔ TẢ CHÍNH XÁC style nhân vật trong ảnh: hình dạng đầu, mắt, miệng, tỉ lệ cơ thể, nét vẽ, tay chân, quần áo, màu da, style tóc. 80-130 từ tiếng Anh cho G-Labs. Chỉ mô tả ART-STYLE, KHÔNG ghi bố cục/nhãn (Tool tự lo layout). Kết thúc: professional clean background",
   "backgroundStyle": "MÔ TẢ chính xác style bối cảnh: nét vẽ outline, level of detail, bảng màu, shading, ánh sáng, atmosphere, props. 80-130 từ tiếng Anh. Kết thúc: NO characters NO people NO figures NO text NO words, 16:9 ratio",
   "sceneStyle": "AESTHETIC NGẮN 30-50 từ tiếng Anh dùng cho mọi scene prompt: kiểu vẽ, nét, màu, shading, mood",
   "promptRules": "Negative rules: liệt kê những gì KHÔNG nên có dựa trên style ảnh",
@@ -4530,6 +4540,13 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
 
 function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO){
   const shortMode = document.getElementById('shortPromptMode')?.checked;
+  // 🏺 Khoá thời đại cho prompt cảnh: ưu tiên giá trị đã đặt ở Tool 3 (state.t3Era), nếu trống → trích kịch bản
+  const eraHintT2 = (state.t3Era && state.t3Era.trim())
+    ? state.t3Era.trim()
+    : (state.script || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+  const eraBlockT2 = eraHintT2
+    ? `\n🏺 BỐI CẢNH & THỜI ĐẠI (áp cho MỌI cảnh): ${eraHintT2}\n- Trang phục, kiểu tóc/đội đầu và đạo cụ của MỌI nhân vật — kể cả nhân vật phụ tả tự do, đám đông, người qua đường — PHẢI đúng thời đại/bối cảnh này; KHÔNG để lẫn đồ/tóc hiện đại sai thời. Phần art-style (mặt off-white, tay chân que đen, bàn tay mitten) thì giữ nguyên ở mọi nhân vật.\n`
+    : '';
   // ---- Mode-aware: Tag / Inline / Inline+bible ----
       const dm = state.descMode || 'tag';
       let charCtx, bgCtx, charHeader, bgHeader, mode1Rule;
@@ -4594,7 +4611,7 @@ ${profileContext}
 SCENE AESTHETIC (dùng cho MỌI cảnh): "${p.sceneStyle || 'consistent visual style across all scenes'}"
 
 PROMPT RULES / NEGATIVE: "${p.promptRules || ''}"
-${animFormulaBlock}
+${eraBlockT2}${animFormulaBlock}
 
 ${charHeader}
 ${charCtx || '(không có)'}
