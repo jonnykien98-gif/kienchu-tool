@@ -1094,7 +1094,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <div class="auto-row">
             <button class="auto-btn" id="autoRunBtn" onclick="runAutoTool2()">🚀 Auto: Chạy hết Tool 2</button>
             <button class="auto-stop" id="autoStopBtn" style="display:none" onclick="stopAutoTool2()">⏸ Dừng</button>
-            <span class="auto-hint">Một nút: Lọc → Chia cảnh → Quét → Gán → Prompt G-Labs → Ảnh B.<br>Dừng giữa chừng vẫn giữ tiến độ — bấm lại để chạy tiếp (không làm lại từ đầu).</span>
+            <span class="auto-hint">Một nút: Lọc → Chia cảnh → Tách cảnh dài → Quét → Gán → Prompt G-Labs → Ảnh B.<br>Dừng giữa chừng vẫn giữ tiến độ — bấm lại để chạy tiếp (không làm lại từ đầu).</span>
           </div>
           <div id="autoBar"></div>
         </div>
@@ -1104,6 +1104,8 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <option value="smart" selected>Chia thông minh (AI) ★</option>
         </select>
         <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
+        <button class="btn ghost" onclick="splitLongScenes()" title="Tách các cảnh dài thành nhiều cảnh con (cắt tại dấu phẩy / — / :) để mỗi cảnh có 1 ảnh, nhịp nhanh hơn">✂ Tách cảnh dài</button>
+        <div class="batch-control" title="Giây tối đa cho mỗi ảnh — cảnh dài hơn ngưỡng này sẽ bị tách"><span>s/ảnh:</span><input type="number" id="maxSecPerImg" value="8" min="3" max="30"></div>
         <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Đính file SRT để lấy ĐỘ DÀI THẬT từ giọng đọc — thay cho độ dài ước lượng. Chia cảnh trước, rồi bấm nút này.">
           ⏱ Căn độ dài từ SRT
           <input type="file" accept=".srt,.txt" style="display:none" onchange="applySRTTiming(this)">
@@ -4046,6 +4048,109 @@ function calcDur(text){
   return Math.max(2, Math.round(text.length / 15));
 }
 
+// Tách 1 đoạn text dài thành N phần cân bằng, ưu tiên cắt tại mệnh đề (, ; : — –).
+// Nếu không có mệnh đề → cắt theo từ. Trả về [text] nếu cảnh không cần tách.
+function _splitTextByDuration(text, maxSec){
+  const totalDur = calcDur(text);
+  if (totalDur <= maxSec) return [text];
+  const N = Math.max(2, Math.ceil(totalDur / maxSec));
+  // Tách theo mệnh đề (giữ nguyên dấu câu ở cuối mỗi mệnh đề)
+  let units = [], buf = '';
+  for (let i = 0; i < text.length; i++) {
+    buf += text[i];
+    if (/[,;:—–]/.test(text[i]) && text[i + 1] === ' ') { units.push(buf.trim()); buf = ''; i++; }
+  }
+  if (buf.trim()) units.push(buf.trim());
+  units = units.filter(Boolean);
+  if (units.length < 2) units = _expandByWords([text], N);   // không có mệnh đề → cắt theo từ
+  else if (units.length < N) units = _expandByWords(units, N);
+  // Gói các mệnh đề thành N phần cân bằng theo độ dài ký tự
+  const targetLen = text.length / N;
+  const parts = [];
+  let cur = '';
+  for (const u of units) {
+    const cand = cur ? cur + ' ' + u : u;
+    if (cur && cur.length >= targetLen && parts.length < N - 1) { parts.push(cur); cur = u; }
+    else cur = cand;
+  }
+  if (cur) parts.push(cur);
+  return parts.length > 1 ? parts : [text];
+}
+
+// Cắt các unit dài theo từ cho tới khi có ít nhất N phần (fallback khi thiếu mệnh đề)
+function _expandByWords(units, N){
+  units = units.slice();
+  let guard = 0;
+  while (units.length < N && guard++ < 300) {
+    let li = -1, lw = 1;
+    for (let i = 0; i < units.length; i++) {
+      const wc = units[i].split(/\s+/).length;
+      if (wc > lw) { lw = wc; li = i; }
+    }
+    if (li < 0) break;
+    const w = units[li].split(/\s+/);
+    const mid = Math.floor(w.length / 2);
+    if (mid < 1) break;
+    units.splice(li, 1, w.slice(0, mid).join(' '), w.slice(mid).join(' '));
+  }
+  return units;
+}
+
+// ✂ Tách các cảnh dài (> ngưỡng giây/ảnh) thành nhiều cảnh con → nhiều ảnh minh hoạ
+function splitLongScenes(){
+  syncTool2();
+  const inp = document.getElementById('maxSecPerImg');
+  let maxSec = parseInt(inp?.value) || 8;
+  if (maxSec < 3) maxSec = 3;
+  if (!state.scenes || !state.scenes.length) return setStatus2('Chưa có cảnh để tách. Bấm "Chia Cảnh" trước.', 'error');
+
+  // Dựng danh sách cảnh mới; nhớ nguồn để giữ prompt/ảnh của cảnh KHÔNG bị tách
+  const built = []; // { scene, sourceId | null }
+  let affected = 0, added = 0;
+  for (const s of state.scenes) {
+    const parts = _splitTextByDuration(s.text, maxSec);
+    if (parts.length <= 1) { built.push({ scene: { ...s }, sourceId: s.id }); continue; }
+    affected++;
+    added += parts.length - 1;
+    for (const t of parts) built.push({ scene: { ...s, text: t, duration: calcDur(t) }, sourceId: null });
+  }
+  if (!added) return setStatus2(`Không có cảnh nào dài quá ${maxSec}s/ảnh.`, 'info');
+
+  // Cap theo tier
+  const maxScenes = getMaxScenes();
+  let trimmedNotice = '';
+  if (built.length > maxScenes) {
+    const cut = built.length - maxScenes;
+    built.length = maxScenes;
+    trimmedNotice = ` (đã cắt ${cut} cảnh vượt giới hạn gói Free)`;
+    setTimeout(() => showUpgradeModal(`Tách ra ${maxScenes + cut} cảnh, gói Free chỉ giữ ${maxScenes}. Nâng cấp Pro để mở khoá.`), 500);
+  }
+
+  // Gán id mới 001.. + remap prompt/ảnh: giữ cho cảnh chưa tách, bỏ cho cảnh bị tách (cần gen lại)
+  const SP = state.scenePrompts || {}, SP2 = state.scenePrompts2 || {}, VEO = state.veoPrompts || {}, SI = state.sceneImages || {};
+  const nSP = {}, nSP2 = {}, nVEO = {}, nSI = {};
+  const newScenes = built.map((b, i) => {
+    const id = String(i + 1).padStart(3, '0');
+    b.scene.id = id;
+    if (b.sourceId) {
+      if (SP[b.sourceId])  nSP[id]  = SP[b.sourceId];
+      if (SP2[b.sourceId]) nSP2[id] = SP2[b.sourceId];
+      if (VEO[b.sourceId]) nVEO[id] = VEO[b.sourceId];
+      if (SI[b.sourceId])  nSI[id]  = SI[b.sourceId];
+    }
+    return b.scene;
+  });
+  state.scenes = newScenes;
+  state.scenePrompts = nSP;
+  state.scenePrompts2 = nSP2;
+  state.veoPrompts = nVEO;
+  state.sceneImages = nSI;
+  renderAllT2();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  saveState();
+  setStatus2(`✓ Đã tách ${affected} cảnh dài → +${added} cảnh (≤${maxSec}s/ảnh). Tổng ${newScenes.length} cảnh. Bấm "Tạo Prompt G-Labs" để sinh ảnh cho cảnh mới.${trimmedNotice}`, 'ok');
+}
+
 // So sánh các cảnh đã chia với kịch bản gốc — phát hiện mất/thêm từ
 function verifyScenesAgainstScript(){
   syncTool2();
@@ -5045,6 +5150,7 @@ let _autoStopFlag = false;
 const AUTO_STEPS = [
   { label: 'Lọc' },
   { label: 'Chia cảnh' },
+  { label: 'Tách cảnh dài' },
   { label: 'Quét trước' },
   { label: 'Gán tài nguyên' },
   { label: 'Prompt G-Labs' },
@@ -5100,7 +5206,7 @@ async function runAutoTool2(){
   const stopped = () => _autoStopFlag;  // inner funcs tự clearCancel, nên dựa vào cờ riêng
 
   try {
-    // BƯỚC 1+2 — Lọc + Chia cảnh (CHỈ khi chưa có cảnh → tránh xoá prompt cũ khi chạy tiếp)
+    // BƯỚC 1+2+3 — Lọc + Chia cảnh + Tách cảnh dài (CHỈ khi chưa có cảnh → tránh xoá prompt cũ khi chạy tiếp)
     if (state.scenes.length === 0){
       _autoSetStep(0, 'active');
       cleanScript(); syncTool2();
@@ -5111,53 +5217,60 @@ async function runAutoTool2(){
       await doSplit();
       if (!state.scenes.length){ _autoSetStep(1, 'fail'); throw new Error('Chia cảnh không ra cảnh nào — kiểm tra lại kịch bản.'); }
       _autoSetStep(1, 'done');
+      if (stopped()) throw 'STOP';
+
+      // Tách cảnh dài → nhiều ảnh (theo ngưỡng s/ảnh ở ô bên cạnh nút Chia Cảnh)
+      _autoSetStep(2, 'active');
+      splitLongScenes();
+      _autoSetStep(2, 'done');
     } else {
       _autoSetStep(0, 'skip');
       _autoSetStep(1, 'skip');
-    }
-    if (stopped()) throw 'STOP';
-
-    // BƯỚC 3 — Quét trước nhân vật/bối cảnh (bỏ qua nếu đã quét)
-    if (!(state.charactersV.length || state.backgroundsV.length)){
-      _autoSetStep(2, 'active');
-      clearCancel();
-      await doPrescan();
-      _autoSetStep(2, 'done');
-    } else {
       _autoSetStep(2, 'skip');
     }
     if (stopped()) throw 'STOP';
 
-    // BƯỚC 4 — Gán tài nguyên (bỏ qua nếu đã gán hoặc không có nhân vật/bối cảnh)
-    if (state.charactersV.length || state.backgroundsV.length){
-      const alreadyAssigned = state.scenes.some(s => s.character || s.background);
-      if (!alreadyAssigned){
-        _autoSetStep(3, 'active');
-        clearCancel();
-        await doAssign();
-        _autoSetStep(3, 'done');
-      } else {
-        _autoSetStep(3, 'skip');
-      }
+    // BƯỚC 4 — Quét trước nhân vật/bối cảnh (bỏ qua nếu đã quét)
+    if (!(state.charactersV.length || state.backgroundsV.length)){
+      _autoSetStep(3, 'active');
+      clearCancel();
+      await doPrescan();
+      _autoSetStep(3, 'done');
     } else {
       _autoSetStep(3, 'skip');
     }
     if (stopped()) throw 'STOP';
 
-    // BƯỚC 5 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
-    _autoSetStep(4, 'active');
+    // BƯỚC 5 — Gán tài nguyên (bỏ qua nếu đã gán hoặc không có nhân vật/bối cảnh)
+    if (state.charactersV.length || state.backgroundsV.length){
+      const alreadyAssigned = state.scenes.some(s => s.character || s.background);
+      if (!alreadyAssigned){
+        _autoSetStep(4, 'active');
+        clearCancel();
+        await doAssign();
+        _autoSetStep(4, 'done');
+      } else {
+        _autoSetStep(4, 'skip');
+      }
+    } else {
+      _autoSetStep(4, 'skip');
+    }
+    if (stopped()) throw 'STOP';
+
+    // BƯỚC 6 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
+    _autoSetStep(5, 'active');
     clearCancel();
     await doGenerateScenePrompts();
     const promptCount = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
-    if (promptCount === 0){ _autoSetStep(4, 'fail'); throw new Error('AI chưa tạo được prompt nào — thử giảm Batch xuống 2-3.'); }
-    _autoSetStep(4, 'done');
+    if (promptCount === 0){ _autoSetStep(5, 'fail'); throw new Error('AI chưa tạo được prompt nào — thử giảm Batch xuống 2-3.'); }
+    _autoSetStep(5, 'done');
     if (stopped()) throw 'STOP';  // user bấm Dừng trong lúc gen prompt
 
-    // BƯỚC 6 — Tự thêm ảnh B cho cảnh dài (autoMode = bỏ confirm)
-    _autoSetStep(5, 'active');
+    // BƯỚC 7 — Tự thêm ảnh B cho cảnh dài (autoMode = bỏ confirm)
+    _autoSetStep(6, 'active');
     clearCancel();
     await autoAddPromptBForLongScenes(true);
-    _autoSetStep(5, 'done');
+    _autoSetStep(6, 'done');
 
     // --- Tổng kết ---
     const secs = Math.round((Date.now() - t0) / 1000);
