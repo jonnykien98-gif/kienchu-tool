@@ -1670,15 +1670,22 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </div>
         <button class="btn sm primary" onclick="savePexelsKey()">💾 Lưu key</button>
       </div>
-      <div class="grid-2 mb-24" style="grid-template-columns:1fr auto;align-items:end">
+      <div class="grid-2 mb-12" style="grid-template-columns:1fr auto;align-items:end">
         <div>
           <label class="label">PIXABAY API KEY (miễn phí — tuỳ chọn)</label>
           <input type="password" id="pixabayKey" placeholder="Paste Pixabay API key... (pixabay.com/api/docs)">
         </div>
         <button class="btn sm primary" onclick="savePixabayKey()">💾 Lưu key</button>
       </div>
+      <div class="grid-2 mb-24" style="grid-template-columns:1fr auto;align-items:end">
+        <div>
+          <label class="label">UNSPLASH ACCESS KEY (miễn phí — chỉ ảnh, tuỳ chọn)</label>
+          <input type="password" id="unsplashKey" placeholder="Paste Unsplash Access Key... (unsplash.com/developers)">
+        </div>
+        <button class="btn sm primary" onclick="saveUnsplashKey()">💾 Lưu key</button>
+      </div>
 
-      <div class="actions mb-24">
+      <div class="actions mb-12">
         <button class="btn teal" onclick="loadScenesForSearch()">📥 Load cảnh từ Tool 02</button>
         <button class="btn primary" onclick="searchAllScenes()">🔍 Tìm tất cả</button>
         <select id="mediaType" style="padding:8px 12px;width:auto">
@@ -1688,6 +1695,16 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </select>
         <span style="font-size:12px;color:var(--text-muted)" id="searchProgress"></span>
         <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT5()" title="Xoá kết quả tìm media">🗑 Xoá hết</button>
+      </div>
+
+      <!-- Gom + xuất -->
+      <div class="actions mb-24" style="padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
+        <span style="font-size:12px;color:var(--text-muted);font-weight:600">📦 Gom &amp; xuất:</span>
+        <button class="btn ghost" onclick="autoPickAll()" title="Tự chọn ứng viên đầu tiên cho mọi cảnh đã tìm (cảnh chưa chọn)">✨ Tự chọn tất cả</button>
+        <button class="btn ghost" onclick="downloadAllPicks()" title="Tải về tất cả media đã chọn, đặt tên theo số cảnh (001, 002...)">⬇ Tải tất cả đã chọn</button>
+        <button class="btn ghost" onclick="exportMediaCSV()" title="Xuất bảng timing cảnh → file → giây (mở bằng Excel / nhập CapCut)">📊 Xuất CSV timing</button>
+        <button class="btn ghost" onclick="exportMediaSRT()" title="Xuất SRT theo timeline cảnh để khớp hình với giọng đọc">📑 Xuất SRT</button>
+        <span style="font-size:12px;color:var(--teal);font-weight:600;margin-left:auto" id="pickCount">Đã chọn 0/0</span>
       </div>
 
       <div class="status-bar" id="status5">Sẵn sàng. Paste Pexels API key rồi load cảnh từ Tool 02.</div>
@@ -3130,7 +3147,7 @@ async function saveCloudState(immediate = false){
       // Tách working data (script, scenes...) — chúng đã được sync vào profile.workData, không cần ở root state
       const { styleRefImages, characterImages, sceneImages, userTier,
               script, scenes, scenePrompts, charactersV, backgroundsV,
-              assetCharPrompts, assetBgPrompts, styleRefPrompt, veoPrompts, pexelsResults,
+              assetCharPrompts, assetBgPrompts, styleRefPrompt, veoPrompts, pexelsResults, mediaPicks,
               ...lightState } = state;
       // Lưu state nhẹ lên Firestore — workData nằm trong profiles[i].workData
       await window.firebaseSaveDoc(uid, {
@@ -3273,6 +3290,7 @@ function createEmptyWorkData(){
     styleRefPrompt: '',
     veoPrompts: {},
     pexelsResults: {},
+    mediaPicks: {},
     descMode: 'tag',
     charBible: {},
     bgBible: {},
@@ -3297,6 +3315,7 @@ function syncStateToCurrentProfile(){
   p.workData.styleRefPrompt = state.styleRefPrompt || '';
   p.workData.veoPrompts = state.veoPrompts || {};
   p.workData.pexelsResults = state.pexelsResults || {};
+  p.workData.mediaPicks = state.mediaPicks || {};
   p.workData.descMode = state.descMode || 'tag';
   p.workData.charBible = state.charBible || {};
   p.workData.bgBible = state.bgBible || {};
@@ -3318,6 +3337,7 @@ function loadStateFromProfile(p){
   state.styleRefPrompt = wd.styleRefPrompt || '';
   state.veoPrompts = wd.veoPrompts || {};
   state.pexelsResults = wd.pexelsResults || {};
+  state.mediaPicks = wd.mediaPicks || {};
   state.descMode = wd.descMode || 'tag';
   state.charBible = wd.charBible || {};
   state.bgBible = wd.bgBible || {};
@@ -3374,7 +3394,8 @@ function migrateProfiles(){
         assetBgPrompts: state.assetBgPrompts || {},
         styleRefPrompt: state.styleRefPrompt || '',
         veoPrompts: state.veoPrompts || {},
-        pexelsResults: state.pexelsResults || {}
+        pexelsResults: state.pexelsResults || {},
+        mediaPicks: state.mediaPicks || {}
       };
       needSave = true;
       console.log('✓ Migrated global state → current profile workData');
@@ -6900,9 +6921,13 @@ function getPexelsKey(){
   return document.getElementById('pexelsKey').value.trim();
 }
 
+// Cache kết quả tìm theo phiên (không lưu lên Firestore — chỉ picks mới được lưu)
+let _t5Results = {};
+
 function loadScenesForSearch(){
   if (state.scenes.length === 0) return setStatus5('Tool 02 chưa có cảnh. Chia cảnh trước.', 'error');
   renderSceneSearchList();
+  updatePickCount();
   setStatus5(`✓ Đã load ${state.scenes.length} cảnh từ Tool 02.`, 'ok');
 }
 
@@ -6921,6 +6946,12 @@ function renderSceneSearchList(){
       </div>
     </div>
   `).join('');
+  // Khôi phục kết quả đã tìm trong phiên + lựa chọn đã lưu
+  for (const s of state.scenes) {
+    const cached = _t5Results[s.id];
+    if (cached) renderSceneResults(s.id, cached.keywords, cached);
+    else if (state.mediaPicks?.[s.id]) renderSceneResults(s.id, '', { photos: [], videos: [] });
+  }
 }
 
 async function generateSearchKeywords(voText){
@@ -6949,6 +6980,46 @@ function loadPixabayKey(){
 function getPixabayKey(){
   const el = document.getElementById('pixabayKey');
   return el ? el.value.trim() : '';
+}
+
+function saveUnsplashKey(){
+  const key = document.getElementById('unsplashKey').value.trim();
+  try { localStorage.setItem('unsplash-key', key); } catch (e) {}
+  setStatus5('✓ Đã lưu Unsplash Access Key.', 'ok');
+}
+function loadUnsplashKey(){
+  try {
+    const k = localStorage.getItem('unsplash-key');
+    if (k && document.getElementById('unsplashKey')) document.getElementById('unsplashKey').value = k;
+  } catch (e) {}
+}
+function getUnsplashKey(){
+  const el = document.getElementById('unsplashKey');
+  return el ? el.value.trim() : '';
+}
+
+// Unsplash — chỉ ảnh
+async function searchUnsplash(query, type = 'both'){
+  const key = getUnsplashKey();
+  const results = { photos: [], videos: [] };
+  if (!key || type === 'videos') return results;
+  try {
+    const r = await fetch(
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=4&orientation=landscape`,
+      { headers: { 'Authorization': 'Client-ID ' + key } }
+    );
+    if (r.ok) {
+      const d = await r.json();
+      results.photos = (d.results || []).map(h => ({
+        url: h.links?.html || h.urls?.regular,
+        width: h.width, height: h.height,
+        src: { small: h.urls?.small, large: h.urls?.regular, original: h.urls?.full },
+        _source: 'unsplash',
+        _downloadUrl: h.urls?.full || h.urls?.regular
+      }));
+    }
+  } catch (e) { console.warn('Unsplash photo failed:', e); }
+  return results;
 }
 
 async function searchPixabay(query, type = 'both'){
@@ -7029,14 +7100,15 @@ async function searchPexels(query, type = 'both'){
   return results;
 }
 
-// Gộp kết quả từ cả 2 nguồn
+// Gộp kết quả từ cả 3 nguồn (Pexels + Pixabay + Unsplash)
 async function searchAllSources(query, type = 'both'){
-  const [pexels, pixabay] = await Promise.all([
+  const [pexels, pixabay, unsplash] = await Promise.all([
     searchPexels(query, type),
-    searchPixabay(query, type)
+    searchPixabay(query, type),
+    searchUnsplash(query, type)
   ]);
   return {
-    photos: [...(pexels.photos || []), ...(pixabay.photos || [])],
+    photos: [...(pexels.photos || []), ...(pixabay.photos || []), ...(unsplash.photos || [])],
     videos: [...(pexels.videos || []), ...(pixabay.videos || [])]
   };
 }
@@ -7044,7 +7116,7 @@ async function searchAllSources(query, type = 'both'){
 async function searchForScene(sceneId){
   const scene = state.scenes.find(s => s.id === sceneId);
   if (!scene) return;
-  if (!getPexelsKey() && !getPixabayKey()) return setStatus5('Cần ít nhất 1 API key (Pexels hoặc Pixabay).', 'error');
+  if (!getPexelsKey() && !getPixabayKey() && !getUnsplashKey()) return setStatus5('Cần ít nhất 1 API key (Pexels / Pixabay / Unsplash).', 'error');
 
   const box = document.getElementById('media-results-' + sceneId);
   box.innerHTML = '<span class="spinner"></span> <span style="color:var(--violet);font-size:11.5px">Đang tìm...</span>';
@@ -7053,6 +7125,7 @@ async function searchForScene(sceneId){
     const keywords = await generateSearchKeywords(scene.text);
     const type = document.getElementById('mediaType').value;
     const results = await searchAllSources(keywords, type);
+    _t5Results[sceneId] = { keywords, photos: results.photos || [], videos: results.videos || [] };
     renderSceneResults(sceneId, keywords, results);
   } catch (e) {
     box.innerHTML = '<span style="color:var(--red);font-size:11.5px">Lỗi: ' + escapeHtml(e.message) + '</span>';
@@ -7061,7 +7134,7 @@ async function searchForScene(sceneId){
 
 async function searchAllScenes(){
   if (state.scenes.length === 0) return setStatus5('Cần load cảnh trước.', 'error');
-  if (!getPexelsKey() && !getPixabayKey()) return setStatus5('Cần ít nhất 1 API key (Pexels hoặc Pixabay).', 'error');
+  if (!getPexelsKey() && !getPixabayKey() && !getUnsplashKey()) return setStatus5('Cần ít nhất 1 API key (Pexels / Pixabay / Unsplash).', 'error');
   setStatus5('Đang tìm media cho tất cả cảnh...', 'working');
   clearCancel();
 
@@ -7080,43 +7153,67 @@ async function searchAllScenes(){
   setStatus5(`✓ Đã tìm xong ${state.scenes.length} cảnh.`, 'ok');
 }
 
+function _srcBadge(s){
+  return s === 'pixabay' ? '🟢 Pixabay' : (s === 'unsplash' ? '🟣 Unsplash' : '🔵 Pexels');
+}
+
 function renderSceneResults(sceneId, keywords, results){
   // Số thứ tự cảnh để đặt tên file (001, 002...)
   const sceneIdx = state.scenes.findIndex(s => s.id === sceneId);
   const sceneNum = sceneIdx >= 0 ? sceneIdx + 1 : '';
   const box = document.getElementById('media-results-' + sceneId);
+  if (!box) return;
   const photos = results.photos || [];
   const videos = results.videos || [];
+  const pick = state.mediaPicks?.[sceneId];
+  const pickedUrl = pick?.downloadUrl || '';
+
+  let html = '';
+  // Tóm tắt lựa chọn hiện tại
+  if (pick) {
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:6px 10px;background:var(--accent-soft);border-radius:6px;font-size:11.5px">
+      <span style="color:var(--accent);font-weight:600">✓ Đã chọn:</span>
+      <span>${pick.kind === 'video' ? '🎬' : '📷'} ${_srcBadge(pick.source)}${pick.duration ? ' · ' + pick.duration + 's' : ''}</span>
+      <button class="btn ghost sm" style="margin-left:auto;padding:2px 8px;font-size:10px;color:var(--red);border-color:var(--red)" onclick="unpickMedia('${sceneId}')">✗ Bỏ chọn</button>
+    </div>`;
+  }
+
   if (!photos.length && !videos.length) {
-    box.innerHTML = `<span style="color:var(--text-dim);font-size:11.5px">Không tìm thấy kết quả cho "${escapeHtml(keywords)}"</span>`;
+    box.innerHTML = html + `<span style="color:var(--text-dim);font-size:11.5px">${keywords ? 'Không tìm thấy kết quả cho "' + escapeHtml(keywords) + '"' : 'Bấm Tìm để lấy ứng viên.'}</span>`;
     return;
   }
-  let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Từ khoá: <strong>${escapeHtml(keywords)}</strong> · ${photos.length} ảnh, ${videos.length} video</div>`;
+  html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Từ khoá: <strong>${escapeHtml(keywords)}</strong> · ${photos.length} ảnh, ${videos.length} video</div>`;
   html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
-  for (const p of photos) {
-    const src = p._source === 'pixabay' ? '🟢 Pixabay' : '🔵 Pexels';
+  photos.forEach((p, i) => {
     const dl = (p._downloadUrl || '').replace(/'/g, "\\'");
-    html += `<div style="width:150px;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+    const sel = pickedUrl && p._downloadUrl === pickedUrl;
+    html += `<div style="width:150px;border-radius:6px;overflow:hidden;border:2px solid ${sel ? 'var(--accent)' : 'var(--border)'}">
       <a href="${p.url}" target="_blank" style="display:block;text-decoration:none"><img src="${p.src.small}" style="width:100%;height:90px;object-fit:cover" loading="lazy"></a>
-      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center">
-        <span>📷 ${src}</span>
-        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','jpg','${sceneNum}')" title="Tải ảnh về (tên = số cảnh)">⬇</button>
+      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center;gap:4px">
+        <span>📷 ${_srcBadge(p._source)}</span>
+        <span style="display:flex;gap:4px">
+          <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:${sel ? 'var(--accent)' : 'var(--teal)'};color:${sel ? 'var(--accent)' : 'var(--teal)'}" onclick="pickMedia('${sceneId}','photos',${i})" title="Dùng ảnh này cho cảnh">${sel ? '✓' : 'Dùng'}</button>
+          <button class="btn ghost" style="padding:2px 6px;font-size:10px" onclick="downloadMedia('${dl}','jpg','${sceneNum}')" title="Tải ảnh về (tên = số cảnh)">⬇</button>
+        </span>
       </div>
     </div>`;
-  }
-  for (const v of videos) {
+  });
+  videos.forEach((v, j) => {
     const thumb = v.image || v.video_pictures?.[0]?.picture || '';
-    const src = v._source === 'pixabay' ? '🟢 Pixabay' : '🔵 Pexels';
     const dl = (v._downloadUrl || '').replace(/'/g, "\\'");
-    html += `<div style="width:150px;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+    const sel = pickedUrl && v._downloadUrl === pickedUrl;
+    html += `<div style="width:150px;border-radius:6px;overflow:hidden;border:2px solid ${sel ? 'var(--accent)' : 'var(--border)'}">
       <a href="${v.url}" target="_blank" style="display:block;text-decoration:none;position:relative"><img src="${thumb}" style="width:100%;height:90px;object-fit:cover" loading="lazy">
       <div style="position:absolute;top:45px;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.65);color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px">▶</div></a>
-      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center">
-        <span>🎬 ${v.duration}s ${src}</span>
-        <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:var(--teal);color:var(--teal)" onclick="downloadMedia('${dl}','mp4','${sceneNum}')" title="Tải video về (tên = số cảnh)">⬇</button>
+      <div style="padding:5px 8px;font-size:10px;color:var(--text-muted);background:var(--surface-2);display:flex;justify-content:space-between;align-items:center;gap:4px">
+        <span>🎬 ${v.duration}s ${_srcBadge(v._source)}</span>
+        <span style="display:flex;gap:4px">
+          <button class="btn ghost" style="padding:2px 6px;font-size:10px;border-color:${sel ? 'var(--accent)' : 'var(--teal)'};color:${sel ? 'var(--accent)' : 'var(--teal)'}" onclick="pickMedia('${sceneId}','videos',${j})" title="Dùng video này cho cảnh">${sel ? '✓' : 'Dùng'}</button>
+          <button class="btn ghost" style="padding:2px 6px;font-size:10px" onclick="downloadMedia('${dl}','mp4','${sceneNum}')" title="Tải video về (tên = số cảnh)">⬇</button>
+        </span>
       </div>
     </div>`;
-  }
+  });
   html += '</div>';
   box.innerHTML = html;
 }
@@ -7147,10 +7244,156 @@ async function downloadMedia(url, kind, sceneNum){
   }
 }
 
-// Load Pexels key on auth
+/* ---- Gom (chọn) + xuất ---- */
+function _mediaExt(url, kind){
+  let ext = (String(url || '').split('?')[0].match(/\.(jpg|jpeg|png|webp|mp4|mov|webm)$/i) || [])[1];
+  if (!ext) ext = (kind === 'video') ? 'mp4' : 'jpg';
+  return ext.toLowerCase();
+}
+
+function pickMedia(sceneId, listType, index){
+  const cached = _t5Results[sceneId];
+  if (!cached) return;
+  const arr = listType === 'videos' ? cached.videos : cached.photos;
+  const item = arr && arr[index];
+  if (!item) return;
+  const kind = listType === 'videos' ? 'video' : 'photo';
+  if (!state.mediaPicks) state.mediaPicks = {};
+  state.mediaPicks[sceneId] = {
+    kind,
+    source: item._source || 'pexels',
+    thumb: kind === 'video' ? (item.image || item.video_pictures?.[0]?.picture || '') : (item.src?.small || ''),
+    downloadUrl: item._downloadUrl || '',
+    pageUrl: item.url || '',
+    duration: kind === 'video' ? (item.duration || null) : null,
+    keywords: cached.keywords || ''
+  };
+  renderSceneResults(sceneId, cached.keywords, cached);
+  updatePickCount();
+  saveState(true);
+}
+
+function unpickMedia(sceneId){
+  if (state.mediaPicks) delete state.mediaPicks[sceneId];
+  const cached = _t5Results[sceneId];
+  if (cached) renderSceneResults(sceneId, cached.keywords, cached);
+  else { const b = document.getElementById('media-results-' + sceneId); if (b) b.innerHTML = '<span style="color:var(--text-dim);font-size:11.5px">Bấm Tìm hoặc Tìm tất cả</span>'; }
+  updatePickCount();
+  saveState(true);
+}
+
+function updatePickCount(){
+  const el = document.getElementById('pickCount');
+  if (!el) return;
+  const total = state.scenes.length;
+  const picked = state.scenes.filter(s => state.mediaPicks?.[s.id]?.downloadUrl).length;
+  el.textContent = `Đã chọn ${picked}/${total}`;
+}
+
+// Tự chọn ứng viên đầu tiên cho mọi cảnh đã tìm mà chưa chọn (ưu tiên video nếu có, không thì ảnh)
+function autoPickAll(){
+  if (state.scenes.length === 0) return setStatus5('Cần load cảnh trước.', 'error');
+  if (!state.mediaPicks) state.mediaPicks = {};
+  let n = 0, noResult = 0;
+  for (const s of state.scenes) {
+    if (state.mediaPicks[s.id]?.downloadUrl) continue;     // đã chọn → giữ
+    const cached = _t5Results[s.id];
+    if (!cached || (!cached.photos.length && !cached.videos.length)) { noResult++; continue; }
+    if (cached.videos.length) pickMedia(s.id, 'videos', 0);
+    else pickMedia(s.id, 'photos', 0);
+    n++;
+  }
+  const note = noResult ? ` (${noResult} cảnh chưa có kết quả — bấm "Tìm tất cả" trước)` : '';
+  setStatus5(`✨ Đã tự chọn ${n} cảnh.${note}`, n ? 'ok' : 'info');
+}
+
+// Tải về tất cả media đã chọn, đặt tên theo số cảnh (001, 002...)
+async function downloadAllPicks(){
+  const picks = state.scenes
+    .map((s, i) => ({ s, num: i + 1, pick: state.mediaPicks?.[s.id] }))
+    .filter(x => x.pick?.downloadUrl);
+  if (!picks.length) return setStatus5('Chưa chọn media cho cảnh nào. Bấm "Tự chọn tất cả" hoặc nút "Dùng" ở từng cảnh.', 'error');
+  setStatus5(`Đang tải ${picks.length} file đã chọn...`, 'working');
+  let ok = 0, fail = 0;
+  for (const { num, pick } of picks) {
+    try {
+      await downloadMedia(pick.downloadUrl, pick.kind, num);
+      ok++;
+    } catch (e) { fail++; }
+    await new Promise(r => setTimeout(r, 400));   // tránh trình duyệt chặn tải hàng loạt
+  }
+  setStatus5(`✓ Đã tải ${ok}/${picks.length} file đã chọn (đặt tên theo số cảnh).${fail ? ' ' + fail + ' file lỗi — thử tải tay từ nút ⬇.' : ''}`, 'ok');
+}
+
+function _downloadTextFile(filename, text, mime){
+  const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  const u = URL.createObjectURL(blob);
+  a.href = u; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(u);
+}
+
+function _srtTime(sec){
+  sec = Math.max(0, sec);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60), ms = Math.round((sec - Math.floor(sec)) * 1000);
+  const p = (n, l) => String(n).padStart(l, '0');
+  return `${p(h, 2)}:${p(m, 2)}:${p(s, 2)},${p(ms, 3)}`;
+}
+
+function _csvCell(v){
+  const str = String(v == null ? '' : v);
+  return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+}
+
+// Xuất bảng timing: số cảnh, file, nguồn, loại, giây bắt đầu/kết thúc, link, lời thoại
+function exportMediaCSV(){
+  if (state.scenes.length === 0) return setStatus5('Cần load cảnh trước.', 'error');
+  const rows = [['scene_num','scene_id','start_s','end_s','duration_s','type','source','file_name','download_url','page_url','keywords','vo_text']];
+  let t = 0, picked = 0;
+  state.scenes.forEach((s, i) => {
+    const dur = parseFloat(s.duration) || 0;
+    const start = t; const end = +(t + dur).toFixed(1); t = end;
+    const pk = state.mediaPicks?.[s.id];
+    if (pk?.downloadUrl) picked++;
+    const fileName = pk?.downloadUrl ? String(i + 1).padStart(3, '0') + '.' + _mediaExt(pk.downloadUrl, pk.kind) : '';
+    rows.push([
+      i + 1, s.id, start, end, dur,
+      pk?.kind || '', pk?.source || '', fileName,
+      pk?.downloadUrl || '', pk?.pageUrl || '', pk?.keywords || '',
+      (s.text || '').replace(/\s+/g, ' ').trim()
+    ]);
+  });
+  const csv = rows.map(r => r.map(_csvCell).join(',')).join('\r\n');
+  const p = getProfile();
+  const base = 'media-timing-' + ((p?.tenKenh || 'video').replace(/\W+/g, '-'));
+  _downloadTextFile(base + '.csv', '﻿' + csv, 'text/csv;charset=utf-8');
+  setStatus5(`✓ Đã xuất CSV timing (${state.scenes.length} cảnh, ${picked} đã chọn media).`, 'ok');
+}
+
+// Xuất SRT theo timeline cảnh — khớp hình/giọng đọc khi dựng ở CapCut
+function exportMediaSRT(){
+  if (state.scenes.length === 0) return setStatus5('Cần load cảnh trước.', 'error');
+  let t = 0; const cues = [];
+  state.scenes.forEach((s, i) => {
+    const dur = parseFloat(s.duration) || 0;
+    const start = t; const end = +(t + dur).toFixed(3); t = end;
+    const pk = state.mediaPicks?.[s.id];
+    const fileName = pk?.downloadUrl ? String(i + 1).padStart(3, '0') + '.' + _mediaExt(pk.downloadUrl, pk.kind) : '(chưa chọn media)';
+    const text = `[${String(i + 1).padStart(3, '0')}] ${fileName}\n${(s.text || '').replace(/\s+/g, ' ').trim()}`;
+    cues.push(`${i + 1}\n${_srtTime(start)} --> ${_srtTime(end)}\n${text}`);
+  });
+  const p = getProfile();
+  const base = 'media-timing-' + ((p?.tenKenh || 'video').replace(/\W+/g, '-'));
+  _downloadTextFile(base + '.srt', cues.join('\n\n') + '\n', 'application/x-subrip;charset=utf-8');
+  setStatus5(`✓ Đã xuất SRT timeline (${state.scenes.length} cảnh).`, 'ok');
+}
+
+// Load API keys on auth
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(loadPexelsKey, 200);
   setTimeout(loadPixabayKey, 200);
+  setTimeout(loadUnsplashKey, 200);
 });
 
 /* ============================================================
@@ -8072,13 +8315,16 @@ function clearAllT3(){
 }
 
 function clearAllT5(){
-  if (!confirm('Xoá HẾT kết quả tìm media của profile hiện tại?')) return;
+  if (!confirm('Xoá HẾT kết quả tìm media + lựa chọn của profile hiện tại?')) return;
   state.pexelsResults = {};
+  state.mediaPicks = {};
+  _t5Results = {};
   document.querySelectorAll('[id^="media-results-"]').forEach(el => el.innerHTML = '');
   const sp = document.getElementById('searchProgress'); if (sp) sp.textContent = '';
+  updatePickCount();
   syncStateToCurrentProfile();
   saveState(true);
-  setStatus5('✓ Đã xoá hết kết quả tìm media của profile hiện tại.', 'ok');
+  setStatus5('✓ Đã xoá hết kết quả tìm media + lựa chọn của profile hiện tại.', 'ok');
 }
 
 function clearAllT6(){
