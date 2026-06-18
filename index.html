@@ -4288,22 +4288,33 @@ CHỈ trả JSON, không giải thích.`;
     arr = JSON.parse(clean);
     if (!Array.isArray(arr) || !arr.length) throw new Error('parse rỗng');
 
-    let updated = 0;
+    // Thu kết quả hợp lệ, giữ thứ tự cảnh
+    const picks = [];
     arr.forEach(item => {
       const i = item.i | 0;
       if (i < 0 || i >= state.scenes.length) return;
-      const start = +item.start;
-      const end = +item.end;
-      if (isFinite(start) && isFinite(end) && end > start) {
-        state.scenes[i].duration = +(end - start).toFixed(1);
-        updated++;
-      }
+      const start = +item.start, end = +item.end;
+      if (isFinite(start) && isFinite(end) && end > start) picks.push({ i, start, end });
+    });
+    picks.sort((a, b) => a.i - b.i);
+
+    // Mốc kết thúc timeline ≈ hết audio = end lớn nhất trong SRT
+    const timelineEnd = picks.reduce((mx, p) => Math.max(mx, p.end), 0);
+
+    let updated = 0;
+    picks.forEach((p, k) => {
+      // LẤP khoảng lặng: ảnh hiện từ lúc câu của nó bắt đầu → tới khi câu sau bắt đầu (cảnh cuối → hết timeline)
+      const nextStart = (k < picks.length - 1) ? picks[k + 1].start : timelineEnd;
+      let dur = nextStart - p.start;
+      if (!(dur > 0.05)) dur = p.end - p.start;   // fallback nếu dữ liệu chồng/lỗi thứ tự
+      state.scenes[p.i].duration = +dur.toFixed(1);
+      updated++;
     });
 
     renderAllT2();
     saveState();
     const totalDur = state.scenes.reduce((sum, s) => sum + (s.duration || 0), 0);
-    setStatus2(`✓ Đã căn độ dài thật cho ${updated}/${state.scenes.length} cảnh theo SRT. Tổng: ${fmtDur(totalDur)}.`, 'ok');
+    setStatus2(`✓ Đã căn độ dài thật cho ${updated}/${state.scenes.length} cảnh theo SRT (đã lấp khoảng lặng). Tổng: ${fmtDur(totalDur)}.`, 'ok');
   } catch (e) {
     console.error(e);
     setStatus2('Lỗi căn độ dài: ' + e.message + '. Thử lại hoặc kiểm tra file SRT.', 'error');
@@ -4462,35 +4473,49 @@ CHỈ trả JSON. VD: [{"from":0,"to":1},{"from":2,"to":2},{"from":3,"to":4}]`;
   }
   if (!Array.isArray(groups) || !groups.length) return fallbackGroupByTime(cues, targetSec);
 
-  const scenes = [];
+  // Dựng các nhóm có start/end để lấp khoảng lặng sau đó
+  const ranges = [];
   for (const g of groups) {
     const from = Math.max(0, g.from | 0);
     const to = Math.min(cues.length - 1, g.to | 0);
     if (to < from) continue;
     const slice = cues.slice(from, to + 1);
     const text = slice.map(c => c.text).join(' ').replace(/\s+/g, ' ').trim();
-    const dur = +(cues[to].end - cues[from].start).toFixed(1);
-    if (text) scenes.push({ text, duration: dur > 0 ? dur : 1 });
+    if (text) ranges.push({ text, start: cues[from].start, end: cues[to].end });
   }
+  if (!ranges.length) return fallbackGroupByTime(cues, targetSec);
+  const timelineEnd = cues[cues.length - 1].end;
+  // Mỗi cảnh kéo dài tới khi cảnh sau bắt đầu (lấp khoảng lặng); cảnh cuối → hết timeline
+  const scenes = ranges.map((g, k) => {
+    const nextStart = (k < ranges.length - 1) ? ranges[k + 1].start : timelineEnd;
+    let dur = nextStart - g.start;
+    if (!(dur > 0.05)) dur = g.end - g.start;
+    return { text: g.text, duration: +(dur > 0 ? dur : 1).toFixed(1) };
+  });
   return scenes.length ? scenes : fallbackGroupByTime(cues, targetSec);
 }
 
 function fallbackGroupByTime(cues, targetSec){
-  const scenes = [];
+  if (!cues.length) return [];
+  // Gom thành các chunk, nhớ mốc start để lấp khoảng lặng
+  const chunks = [];
   let buf = [], startT = null;
   for (const c of cues) {
     if (startT == null) startT = c.start;
     buf.push(c.text);
     if (c.end - startT >= targetSec) {
-      scenes.push({ text: buf.join(' ').trim(), duration: +(c.end - startT).toFixed(1) });
+      chunks.push({ text: buf.join(' ').trim(), start: startT });
       buf = []; startT = null;
     }
   }
-  if (buf.length) {
-    const last = cues[cues.length - 1];
-    scenes.push({ text: buf.join(' ').trim(), duration: +(last.end - startT).toFixed(1) });
-  }
-  return scenes;
+  if (buf.length) chunks.push({ text: buf.join(' ').trim(), start: startT });
+  const timelineEnd = cues[cues.length - 1].end;
+  // Mỗi cảnh kéo tới khi cảnh sau bắt đầu; cảnh cuối → hết timeline
+  return chunks.map((ch, k) => {
+    const nextStart = (k < chunks.length - 1) ? chunks[k + 1].start : timelineEnd;
+    const dur = Math.max(0.1, nextStart - ch.start);
+    return { text: ch.text, duration: +dur.toFixed(1) };
+  });
 }
 
 async function doSplit(){
