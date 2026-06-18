@@ -4251,70 +4251,21 @@ async function applySRTTiming(input){
 
   setStatus2(`Đang căn độ dài ${state.scenes.length} cảnh theo SRT (${cues.length} block)...`, 'working');
 
-  // Tạo timeline SRT có timestamp
-  const srtTimeline = cues.map((c, i) =>
-    `[${i}] ${c.start.toFixed(1)}-${c.end.toFixed(1)}s: ${c.text}`
-  ).join('\n');
-
-  // Danh sách cảnh hiện tại
-  const sceneList = state.scenes.map((s, i) =>
-    `[${i}] ${s.text}`
-  ).join('\n');
-
-  const prompt = `Tôi có DANH SÁCH CẢNH (mỗi cảnh 1 câu) và file SRT (timing thật từ giọng đọc, chữ có thể hơi khác do nhận diện giọng nói).
-
-NHIỆM VỤ: Với MỖI cảnh, tìm đoạn tương ứng trong SRT timeline và tính ĐỘ DÀI THẬT (giây) mà câu đó được đọc.
-
-QUY TẮC:
-- Khớp theo NỘI DUNG (nghĩa giống nhau), không cần khớp từng chữ
-- start = thời điểm bắt đầu đọc câu đó trong SRT; end = thời điểm kết thúc
-- Cảnh nối tiếp nhau: end của cảnh trước ≈ start của cảnh sau
-- Nếu 1 cảnh khớp nhiều block SRT → lấy start của block đầu, end của block cuối
-- Giữ ĐÚNG thứ tự và số lượng cảnh (mỗi cảnh đầu vào = 1 kết quả ra)
-
-DANH SÁCH CẢNH:
-${sceneList}
-
-SRT TIMELINE:
-${srtTimeline}
-
-Trả về JSON array, mỗi phần tử ứng với 1 cảnh theo thứ tự: {"i": index_cảnh, "start": số_giây, "end": số_giây}
-CHỈ trả JSON, không giải thích.`;
-
   try {
-    const raw = await callClaude(prompt, 4000);
-    let arr;
-    const clean = raw.replace(/```json|```/g, '').trim();
-    arr = JSON.parse(clean);
-    if (!Array.isArray(arr) || !arr.length) throw new Error('parse rỗng');
-
-    // Thu kết quả hợp lệ, giữ thứ tự cảnh
-    const picks = [];
-    arr.forEach(item => {
-      const i = item.i | 0;
-      if (i < 0 || i >= state.scenes.length) return;
-      const start = +item.start, end = +item.end;
-      if (isFinite(start) && isFinite(end) && end > start) picks.push({ i, start, end });
-    });
-    picks.sort((a, b) => a.i - b.i);
-
-    // Mốc kết thúc timeline ≈ hết audio = end lớn nhất trong SRT
-    const timelineEnd = picks.reduce((mx, p) => Math.max(mx, p.end), 0);
+    // Căn cục bộ bằng 2 con trỏ theo từ + lấp khoảng lặng (không gọi AI — chính xác, tức thì, miễn phí)
+    const words = t8SrtToWords(cues);
+    if (!words.length) return setStatus2('❌ SRT không có nội dung text để căn.', 'error');
+    const results = t8AlignScenesToWords(state.scenes, words);
 
     let updated = 0;
-    picks.forEach((p, k) => {
-      // LẤP khoảng lặng: ảnh hiện từ lúc câu của nó bắt đầu → tới khi câu sau bắt đầu (cảnh cuối → hết timeline)
-      const nextStart = (k < picks.length - 1) ? picks[k + 1].start : timelineEnd;
-      let dur = nextStart - p.start;
-      if (!(dur > 0.05)) dur = p.end - p.start;   // fallback nếu dữ liệu chồng/lỗi thứ tự
-      state.scenes[p.i].duration = +dur.toFixed(1);
-      updated++;
+    results.forEach((r, i) => {
+      if (r.newDur != null && state.scenes[i]) { state.scenes[i].duration = r.newDur; updated++; }
     });
 
     renderAllT2();
     saveState();
     const totalDur = state.scenes.reduce((sum, s) => sum + (s.duration || 0), 0);
-    setStatus2(`✓ Đã căn độ dài thật cho ${updated}/${state.scenes.length} cảnh theo SRT (đã lấp khoảng lặng). Tổng: ${fmtDur(totalDur)}.`, 'ok');
+    setStatus2(`✓ Đã căn độ dài ${updated}/${state.scenes.length} cảnh theo SRT (căn theo từ + lấp khoảng lặng). Tổng: ${fmtDur(totalDur)}.`, 'ok');
   } catch (e) {
     console.error(e);
     setStatus2('Lỗi căn độ dài: ' + e.message + '. Thử lại hoặc kiểm tra file SRT.', 'error');
@@ -8533,23 +8484,45 @@ function t8UpdateInfo(){
 }
 
 // Greedy sequential alignment: map scenes vào word timeline
+// Căn cảnh ↔ word-timeline bằng 2 con trỏ có RESYNC (bám theo nội dung, không trôi theo số từ),
+// rồi tính duration kiểu LẤP KHOẢNG LẶNG: mỗi cảnh kéo từ lúc câu của nó bắt đầu → tới khi câu sau bắt đầu;
+// cảnh cuối kéo tới hết timeline. Nhờ vậy tổng khớp đúng audio, không lệch dồn.
 function t8AlignScenesToWords(scenes, words){
-  let cursor = 0;
-  const results = [];
+  const norm = w => String(w || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const N = words.length;
+  const timelineEnd = N ? words[N - 1].end : 0;
+
+  // 1) Tìm START (index trong words) của mỗi cảnh — bỏ qua từ thừa trong VO/SRT để tự bám lại
+  const startIdx = [];
+  let j = 0;
   for (const scene of scenes) {
-    const sceneWords = (scene.text || '').trim().split(/\s+/).filter(Boolean);
-    const wc = sceneWords.length || 1;
-    if (cursor >= words.length) {
-      results.push({ id: scene.id, text: scene.text, oldDur: scene.duration || 0, newStart: null, newEnd: null, newDur: null });
+    const sw = (scene.text || '').trim().split(/\s+/).map(norm).filter(Boolean);
+    if (j >= N || !sw.length) { startIdx.push(j < N ? j : null); continue; }
+    startIdx.push(j);
+    for (const w of sw) {
+      if (j >= N) break;
+      if (norm(words[j].word) === w) { j++; continue; }
+      let found = -1;
+      for (let d = 1; d <= 5; d++) { if (j + d < N && norm(words[j + d].word) === w) { found = j + d; break; } }
+      if (found >= 0) j = found + 1;   // bỏ qua từ thừa trong SRT
+      // else: từ này là từ thừa trong VO (SRT không có) → bỏ qua, giữ nguyên j
+    }
+  }
+  const startSec = startIdx.map(idx => (idx == null ? null : words[idx].start));
+
+  // 2) Gap-fill: duration = start cảnh kế tiếp − start cảnh này (cảnh cuối → hết timeline)
+  const results = [];
+  for (let i = 0; i < scenes.length; i++) {
+    const s = scenes[i];
+    if (startSec[i] == null) {
+      results.push({ id: s.id, text: s.text, oldDur: s.duration || 0, newStart: null, newEnd: null, newDur: null });
       continue;
     }
-    const startIdx = cursor;
-    const endIdx = Math.min(cursor + wc - 1, words.length - 1);
-    const start = words[startIdx].start;
-    const end = words[endIdx].end;
-    const newDur = Math.max(0.3, Math.round((end - start) * 10) / 10);
-    results.push({ id: scene.id, text: scene.text, oldDur: scene.duration || 0, newStart: start, newEnd: end, newDur });
-    cursor = endIdx + 1;
+    let nextStart = timelineEnd;
+    for (let k = i + 1; k < scenes.length; k++) { if (startSec[k] != null) { nextStart = startSec[k]; break; } }
+    let dur = nextStart - startSec[i];
+    if (!(dur > 0.05)) dur = 0.3;   // fallback nếu 2 cảnh trùng mốc
+    results.push({ id: s.id, text: s.text, oldDur: s.duration || 0, newStart: startSec[i], newEnd: nextStart, newDur: Math.round(dur * 10) / 10 });
   }
   return results;
 }
