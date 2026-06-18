@@ -1094,7 +1094,12 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <div class="auto-row">
             <button class="auto-btn" id="autoRunBtn" onclick="runAutoTool2()">🚀 Auto: Chạy hết Tool 2</button>
             <button class="auto-stop" id="autoStopBtn" style="display:none" onclick="stopAutoTool2()">⏸ Dừng</button>
-            <span class="auto-hint">Một nút: Lọc → Chia cảnh → Tách cảnh dài → Quét → Gán → Prompt G-Labs → Ảnh B.<br>Dừng giữa chừng vẫn giữ tiến độ — bấm lại để chạy tiếp (không làm lại từ đầu).</span>
+            <label class="btn ghost sm" style="cursor:pointer;border-color:#0d9488;color:#0d9488;white-space:nowrap" title="Đính file SRT (timing thật từ giọng đọc) → Auto sẽ tự căn độ dài từng cảnh khớp audio. Để trống thì dùng độ dài ước lượng.">
+              ⏱ SRT căn timing
+              <input type="file" accept=".srt,.txt,.vtt" style="display:none" onchange="loadAutoSrt(this)">
+            </label>
+            <button class="btn ghost sm" id="autoSrtClear" style="display:none;color:var(--red);border-color:var(--red)" onclick="clearAutoSrt()" title="Bỏ file SRT đã đính">✗</button>
+            <span class="auto-hint">Một nút: Lọc → Chia cảnh → Tách cảnh dài → Quét → Gán → <strong>Căn timing (nếu có SRT)</strong> → Prompt G-Labs → Ảnh B.<br>Đính SRT để tự khớp độ dài audio. Dừng giữa chừng vẫn giữ tiến độ — bấm lại để chạy tiếp.<br><span id="autoSrtInfo" style="color:#0d9488;font-weight:600"></span></span>
           </div>
           <div id="autoBar"></div>
         </div>
@@ -5157,6 +5162,30 @@ function regenAllScenePrompts(){
 ============================================================ */
 let _autoRunning = false;
 let _autoStopFlag = false;
+let _autoSrtText = null;   // SRT đính cho Auto để tự căn độ dài
+
+function loadAutoSrt(input){
+  const f = input.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _autoSrtText = e.target.result || '';
+    const cues = (typeof parseSRT === 'function') ? parseSRT(_autoSrtText) : [];
+    const info = document.getElementById('autoSrtInfo');
+    if (info) info.textContent = cues.length
+      ? `✓ Đã đính SRT: ${f.name} (${cues.length} dòng) — Auto sẽ căn timing.`
+      : `⚠️ File SRT không đọc được mốc thời gian.`;
+    const clr = document.getElementById('autoSrtClear');
+    if (clr) clr.style.display = cues.length ? 'inline-flex' : 'none';
+  };
+  reader.readAsText(f);
+  input.value = '';
+}
+function clearAutoSrt(){
+  _autoSrtText = null;
+  const info = document.getElementById('autoSrtInfo'); if (info) info.textContent = '';
+  const clr = document.getElementById('autoSrtClear'); if (clr) clr.style.display = 'none';
+}
 
 const AUTO_STEPS = [
   { label: 'Lọc' },
@@ -5164,6 +5193,7 @@ const AUTO_STEPS = [
   { label: 'Tách cảnh dài' },
   { label: 'Quét trước' },
   { label: 'Gán tài nguyên' },
+  { label: 'Căn timing' },
   { label: 'Prompt G-Labs' },
   { label: 'Ảnh B (cảnh dài)' }
 ];
@@ -5268,20 +5298,40 @@ async function runAutoTool2(){
     }
     if (stopped()) throw 'STOP';
 
-    // BƯỚC 6 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
-    _autoSetStep(5, 'active');
+    // BƯỚC 6 — Căn độ dài theo SRT (nếu có đính SRT cho Auto) — căn theo từ + lấp khoảng lặng, không gọi AI
+    if (_autoSrtText && _autoSrtText.trim()){
+      _autoSetStep(5, 'active');
+      try {
+        const cues = parseSRT(_autoSrtText);
+        const words = cues.length ? t8SrtToWords(cues) : [];
+        if (words.length){
+          const results = t8AlignScenesToWords(state.scenes, words);
+          let upd = 0;
+          results.forEach((r, i) => { if (r.newDur != null && state.scenes[i]){ state.scenes[i].duration = r.newDur; upd++; } });
+          renderAllT2();
+          setStatus2(`✓ Đã căn timing ${upd}/${state.scenes.length} cảnh theo SRT.`, 'working');
+        }
+        _autoSetStep(5, 'done');
+      } catch(e){ console.warn('Auto SRT timing lỗi:', e); _autoSetStep(5, 'fail'); }
+    } else {
+      _autoSetStep(5, 'skip');
+    }
+    if (stopped()) throw 'STOP';
+
+    // BƯỚC 7 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
+    _autoSetStep(6, 'active');
     clearCancel();
     await doGenerateScenePrompts();
     const promptCount = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
-    if (promptCount === 0){ _autoSetStep(5, 'fail'); throw new Error('AI chưa tạo được prompt nào — thử giảm Batch xuống 2-3.'); }
-    _autoSetStep(5, 'done');
+    if (promptCount === 0){ _autoSetStep(6, 'fail'); throw new Error('AI chưa tạo được prompt nào — thử giảm Batch xuống 2-3.'); }
+    _autoSetStep(6, 'done');
     if (stopped()) throw 'STOP';  // user bấm Dừng trong lúc gen prompt
 
-    // BƯỚC 7 — Tự thêm ảnh B cho cảnh dài (autoMode = bỏ confirm)
-    _autoSetStep(6, 'active');
+    // BƯỚC 8 — Tự thêm ảnh B cho cảnh dài (autoMode = bỏ confirm)
+    _autoSetStep(7, 'active');
     clearCancel();
     await autoAddPromptBForLongScenes(true);
-    _autoSetStep(6, 'done');
+    _autoSetStep(7, 'done');
 
     // --- Tổng kết ---
     const secs = Math.round((Date.now() - t0) / 1000);
