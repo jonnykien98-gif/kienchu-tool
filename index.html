@@ -9343,47 +9343,94 @@ async function t8WhisperAlign(){
   notifyDone('✓ Căn timing xong!', `${matched} cảnh đã khớp audio.`);
 }
 
-async function t8TranscribeAPI(prov, file){
+// Gửi 1 BLOB audio (1 đoạn) lên Whisper → trả [{word,start,end}]
+async function _t8TranscribeBlob(prov, blob, filename){
   const cfg = T8_PROVIDERS[prov];
   const key = t8GetKey(prov) || document.getElementById('t8ApiKey').value.trim();
   if (!key) throw new Error(`Chưa có ${cfg.name} key. Nhập + Lưu key trước.`);
   const lang = document.getElementById('t8Language')?.value ?? 'en';
   const model = t8PickModel(prov, lang);
-  setStatus8(`Đang gửi audio lên ${cfg.name} (${model})...`, 'working');
   const form = new FormData();
-  form.append('file', file);
+  form.append('file', blob, filename || 'audio.wav');
   form.append('model', model);
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'word');
-  if (lang) form.append('language', lang);  // Set ngôn ngữ → nhanh + chính xác hơn
-  const r = await fetch(cfg.url, {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key },
-    body: form
-  });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error(`${cfg.name} HTTP ${r.status}: ${txt.slice(0, 200)}`);
-  }
+  if (lang) form.append('language', lang);
+  const r = await fetch(cfg.url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + key }, body: form });
+  if (!r.ok) { const txt = await r.text(); throw new Error(`${cfg.name} HTTP ${r.status}: ${txt.slice(0, 200)}`); }
   const data = await r.json();
-  // verbose_json có data.words = [{word, start, end}]
-  if (data.words && data.words.length) {
-    return data.words.map(w => ({ word: w.word, start: w.start, end: w.end }));
-  }
-  // Fallback: segments → ước lượng word time đều trong segment
+  if (data.words && data.words.length) return data.words.map(w => ({ word: w.word, start: w.start, end: w.end }));
   if (data.segments && data.segments.length) {
     const words = [];
     for (const seg of data.segments) {
-      const segWords = (seg.text || '').trim().split(/\s+/).filter(Boolean);
-      const segDur = seg.end - seg.start;
-      const perWord = segDur / (segWords.length || 1);
-      segWords.forEach((w, i) => {
-        words.push({ word: w, start: seg.start + i * perWord, end: seg.start + (i + 1) * perWord });
-      });
+      const sw = (seg.text || '').trim().split(/\s+/).filter(Boolean);
+      const per = (seg.end - seg.start) / (sw.length || 1);
+      sw.forEach((w, i) => words.push({ word: w, start: seg.start + i * per, end: seg.start + (i + 1) * per }));
     }
     return words;
   }
   throw new Error('Không có word/segment timestamps trong response.');
+}
+
+// Giải mã audio bất kỳ → 16kHz mono Float32 (Whisper chỉ cần 16kHz mono → nén nhỏ, không mất chính xác)
+async function _decodeToMono16k(file){
+  const buf = await file.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  let decoded;
+  try { decoded = await ac.decodeAudioData(buf.slice(0)); } finally { try { ac.close(); } catch (_) {} }
+  const RATE = 16000;
+  const Off = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const off = new Off(1, Math.ceil(decoded.duration * RATE), RATE);
+  const src = off.createBufferSource();
+  src.buffer = decoded;
+  src.connect(off.destination);
+  src.start();
+  const rendered = await off.startRendering();
+  return rendered.getChannelData(0);   // Float32Array @16kHz mono
+}
+
+// PCM Float32 → WAV blob 16-bit mono
+function _pcmToWav(float32, rate){
+  const len = float32.length;
+  const ab = new ArrayBuffer(44 + len * 2);
+  const v = new DataView(ab);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); v.setUint32(4, 36 + len * 2, true); ws(8, 'WAVE'); ws(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, 'data'); v.setUint32(40, len * 2, true);
+  let o = 44;
+  for (let i = 0; i < len; i++) { let s = Math.max(-1, Math.min(1, float32[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); o += 2; }
+  return new Blob([ab], { type: 'audio/wav' });
+}
+
+// Transcribe audio (mọi kích thước): nén 16kHz mono → cắt đoạn ≤~19MB → transcribe từng đoạn → cộng offset ghép timestamp
+async function t8TranscribeAPI(prov, file){
+  const cfg = T8_PROVIDERS[prov];
+  let mono;
+  try {
+    setStatus8('Đang nén audio (16kHz mono) để vượt giới hạn 25MB...', 'working');
+    mono = await _decodeToMono16k(file);
+  } catch (e) {
+    // Không decode được (format lạ) → gửi thẳng nếu nhỏ, else báo nén
+    if (file.size <= 24 * 1024 * 1024) { setStatus8(`Đang gửi audio lên ${cfg.name}...`, 'working'); return _t8TranscribeBlob(prov, file, file.name); }
+    throw new Error('File >24MB và trình duyệt không giải mã được để nén. Hãy xuất lại mp3 64kbps mono rồi thử.');
+  }
+  const RATE = 16000, CHUNK_SEC = 600;        // 10 phút/đoạn ≈ 19MB WAV (an toàn < 25MB)
+  const chunkSamples = CHUNK_SEC * RATE;
+  const nChunks = Math.ceil(mono.length / chunkSamples);
+  const words = [];
+  for (let ci = 0; ci < nChunks; ci++) {
+    const slice = mono.subarray(ci * chunkSamples, Math.min((ci + 1) * chunkSamples, mono.length));
+    const blob = _pcmToWav(slice, RATE);
+    if (nChunks > 1) setStatus8(`Transcribe ${cfg.name}: đoạn ${ci + 1}/${nChunks} (${Math.round(blob.size / 1048576)}MB)...`, 'working');
+    else setStatus8(`Đang gửi audio lên ${cfg.name} (${Math.round(blob.size / 1048576)}MB)...`, 'working');
+    const w = await _t8TranscribeBlob(prov, blob, `chunk${ci}.wav`);
+    const offset = ci * CHUNK_SEC;
+    w.forEach(x => words.push({ word: x.word, start: (x.start || 0) + offset, end: (x.end || 0) + offset }));
+  }
+  return words;
 }
 
 // Local Whisper qua transformers.js (best-effort)
