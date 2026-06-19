@@ -4252,14 +4252,9 @@ async function splitScenesSmart(text, min, max){
   }
   if (cur) batches.push(cur);
   clearCancel();
-  for (let bi = 0; bi < batches.length; bi++) {
-    if (state.cancelRequested) {
-      clearCancel();
-      setStatus2(`⏸ Đã dừng. Đã chia được ${all.length} cảnh.`, 'info');
-      return all;
-    }
-    setStatus2(`AI đang chia cảnh... (phần ${bi + 1}/${batches.length})`, 'working');
-    const prompt = `Bạn là biên tập video. Chia đoạn kịch bản sau thành các cảnh cho sản xuất video ảnh.
+  const lanes = _concurrency();
+
+  const buildPrompt = (batchText) => `Bạn là biên tập video. Chia đoạn kịch bản sau thành các cảnh cho sản xuất video ảnh.
 
 QUY TẮC QUAN TRỌNG NHẤT — KHÔNG ĐƯỢC VI PHẠM:
 - ĐƠN VỊ NHỎ NHẤT LÀ 1 CÂU HOÀN CHỈNH (kết thúc bằng . ! ? …).
@@ -4285,34 +4280,46 @@ KHÔNG dùng JSON, KHÔNG ngoặc kép quanh cảnh, KHÔNG đánh số. CHỈ i
 
 Đoạn kịch bản:
 """
-${batches[bi]}
+${batchText}
 """`;
-    let reply = await callClaude(prompt, 4000);
-    // Parse theo delimiter ===SCENE===
-    const parse = (r) => {
-      let ps = r.split(/===SCENE===/i).map(s => s.trim()).filter(Boolean);
-      if (ps.length && ps[0].length < 80 && !/[.!?…]$/.test(ps[0])) ps = ps.slice(1); // bỏ preamble
-      return ps;
-    };
-    // Hợp lệ khi: model CÓ dùng delimiter + tổng độ dài xấp xỉ kịch bản gốc (chống model trả suy luận/echo prompt)
-    const valid = (r, ps) => {
-      if (!ps.length || !/===SCENE===/i.test(r)) return false;
-      const ratio = ps.join(' ').length / Math.max(1, batches[bi].length);
-      return ratio >= 0.6 && ratio <= 1.6;
-    };
-    let parts = parse(reply);
-    if (!valid(reply, parts)) {
-      // Retry 1 lần (model đôi khi quên delimiter / chèn suy luận)
-      reply = await callClaude(prompt, 4000);
+  const parse = (r) => {
+    let ps = r.split(/===SCENE===/i).map(s => s.trim()).filter(Boolean);
+    if (ps.length && ps[0].length < 80 && !/[.!?…]$/.test(ps[0])) ps = ps.slice(1); // bỏ preamble
+    return ps;
+  };
+  // Hợp lệ khi: model CÓ dùng delimiter + tổng độ dài xấp xỉ kịch bản gốc (chống model trả suy luận/echo prompt)
+  const valid = (r, ps, batchText) => {
+    if (!ps.length || !/===SCENE===/i.test(r)) return false;
+    const ratio = ps.join(' ').length / Math.max(1, batchText.length);
+    return ratio >= 0.6 && ratio <= 1.6;
+  };
+
+  let doneCount = 0;
+  // SONG SONG theo số luồng — các đoạn độc lập, runConcurrent trả kết quả theo ĐÚNG thứ tự
+  const results = await runConcurrent(batches, async (batchText, bi) => {
+    if (state.cancelRequested) return [];
+    let parts;
+    try {
+      const prompt = buildPrompt(batchText);
+      let reply = await callClaude(prompt, 4000);
       parts = parse(reply);
+      if (!valid(reply, parts, batchText)) { reply = await callClaude(prompt, 4000); parts = parse(reply); }
+      if (!valid(reply, parts, batchText)) {
+        console.warn('Smart split đoạn ' + (bi + 1) + ' không hợp lệ → fallback regex');
+        parts = splitScenesFast(batchText, min, max);
+      }
+    } catch (e) {
+      console.warn('Smart split đoạn ' + (bi + 1) + ' lỗi → fallback regex:', e.message);
+      parts = splitScenesFast(batchText, min, max);
     }
-    if (!valid(reply, parts)) {
-      // AI trả RÁC (vd DeepSeek trả cả phần suy luận) → chia regex cho batch này, không vỡ cả run
-      console.warn('Smart split batch ' + (bi+1) + ' không hợp lệ → fallback regex');
-      parts = splitScenesFast(batches[bi], min, max);
-    }
-    all.push(...parts);
-  }
+    doneCount++;
+    setStatus2(`AI đang chia cảnh... ${doneCount}/${batches.length} phần${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
+    return parts;
+  }, lanes, () => state.cancelRequested);
+
+  // Ghép theo thứ tự đoạn
+  results.forEach(parts => { if (Array.isArray(parts)) all.push(...parts); });
+  if (state.cancelRequested) { clearCancel(); setStatus2(`⏸ Đã dừng. Đã chia được ${all.length} cảnh.`, 'info'); }
   return all;
 }
 
@@ -4325,14 +4332,16 @@ function calcDur(text){
 // Nếu không có mệnh đề → cắt theo từ. Trả về [text] nếu cảnh không cần tách.
 // realDur (tuỳ chọn): độ dài THẬT của cảnh (đã căn SRT) — dùng để quyết định tách chính xác thay vì ước lượng theo chữ.
 function _splitTextByDuration(text, maxSec, realDur){
-  const totalDur = (realDur && realDur > 0) ? realDur : calcDur(text);
+  // Dùng GIÁ TRỊ LỚN HƠN giữa độ dài thật (SRT) và ước lượng theo chữ → cảnh text dài vẫn bị tách
+  // dù SRT căn sai (vd dồn về 0.3s). Cảnh đọc chậm thì realDur lớn cũng bắt được.
+  const totalDur = Math.max((realDur && realDur > 0) ? realDur : 0, calcDur(text));
   if (totalDur <= maxSec) return [text];
   const N = Math.max(2, Math.ceil(totalDur / maxSec));
-  // Tách theo mệnh đề (giữ nguyên dấu câu ở cuối mỗi mệnh đề)
+  // Tách tại ranh giới CÂU (. ! ? …) TRƯỚC, rồi tới mệnh đề (, ; : — –) → ưu tiên câu trọn vẹn
   let units = [], buf = '';
   for (let i = 0; i < text.length; i++) {
     buf += text[i];
-    if (/[,;:—–]/.test(text[i]) && text[i + 1] === ' ') { units.push(buf.trim()); buf = ''; i++; }
+    if (/[.!?…,;:—–]/.test(text[i]) && (text[i + 1] === ' ' || i === text.length - 1)) { units.push(buf.trim()); buf = ''; }
   }
   if (buf.trim()) units.push(buf.trim());
   units = units.filter(Boolean);
@@ -4924,22 +4933,15 @@ async function doAssign(){
   const bs = parseInt(document.getElementById('batchSize').value) || 5;
   setStatus2('AI đang gán nhân vật + bối cảnh...', 'working');
   clearCancel();
-  try {
-    for (let i = 0; i < state.scenes.length; i += bs) {
-      if (state.cancelRequested) {
-        clearCancel();
-        setStatus2(`⏸ Đã dừng tại ${i}/${state.scenes.length}. Kết quả được giữ lại.`, 'info');
-        saveState();
-        return;
-      }
-      const batch = state.scenes.slice(i, i + bs);
-      const prompt = `Gán nhân vật + bối cảnh + góc camera cho mỗi cảnh.
+  const charList = state.charactersV.map(c => '- ' + c).join('\n') || '(không có)';
+  const bgList   = state.backgroundsV.map(b => '- ' + b).join('\n') || '(không có)';
+  const buildAssignPrompt = (batch) => `Gán nhân vật + bối cảnh + góc camera cho mỗi cảnh.
 
 DANH SÁCH NHÂN VẬT có sẵn:
-${state.charactersV.map(c => '- ' + c).join('\n') || '(không có)'}
+${charList}
 
 DANH SÁCH BỐI CẢNH có sẵn:
-${state.backgroundsV.map(b => '- ' + b).join('\n') || '(không có)'}
+${bgList}
 
 Quy tắc:
 - character: chọn 1 từ danh sách hoặc để rỗng nếu cảnh không có người
@@ -4952,18 +4954,35 @@ Trả về CHỈ JSON array:
 
 CÁC CẢNH:
 ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
-      const reply = await callClaude(prompt, 2000);
-      for (const x of parseJSON(reply)) {
-        const sc = state.scenes.find(s => s.id === x.id);
-        if (sc) {
-          sc.character = x.character || '';
-          sc.background = x.background || '';
-          sc.camera = x.camera || 'medium';
-          sc.level = x.level || 'L1';
+  try {
+    const lanes = _concurrency();
+    const batches = [];
+    for (let i = 0; i < state.scenes.length; i += bs) batches.push(state.scenes.slice(i, i + bs));
+    let done = 0;
+    // SONG SONG theo số luồng — các batch độc lập (gán theo id)
+    await runConcurrent(batches, async (batch) => {
+      if (state.cancelRequested) return;
+      const reply = await callClaude(buildAssignPrompt(batch), 2000);
+      try {
+        for (const x of parseJSON(reply)) {
+          const sc = state.scenes.find(s => s.id === x.id);
+          if (sc) {
+            sc.character = x.character || '';
+            sc.background = x.background || '';
+            sc.camera = x.camera || 'medium';
+            sc.level = x.level || 'L1';
+          }
         }
-      }
+      } catch (e) { console.warn('Gán batch parse lỗi → bỏ qua:', e.message); }
+      done += batch.length;
       renderAllT2();
-      setStatus2(`Gán... ${Math.min(i + bs, state.scenes.length)}/${state.scenes.length}`, 'working');
+      setStatus2(`Gán... ${Math.min(done, state.scenes.length)}/${state.scenes.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
+    }, lanes, () => state.cancelRequested);
+    if (state.cancelRequested) {
+      clearCancel();
+      setStatus2('⏸ Đã dừng. Kết quả gán được giữ lại.', 'info');
+      saveState();
+      return;
     }
     setStatus2(`✓ Đã gán ${state.scenes.length} cảnh.`, 'ok');
     saveState();
@@ -5291,26 +5310,28 @@ async function autoAddPromptBForLongScenes(autoMode = false){
   if (!state.scenePrompts2) state.scenePrompts2 = {};
   clearCancel();
 
+  const lanes = _concurrency();
+  const batches = [];
+  for (let i = 0; i < targets.length; i += BATCH) batches.push(targets.slice(i, i + BATCH));
   let done = 0;
-  for (let i = 0; i < targets.length; i += BATCH) {
-    if (state.cancelRequested) { clearCancel(); break; }
-    const batch = targets.slice(i, i + BATCH);
-    setStatus2(`Đang tạo Prompt B: ${done + 1}-${Math.min(done + batch.length, targets.length)}/${targets.length}...`, 'working');
+  // SONG SONG theo số luồng — mỗi batch độc lập (gán Prompt B theo id)
+  await runConcurrent(batches, async (batch) => {
+    if (state.cancelRequested) return;
     try {
       await genBatchPromptB(batch, p);
       done += batch.length;
       renderPromptsV();
       saveState(true);
+      setStatus2(`Đang tạo Prompt B: ${Math.min(done, targets.length)}/${targets.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}...`, 'working');
     } catch (e) {
-      console.error(e);
-      setStatus2('Lỗi batch: ' + e.message + '. Đã lưu phần xong.', 'error');
-      break;
+      console.warn('Prompt B batch lỗi → bỏ qua:', e.message);
     }
-  }
+  }, lanes, () => state.cancelRequested);
 
   renderPromptsV();
   saveState(true);
-  setStatus2(`✓ Đã thêm Prompt B cho ${done}/${targets.length} cảnh dài hơn ${THRESHOLD}s (gọi AI ${Math.ceil(done / BATCH)} lần).`, 'ok');
+  if (state.cancelRequested) { clearCancel(); setStatus2(`⏸ Đã dừng. Đã thêm Prompt B cho ${done}/${targets.length} cảnh.`, 'info'); return; }
+  setStatus2(`✓ Đã thêm Prompt B cho ${done}/${targets.length} cảnh dài hơn ${THRESHOLD}s.`, 'ok');
 }
 
 // Tạo Prompt B cho NHIỀU cảnh trong 1 lần gọi API (tiết kiệm chi phí)
@@ -8953,13 +8974,19 @@ function t8AlignScenesToWords(scenes, words){
     const sw = (scene.text || '').trim().split(/\s+/).map(norm).filter(Boolean);
     if (j >= N || !sw.length) { startIdx.push(j < N ? j : null); continue; }
     startIdx.push(j);
+    const jStart = j;
     for (const w of sw) {
       if (j >= N) break;
       if (norm(words[j].word) === w) { j++; continue; }
       let found = -1;
-      for (let d = 1; d <= 5; d++) { if (j + d < N && norm(words[j + d].word) === w) { found = j + d; break; } }
+      for (let d = 1; d <= 7; d++) { if (j + d < N && norm(words[j + d].word) === w) { found = j + d; break; } }
       if (found >= 0) j = found + 1;   // bỏ qua từ thừa trong SRT
       // else: từ này là từ thừa trong VO (SRT không có) → bỏ qua, giữ nguyên j
+    }
+    // 🛡 CHỐNG KẸT: cảnh hầu như không khớp được (tên riêng/số lạ) → con trỏ không nhích → các cảnh sau dồn về 1 mốc (0.3s).
+    // Nếu nhích quá ít so với số từ của cảnh → đẩy j theo ~số từ cảnh để tiến đều; cảnh sau khớp được sẽ tự bám lại.
+    if (sw.length >= 3 && (j - jStart) < sw.length * 0.4) {
+      j = Math.min(N, jStart + Math.round(sw.length * 0.9));
     }
   }
   const startSec = startIdx.map(idx => (idx == null ? null : words[idx].start));
