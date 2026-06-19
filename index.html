@@ -5142,45 +5142,71 @@ async function doAssign(){
   clearCancel();
   const charList = state.charactersV.map(c => '- ' + c).join('\n') || '(không có)';
   const bgList   = state.backgroundsV.map(b => '- ' + b).join('\n') || '(không có)';
-  const buildAssignPrompt = (batch) => `Gán nhân vật + bối cảnh + góc camera cho mỗi cảnh.
+  const CAM = ['wide', 'medium', 'close', 'over-shoulder', 'pov'];
+  // Chỉ nhận tên KHỚP danh sách (khớp đúng, hoặc gần đúng kiểu chứa nhau) — chống AI bịa tên
+  const matchInList = (name, list) => {
+    const n = String(name || '').toLowerCase().trim();
+    if (!n) return '';
+    const exact = list.find(x => x.toLowerCase() === n);
+    if (exact) return exact;
+    return list.find(x => { const lx = x.toLowerCase(); return lx.includes(n) || n.includes(lx); }) || '';
+  };
+  const buildAssignPrompt = (batch) => `Gán nhân vật + bối cảnh + góc camera + cấp cho mỗi cảnh.
 
-DANH SÁCH NHÂN VẬT có sẵn:
+DANH SÁCH NHÂN VẬT (chỉ được chọn ĐÚNG 1 tên từ đây, hoặc "" nếu cảnh không có người):
 ${charList}
 
-DANH SÁCH BỐI CẢNH có sẵn:
+DANH SÁCH BỐI CẢNH (chỉ được chọn ĐÚNG 1 tên từ đây, hoặc "" nếu không rõ):
 ${bgList}
 
 Quy tắc:
-- character: chọn 1 từ danh sách hoặc để rỗng nếu cảnh không có người
-- background: chọn 1 từ danh sách hoặc để rỗng nếu không cần
-- camera: wide / medium / close / over-shoulder / pov
-- level: L1 (intro) / L2 (build) / L3 (climax) / L4 (resolution)
+- character / background: PHẢI là tên y hệt trong danh sách trên, hoặc "" — KHÔNG bịa tên mới.
+- camera: wide | medium | close | over-shoulder | pov
+- level: L1 | L2 | L3 | L4
 
-Trả về CHỈ JSON array:
-[{"id":"001","character":"name","background":"name","camera":"medium","level":"L1"}, ...]
+Trả về CHỈ 1 JSON object, key = id cảnh:
+{"001":{"character":"...","background":"...","camera":"medium","level":"L1"}, "002":{...}}
 
 CÁC CẢNH:
 ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
+
+  // Chuẩn hoá kết quả về dạng { id: {character,background,camera,level} } dù AI trả object hay array
+  const normalize = (parsed) => {
+    const o = {};
+    if (Array.isArray(parsed)) { for (const x of parsed) if (x && x.id) o[String(x.id).padStart(3, '0')] = x; }
+    else if (parsed && typeof parsed === 'object') { for (const [k, v] of Object.entries(parsed)) o[String(k).padStart(3, '0')] = v || {}; }
+    return o;
+  };
+
   try {
     const lanes = _concurrency();
     const batches = [];
     for (let i = 0; i < state.scenes.length; i += bs) batches.push(state.scenes.slice(i, i + bs));
-    let done = 0;
-    // SONG SONG theo số luồng — các batch độc lập (gán theo id)
+    let done = 0, assigned = 0;
     await runConcurrent(batches, async (batch) => {
       if (state.cancelRequested) return;
-      const reply = await callClaude(buildAssignPrompt(batch), 2000);
-      try {
-        for (const x of parseJSON(reply)) {
-          const sc = state.scenes.find(s => s.id === x.id);
-          if (sc) {
-            sc.character = x.character || '';
-            sc.background = x.background || '';
-            sc.camera = x.camera || 'medium';
-            sc.level = x.level || 'L1';
-          }
+      const batchIds = new Set(batch.map(s => s.id));
+      // CHECK + RETRY: thử tối đa 2 lần, ép JSON mode; chỉ chấp nhận khi parse ra object/array hợp lệ
+      let obj = null;
+      for (let attempt = 0; attempt < 2 && !obj; attempt++) {
+        try {
+          const reply = await callLLM(buildAssignPrompt(batch), { maxTokens: 1500, json: true });
+          const got = normalize(parseJSON(reply));
+          if (Object.keys(got).length) obj = got;
+        } catch (e) { if (attempt === 1) console.warn('Gán batch lỗi sau 2 lần:', e.message); }
+      }
+      if (obj) {
+        for (const [id, x] of Object.entries(obj)) {
+          if (!batchIds.has(id)) continue;            // chỉ ghi cho cảnh thuộc batch này
+          const sc = state.scenes.find(s => s.id === id);
+          if (!sc) continue;
+          sc.character = matchInList(x.character, state.charactersV);   // chỉ nhận tên có thật
+          sc.background = matchInList(x.background, state.backgroundsV);
+          sc.camera = CAM.includes(x.camera) ? x.camera : (sc.camera || 'medium');
+          sc.level = /^L[1-4]$/.test(x.level) ? x.level : (sc.level || 'L1');
+          assigned++;
         }
-      } catch (e) { console.warn('Gán batch parse lỗi → bỏ qua:', e.message); }
+      }
       done += batch.length;
       renderAllT2();
       setStatus2(`Gán... ${Math.min(done, state.scenes.length)}/${state.scenes.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
@@ -5191,7 +5217,13 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
       saveState();
       return;
     }
-    setStatus2(`✓ Đã gán ${state.scenes.length} cảnh.`, 'ok');
+    // Cảnh báo nếu gán được quá ít (dấu hiệu model trả rác) → khuyên đổi provider
+    const withRes = state.scenes.filter(s => s.character || s.background).length;
+    if (withRes < state.scenes.length * 0.15) {
+      setStatus2(`⚠️ Chỉ gán được ${withRes}/${state.scenes.length} cảnh — model có thể trả JSON lỗi. Thử đổi provider sang Claude/OpenAI cho bước Gán, hoặc Quét Trước lại.`, 'info');
+    } else {
+      setStatus2(`✓ Đã gán xong (${withRes}/${state.scenes.length} cảnh có nhân vật/bối cảnh).`, 'ok');
+    }
     saveState();
   } catch (e) {
     console.error(e);
