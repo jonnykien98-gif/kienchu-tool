@@ -4578,6 +4578,35 @@ function _balanceScenesCore(minSec, maxSec){
     } else { out.push(cur); cur = { ...s }; cur.duration = sd; }
   }
   if (cur) out.push(cur);
+
+  // 3) HÚT cảnh quá NGẮN còn lẻ (kẹp giữa 2 cảnh to) vào hàng xóm NGẮN HƠN — cho nới max ~20% để khử hẳn cảnh lẻ
+  const SLACK = maxSec * 1.2;
+  let changed = true, guard = 0;
+  while (changed && guard++ < 500) {
+    changed = false;
+    for (let i = 0; i < out.length; i++) {
+      if (out.length <= 1) break;
+      const sd = parseFloat(out[i].duration) || 0;
+      if (sd >= minSec) continue;                       // không ngắn → bỏ qua
+      const cands = [];
+      if (i > 0) cands.push({ idx: i - 1, dur: parseFloat(out[i - 1].duration) || 0, side: 'prev' });
+      if (i < out.length - 1) cands.push({ idx: i + 1, dur: parseFloat(out[i + 1].duration) || 0, side: 'next' });
+      cands.sort((a, b) => a.dur - b.dur);              // ưu tiên hàng xóm NGẮN HƠN
+      const pick = cands.find(c => (c.dur + sd) <= SLACK);
+      if (!pick) continue;                              // cả 2 bên đều vượt slack → đành để lẻ
+      const tgt = out[pick.idx], cu = out[i];
+      tgt.text = pick.side === 'prev'
+        ? (tgt.text.trim() + ' ' + cu.text.trim()).trim()
+        : (cu.text.trim() + ' ' + tgt.text.trim()).trim();
+      tgt.duration = (parseFloat(tgt.duration) || 0) + sd;
+      if (!tgt.character && cu.character) tgt.character = cu.character;
+      if (!tgt.background && cu.background) tgt.background = cu.background;
+      out.splice(i, 1);
+      changed = true;
+      break;                                            // mảng đổi → quét lại
+    }
+  }
+
   // Cap theo tier
   const maxScenes = getMaxScenes();
   if (out.length > maxScenes) out.length = maxScenes;
