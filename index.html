@@ -3410,45 +3410,51 @@ const STYLE_PRESETS = {
   '': { label: '— Chọn preset style —' },
   cartoon2d: {
     label: '🎨 Cartoon 2D (flat vector)',
-    characterStyle: 'Flat 2D cartoon character, bold clean black outlines, simple expressive face with dot eyes and curved mouth, simple body proportions, flat color fills no gradients, era/role-appropriate clothing, hand-drawn vector illustration style, professional white background',
-    backgroundStyle: 'Flat 2D cartoon background illustration, clean black outlines, environment with depth and props, muted color palette with soft shading, flat color fills, hand-drawn vector style, NO characters NO people NO figures NO text NO words, 16:9 ratio',
-    sceneStyle: 'simple 2D flat animation style, thick black outlines, round expressive eyes, simple hand-drawn aesthetic, warm muted color palette, educational explainer video style, no photorealism, flat colors',
-    promptRules: 'No text overlay, no watermark, no photorealism, no gradients, no 3D shading, consistent character design across all scenes, thick black outlines on every element, flat color fills only, simple hand-drawn shapes'
+    characterStyle: 'Flat 2D cartoon character drawn as a clean hand-drawn vector illustration. Bold, clean black outlines of even constant weight on every shape. Simple expressive face: two solid dot eyes, a small simple nose, bold eyebrows as the main emotion driver, and one curved expressive mouth. Simplified, slightly stylized body proportions (head a touch large), clear silhouette. Flat solid color fills with NO gradients and only light minimal cel-shading for form. Era- and role-appropriate clothing built from simple bold shapes and flat colors. Full-body front view, clean plain off-white background, soft contact shadow under the feet. Identical character design, proportions and palette in every pose and camera angle.',
+    backgroundStyle: 'Flat 2D cartoon environment illustration matching the character style. Bold clean black outlines of even weight, clear foreground / midground / background depth, simple props and architecture drawn as flat bold shapes. Muted, harmonious color palette with soft flat cel-shading, NO gradients, hand-drawn vector aesthetic. Crisp clean linework, readable composition. NO characters NO people NO figures NO text NO words NO logos. 16:9 ratio.',
+    sceneStyle: 'simple flat 2D animation aesthetic, thick even black outlines, flat solid colors with light cel-shading, round expressive faces, warm muted harmonious palette, clean educational explainer-video look, NOT photorealistic, NOT 3D, NOT anime.',
+    promptRules: 'No text, no captions, no watermark, no logos, no photorealism, no 3D shading, no gradients, no realistic skin/fabric/material texture, no painterly brushwork. Keep thick even black outlines on every element, flat color fills only, the SAME character design, proportions and colors across all scenes. No distorted anatomy, no extra fingers.',
+    charIdentity: 'flat 2D cartoon, bold even black outline, dot eyes, flat solid colors, simple slightly-large-head proportions'
   },
   realistic: {
     label: '📷 Ảnh thực (photorealistic)',
-    characterStyle: 'Photorealistic person, natural realistic skin texture and pores, realistic hair, accurate human proportions and anatomy, detailed realistic clothing with fabric texture, soft natural studio lighting, sharp focus, professional photography, neutral grey backdrop',
-    backgroundStyle: 'Photorealistic environment, realistic materials and textures, accurate perspective and depth, natural or practical lighting with realistic shadows, cinematic photography, high detail, NO characters NO people NO text NO words, 16:9 ratio',
-    sceneStyle: 'photorealistic, cinematic photography, natural lighting, realistic textures, sharp focus, shallow depth of field',
-    promptRules: 'No text, no watermark, no cartoon or illustration look, no distorted anatomy, no extra fingers, consistent character appearance'
+    characterStyle: 'Photorealistic real human. Natural skin with realistic texture, pores and subtle imperfections; realistic hair rendered strand by strand; anatomically accurate human proportions and hands (five correct fingers). Age-, gender- and role-appropriate detailed clothing with real fabric texture, weight and natural folds. Soft natural three-point studio lighting, sharp focus, shot on a full-frame camera with a 50mm lens, shallow depth of field, professional portrait photography, neutral grey seamless backdrop. The SAME recognizable face, hairstyle and build kept consistent in every shot.',
+    backgroundStyle: 'Photorealistic real-world environment. Physically accurate materials and surface textures, correct perspective and depth, natural or practical lighting with realistic soft shadows, reflections and bounce light, cinematic color grading, high dynamic range, ultra-detailed, shot on a wide cinematic lens with subtle depth of field. NO characters NO people NO text NO words NO logos. 16:9 ratio.',
+    sceneStyle: 'photorealistic cinematic photography, natural realistic lighting, true-to-life materials and textures, sharp focus with shallow depth of field, subtle film grain, professional color grading, real-world look.',
+    promptRules: 'No text, no captions, no watermark, no logos. No cartoon / illustration / anime / 3D-render / painterly look. No plastic or waxy skin, no distorted anatomy, no extra or missing fingers, no warped faces or limbs. Keep the SAME person\'s facial identity, hairstyle and body consistent across all scenes.',
+    charIdentity: 'same real person, consistent photoreal face and hairstyle, natural skin with pores, realistic human proportions'
   },
   anime: {
     label: '🌸 Anime / Manga',
-    characterStyle: 'Anime style character, clean cel-shaded coloring, large expressive eyes with highlights, detailed stylized hair, slim anime proportions, sharp clean lineart, vibrant colors, detailed costume, white background',
-    backgroundStyle: 'Anime background art, detailed painterly environment, soft gradient skies, cel-shaded lighting, vibrant saturated colors, depth and atmosphere, Studio-anime quality, NO characters NO people NO text NO words, 16:9 ratio',
-    sceneStyle: 'anime style, cel-shaded, clean lineart, vibrant colors, expressive, detailed background art',
-    promptRules: 'No text, no watermark, consistent character design, no photorealism, maintain anime cel-shaded look'
+    characterStyle: 'Anime / manga character with clean crisp cel-shaded coloring (2–3 flat shadow tones, sharp shadow edges). Large expressive eyes with bright catchlights, detailed stylized hair built from distinct strand clusters, slim stylized anime proportions, sharp confident clean lineart of varied weight. Vibrant yet harmonious saturated colors, detailed era- and role-appropriate costume. Full-body front view, plain white background, soft shadow under the feet. Identical character design, hairstyle, eye shape and outfit in every pose.',
+    backgroundStyle: 'Anime background art: detailed semi-painterly environment, soft gradient skies, atmospheric depth with light rays and bloom, cel-shaded lighting with warm/cool contrast, vibrant saturated but harmonious colors, clean edges, studio-anime feature-film quality. NO characters NO people NO text NO words NO logos. 16:9 ratio.',
+    sceneStyle: 'anime cel-shaded aesthetic, clean confident lineart, vibrant saturated colors, expressive dramatic lighting, detailed semi-painterly backgrounds, Japanese animation feature-film look.',
+    promptRules: 'No text, no captions, no watermark, no logos. No photorealism, no 3D render, no Western-cartoon look. Keep the clean cel-shaded anime style and the SAME character design, hairstyle and outfit across all scenes. No distorted anatomy, no extra fingers.',
+    charIdentity: 'anime cel-shaded, large expressive eyes with catchlights, clean lineart, consistent stylized hair and outfit'
   },
   render3d: {
     label: '🧊 3D Render (Pixar-like)',
-    characterStyle: '3D rendered character, stylized Pixar-like proportions, smooth subsurface-scattering skin, soft rounded forms, detailed textured clothing, soft global illumination, subtle ambient occlusion, clean studio render, neutral background',
-    backgroundStyle: '3D rendered environment, stylized props with smooth surfaces, soft global illumination and ambient occlusion, depth of field, cinematic 3D render, NO characters NO people NO text NO words, 16:9 ratio',
-    sceneStyle: '3D render, stylized Pixar-like, soft global illumination, smooth surfaces, cinematic lighting, ambient occlusion',
-    promptRules: 'No text, no watermark, consistent character model, no 2D flat look, maintain 3D rendered style'
+    characterStyle: '3D rendered character in a stylized Pixar / DreamWorks animation look. Appealing stylized proportions (slightly large head, expressive eyes), smooth subsurface-scattering skin, soft rounded sculpted forms, detailed textured clothing with believable physically-based material shading. Lit with soft global illumination, subtle ambient occlusion in the creases and a gentle rim light. Clean studio render, neutral seamless background, gentle depth of field. The SAME character model, proportions and textures kept consistent across all shots.',
+    backgroundStyle: '3D rendered environment in a stylized animated-film look. Props and architecture with smooth clean surfaces and physically-based materials, soft global illumination, ambient occlusion, gentle depth of field, warm cinematic key light with cool fill. High render quality. NO characters NO people NO text NO words NO logos. 16:9 ratio.',
+    sceneStyle: 'stylized 3D render, Pixar-like, soft global illumination, smooth surfaces, physically-based materials, cinematic lighting with ambient occlusion and gentle depth of field.',
+    promptRules: 'No text, no captions, no watermark, no logos. No 2D flat look, no hand-drawn lineart, no photoreal human. Keep the SAME stylized 3D character model, proportions and textures consistent across all scenes. No distorted anatomy, no extra fingers.',
+    charIdentity: 'stylized 3D Pixar-like model, smooth subsurface skin, soft rounded forms, consistent character model'
   },
   watercolor: {
     label: '🖌 Màu nước (watercolor)',
-    characterStyle: 'Watercolor illustration character, soft hand-painted washes, visible paper texture, gentle bleeding edges, loose expressive brushwork, soft muted palette, delicate linework, white paper background',
-    backgroundStyle: 'Watercolor painted environment, soft washes and bleeding colors, visible paper grain, loose brushwork, gentle muted palette, airy atmosphere, NO characters NO people NO text NO words, 16:9 ratio',
-    sceneStyle: 'watercolor illustration, soft hand-painted washes, paper texture, loose brushwork, muted gentle palette',
-    promptRules: 'No text, no watermark, keep soft watercolor look, no hard digital edges, no photorealism'
+    characterStyle: 'Traditional watercolor-illustration character. Soft hand-painted washes layered wet-on-wet, visible cold-press paper texture, gentle bleeding pigment edges, loose expressive brushwork, delicate pencil-and-ink linework on top. Soft muted harmonious palette, airy light feel, white paper background. Recognizable, consistent character design, palette and silhouette kept the same in every pose.',
+    backgroundStyle: 'Watercolor painted environment: layered soft washes and blooming colors, visible cold-press paper grain, loose wet-on-wet brushwork, gentle muted harmonious palette, airy light atmosphere with soft feathered edges, delicate ink accents. NO characters NO people NO text NO words NO logos. 16:9 ratio.',
+    sceneStyle: 'traditional watercolor illustration, soft hand-painted layered washes, visible paper texture, loose expressive brushwork, gentle muted palette, soft bleeding edges, warm storybook feel.',
+    promptRules: 'No text, no captions, no watermark, no logos. Keep the soft watercolor look with visible paper texture and bleeding edges; no hard digital edges, no photorealism, no 3D, no heavy black outlines. Keep the SAME character design and palette across all scenes.',
+    charIdentity: 'watercolor washes, visible paper texture, loose brushwork, delicate ink lines, consistent muted palette'
   },
   lineart: {
     label: '✏️ Line art tối giản',
-    characterStyle: 'Minimalist line art character, clean single-weight black lines on white, minimal or no fill, simple geometric shapes, lots of negative space, modern editorial illustration, white background',
-    backgroundStyle: 'Minimalist line art environment, clean thin black lines on white, minimal detail, lots of negative space, modern editorial style, NO characters NO people NO text NO words, 16:9 ratio',
-    sceneStyle: 'minimalist line art, clean thin black lines, white background, lots of negative space, modern editorial',
-    promptRules: 'No text, no watermark, keep minimalist clean lines, avoid heavy shading, avoid clutter'
+    characterStyle: 'Minimalist line-art character: clean single-weight black lines on pure white, minimal or no fill (at most one subtle accent color), simple confident geometric shapes, strong clear silhouette, generous negative space, modern editorial illustration. Full-body front view, white background. The SAME simple design and line weight kept consistent in every pose.',
+    backgroundStyle: 'Minimalist line-art environment: clean thin even single-weight black lines on pure white, only the essential lines and props, generous negative space, modern editorial aesthetic, optional single subtle accent color. NO characters NO people NO text NO words NO logos. 16:9 ratio.',
+    sceneStyle: 'minimalist single-weight line art, clean thin black lines on white, lots of negative space, modern editorial look, minimal or no fill, at most one subtle accent color.',
+    promptRules: 'No text, no captions, no watermark, no logos. Keep a minimalist clean even line weight; no heavy shading, no gradients, no color fills beyond one subtle accent, avoid clutter. Keep the SAME simple design across all scenes.',
+    charIdentity: 'minimalist single-weight black line art on white, minimal fill, simple consistent geometric shapes'
   }
 };
 
@@ -3843,6 +3849,8 @@ function applyStylePreset(key){
   if (bs) bs.value = p.backgroundStyle || '';
   if (ss) ss.value = p.sceneStyle || '';
   if (pr) pr.value = p.promptRules || '';
+  const ci = document.getElementById('pCharIdentity');
+  if (ci) ci.value = p.charIdentity || '';   // dòng đặc điểm lặp mỗi cảnh → giữ nhất quán
   const st = document.getElementById('extractStatus');
   if (st) st.innerHTML = '<span style="color:var(--green)">✓ Đã điền preset ' + (p.label || key) + '. Sửa lại cho khớp kênh rồi Lưu.</span>';
 }
