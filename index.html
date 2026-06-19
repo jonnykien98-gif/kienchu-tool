@@ -5131,12 +5131,14 @@ function t2OnDescModeChange(){
   saveState();
 }
 
-async function doAssign(){
+async function doAssign(only){
   syncTool2();
   if (state.scenes.length === 0) return setStatus2('Cần chia cảnh trước.', 'error');
   if (state.charactersV.length === 0 && state.backgroundsV.length === 0)
     return setStatus2('Cần Quét Trước nhân vật/bối cảnh trước.', 'error');
 
+  // only = danh sách cảnh CẦN gán lại (vd cảnh trống sau lần Gán đầu); mặc định gán tất cả
+  const pool = (Array.isArray(only) && only.length) ? only : state.scenes;
   const bs = parseInt(document.getElementById('batchSize').value) || 5;
   setStatus2('AI đang gán nhân vật + bối cảnh...', 'working');
   clearCancel();
@@ -5181,7 +5183,7 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
   try {
     const lanes = _concurrency();
     const batches = [];
-    for (let i = 0; i < state.scenes.length; i += bs) batches.push(state.scenes.slice(i, i + bs));
+    for (let i = 0; i < pool.length; i += bs) batches.push(pool.slice(i, i + bs));
     let done = 0, assigned = 0;
     await runConcurrent(batches, async (batch) => {
       if (state.cancelRequested) return;
@@ -5209,7 +5211,7 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
       }
       done += batch.length;
       renderAllT2();
-      setStatus2(`Gán... ${Math.min(done, state.scenes.length)}/${state.scenes.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
+      setStatus2(`Gán... ${Math.min(done, pool.length)}/${pool.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
     }, lanes, () => state.cancelRequested);
     if (state.cancelRequested) {
       clearCancel();
@@ -5975,6 +5977,15 @@ async function runAutoTool2(){
         _autoSetStep(6, 'active');
         clearCancel();
         await doAssign();
+        // 🔍 KIỂM GÁN: cảnh trống CẢ nhân vật lẫn bối cảnh = dấu hiệu batch lỗi → ép gán lại đúng những cảnh đó (1 lượt)
+        if (!stopped()) {
+          const empties = state.scenes.filter(s => !s.character && !s.background);
+          if (empties.length && empties.length < state.scenes.length) {  // còn vài cảnh trống (không phải tất cả)
+            setStatus2(`🔍 Kiểm Gán: ${empties.length} cảnh trống → gán lại...`, 'working');
+            clearCancel();
+            await doAssign(empties);
+          }
+        }
         _autoSetStep(6, 'done');
       } else {
         _autoSetStep(6, 'skip');
