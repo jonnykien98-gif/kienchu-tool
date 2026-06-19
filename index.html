@@ -931,6 +931,10 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div id="apiKeyList" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
         <button class="btn ghost sm" onclick="addKeyField('')" style="margin-top:6px;width:100%">+ Thêm key</button>
       </div>
+      <div class="api-row">
+        <label class="label">Số luồng song song <span style="font-weight:400;opacity:.6;font-size:10px">— để trống = bằng số key. Đây là TỔNG luồng, không nhân số key.</span></label>
+        <input type="number" id="apiConcurrency" min="1" max="30" placeholder="tự động (= số key)" style="font-size:11px">
+      </div>
       <div class="api-row" id="thinkingRow" style="display:none">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px">
           <input type="checkbox" id="apiThinking" style="width:auto;margin:0">
@@ -2456,6 +2460,8 @@ function loadApiSettings(){
   updateGetKeyLink();
   const thinkEl = document.getElementById('apiThinking');
   if (thinkEl) thinkEl.checked = localStorage.getItem('api_thinking') === '1';
+  const concEl = document.getElementById('apiConcurrency');
+  if (concEl) concEl.value = localStorage.getItem('api_concurrency') || '';
   const baseUrlEl = document.getElementById('apiBaseUrl');
   if (baseUrlEl) baseUrlEl.value = localStorage.getItem('api_base_url') || '';
   updateApiStatus();
@@ -2470,6 +2476,8 @@ function saveApiSettings(){
   localStorage.setItem('api_model', model);
   localStorage.setItem('api_key', keys.join('\n'));
   localStorage.setItem('api_thinking', document.getElementById('apiThinking')?.checked ? '1' : '');
+  const conc = parseInt(document.getElementById('apiConcurrency')?.value);
+  localStorage.setItem('api_concurrency', (conc >= 1) ? String(conc) : '');
   localStorage.setItem('api_base_url', baseUrl);
   updateApiStatus();
   setApiStatus(baseUrl ? `✓ Đã lưu. Dùng Base URL: ${baseUrl}` : '✓ Đã lưu cấu hình API.', 'ok');
@@ -2482,7 +2490,8 @@ function updateApiStatus(){
   const model = localStorage.getItem('api_model');
   const el = document.getElementById('apiStatus');
   if (keys.length && provider && model) {
-    const multi = keys.length > 1 ? ` · ⚡ ${keys.length} key song song` : '';
+    const lanes = _concurrency();
+    const multi = lanes > 1 ? ` · ⚡ ${lanes} luồng (${keys.length} key)` : '';
     el.innerHTML = `<span class="api-status ok"></span> ${PROVIDER_LABEL[provider] || provider} · ${model}${multi}`;
   } else {
     el.innerHTML = `<span class="api-status"></span> Chưa cấu hình`;
@@ -2533,8 +2542,13 @@ function _nextApiKey(){
   _apiKeyIdx++;
   return k;
 }
-// Số luồng chạy song song = số key (1 key → 1 luồng, an toàn rate-limit)
-function _concurrency(){ return Math.max(1, _apiKeyPool().length); }
+// Số luồng chạy song song: ưu tiên giá trị người dùng đặt (TỔNG luồng); để trống → bằng số key.
+// Nhiều luồng hơn số key chỉ có lợi nếu API cho gửi nhiều request đồng thời trên 1 key (vd DeepSeek).
+function _concurrency(){
+  const set = parseInt(localStorage.getItem('api_concurrency') || '');
+  if (set >= 1) return Math.min(set, 30);
+  return Math.max(1, _apiKeyPool().length);
+}
 
 // Chạy worker(item) trên `items` với tối đa `limit` luồng đồng thời. Dừng nhận việc mới khi shouldStop().
 async function runConcurrent(items, worker, limit, shouldStop){
