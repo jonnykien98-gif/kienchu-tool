@@ -1148,6 +1148,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer" title="Tả dày MÔI TRƯỜNG: đạo cụ tiền cảnh, vật liệu/texture, lớp hậu cảnh, nguồn sáng. Bật CHUNG với 'Prompt ngắn' = nhân vật do ảnh reference lo (đồng nhất) + bối cảnh chi tiết — combo tốt nhất.">
           <input type="checkbox" id="highDetailMode" style="width:auto;margin:0"> 🔍 Chi tiết cao
         </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer" title="Cho AI tự quyết: cảnh tả đồ vật/bối cảnh/cận cảnh/quá trình → vẽ B-ROLL KHÔNG có người, thay vì nhồi nhân vật vào mọi ảnh. Xen kẽ cho video tự nhiên. Tắt = mọi cảnh đều có nhân vật.">
+          <input type="checkbox" id="brollMode" style="width:auto;margin:0" checked> 🎬 Cảnh b-roll (không nhân vật)
+        </label>
         <button class="btn ghost" style="border-color:var(--rose);color:var(--rose);font-weight:600" onclick="regenAllScenePrompts()" title="Xoá toàn bộ prompt cũ và tạo lại từ đầu">🔄 Tạo lại tất cả</button>
         <button class="btn ghost" id="t2FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="doGenerateScenePrompts()" title="Chỉ tạo các cảnh chưa có prompt">🔧 Tạo nốt cảnh thiếu <span id="t2MissingCount"></span></button>
         <button class="btn ghost" onclick="exportVideo()">↓ Xuất JSON</button>
@@ -4250,19 +4253,27 @@ KHÔNG dùng JSON, KHÔNG ngoặc kép quanh cảnh, KHÔNG đánh số. CHỈ i
 ${batches[bi]}
 """`;
     let reply = await callClaude(prompt, 4000);
-    // Parse theo delimiter — chống lỗi escape JSON
-    let parts = reply.split(/===SCENE===/i).map(s => s.trim()).filter(Boolean);
-    // Bỏ phần preamble nếu có (vd "Đây là các cảnh:")
-    if (parts.length && parts[0].length < 80 && !/[.!?…]$/.test(parts[0])) parts = parts.slice(1);
-    if (!parts.length) {
-      // Retry 1 lần
+    // Parse theo delimiter ===SCENE===
+    const parse = (r) => {
+      let ps = r.split(/===SCENE===/i).map(s => s.trim()).filter(Boolean);
+      if (ps.length && ps[0].length < 80 && !/[.!?…]$/.test(ps[0])) ps = ps.slice(1); // bỏ preamble
+      return ps;
+    };
+    // Hợp lệ khi: model CÓ dùng delimiter + tổng độ dài xấp xỉ kịch bản gốc (chống model trả suy luận/echo prompt)
+    const valid = (r, ps) => {
+      if (!ps.length || !/===SCENE===/i.test(r)) return false;
+      const ratio = ps.join(' ').length / Math.max(1, batches[bi].length);
+      return ratio >= 0.6 && ratio <= 1.6;
+    };
+    let parts = parse(reply);
+    if (!valid(reply, parts)) {
+      // Retry 1 lần (model đôi khi quên delimiter / chèn suy luận)
       reply = await callClaude(prompt, 4000);
-      parts = reply.split(/===SCENE===/i).map(s => s.trim()).filter(Boolean);
-      if (parts.length && parts[0].length < 80 && !/[.!?…]$/.test(parts[0])) parts = parts.slice(1);
+      parts = parse(reply);
     }
-    if (!parts.length) {
-      // Fallback: chia regex cho riêng batch này, không kill cả run
-      console.warn('Smart split batch ' + (bi+1) + ' parse rỗng → fallback fast');
+    if (!valid(reply, parts)) {
+      // AI trả RÁC (vd DeepSeek trả cả phần suy luận) → chia regex cho batch này, không vỡ cả run
+      console.warn('Smart split batch ' + (bi+1) + ' không hợp lệ → fallback regex');
       parts = splitScenesFast(batches[bi], min, max);
     }
     all.push(...parts);
@@ -4381,6 +4392,23 @@ function splitLongScenes(){
 }
 
 // So sánh các cảnh đã chia với kịch bản gốc — phát hiện mất/thêm từ
+// So sánh từ-cấp giữa các cảnh và kịch bản gốc → trả về số liệu (dùng cho Auto tự kiểm tra)
+function _diffScenesScript(){
+  const normalize = t => (t || '')
+    .replace(/[‘’‚]/g, "'").replace(/[“”„]/g, '"')
+    .replace(/[–—]/g, '-').replace(/…/g, '...')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
+  const tokenize = s => s.match(/[\w'-]+/g) || [];
+  const oW = tokenize(normalize(state.script || ''));
+  const sW = tokenize(normalize((state.scenes || []).map(s => s.text).join(' ')));
+  const count = arr => { const c = {}; arr.forEach(w => c[w] = (c[w] || 0) + 1); return c; };
+  const oC = count(oW), sC = count(sW);
+  let missN = 0, extraN = 0;
+  for (const w in oC) { const d = oC[w] - (sC[w] || 0); if (d > 0) missN += d; }
+  for (const w in sC) { const d = sC[w] - (oC[w] || 0); if (d > 0) extraN += d; }
+  return { exact: missN === 0 && extraN === 0, missN, extraN, oLen: oW.length, sLen: sW.length };
+}
+
 function verifyScenesAgainstScript(){
   syncTool2();
   if (!state.script || !state.script.trim()) return setStatus2('Chưa có kịch bản gốc.', 'error');
@@ -4870,13 +4898,22 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO)
   // Hai chế độ ĐỘC LẬP: shortMode = nhân vật do ảnh reference lo (đồng nhất); highDetail = môi trường tả dày.
   // Bật CẢ HAI = nhân vật khoá theo reference + bối cảnh chi tiết.
   const shortMode = document.getElementById('shortPromptMode')?.checked;
+  const brollMode = document.getElementById('brollMode')?.checked;
   // 🏺 Khoá thời đại cho prompt cảnh: ưu tiên giá trị đã đặt ở Tool 3 (state.t3Era), nếu trống → trích kịch bản
   const eraHintT2 = (state.t3Era && state.t3Era.trim())
     ? state.t3Era.trim()
     : (state.script || '').replace(/\s+/g, ' ').trim().slice(0, 400);
   const eraBlockT2 = eraHintT2
-    ? `\n🏺 BỐI CẢNH & THỜI ĐẠI (áp cho MỌI cảnh): ${eraHintT2}\n- Trang phục, kiểu tóc/đội đầu và đạo cụ của MỌI nhân vật — kể cả nhân vật phụ tả tự do, đám đông, người qua đường — PHẢI đúng thời đại/bối cảnh này; KHÔNG để lẫn đồ/tóc hiện đại sai thời. Phần art-style (mặt off-white, tay chân que đen, bàn tay mitten) thì giữ nguyên ở mọi nhân vật.\n`
+    ? `\n🏺 BỐI CẢNH & THỜI ĐẠI (áp cho MỌI cảnh): ${eraHintT2}\n- Trang phục, kiểu tóc/đội đầu và đạo cụ của MỌI nhân vật — kể cả nhân vật phụ tả tự do, đám đông, người qua đường — PHẢI đúng thời đại/bối cảnh này; KHÔNG để lẫn đồ/tóc hiện đại sai thời. GIỮ NGUYÊN art-style/phong cách render của kênh (theo Character/Scene Style) ở mọi nhân vật — chỉ đổi trang phục/tóc/đạo cụ cho khớp thời đại.\n`
     : '';
+  // 🎬 Cảnh b-roll: cho phép cảnh tả đồ vật/bối cảnh/cận cảnh → KHÔNG có người, thay vì nhồi nhân vật vào mọi ảnh
+  const brollRule = brollMode ? `
+🎬 KHÔNG phải cảnh nào cũng có người — TỰ QUYẾT theo nội dung VO:
+- VO nói về NGƯỜI (hành động, lời người dẫn, cảm xúc, đối thoại) → cảnh CÓ nhân vật.
+- VO tả ĐỒ VẬT / NƠI CHỐN / QUÁ TRÌNH / CẬN CẢNH chi tiết / hiện tượng cụ thể (vd "ants on a leaf", "the vegetable bed", "a jar of baking soda", "roots in the soil", "rain falling") → làm cảnh B-ROLL / INSERT / CẬN CẢNH chỉ có đồ vật + bối cảnh, KHÔNG có người, KHÔNG có người dẫn nhìn camera.
+- Mục tiêu: XEN KẼ cảnh có người và cảnh b-roll cho video tự nhiên — KHÔNG ép người dẫn vào mọi khung hình.
+- Cảnh b-roll vẫn giữ đúng style/tông màu/ánh sáng của kênh; mô tả rõ chủ thể, góc máy (close-up/macro/wide), bố cục.
+` : '';
   // ---- Mode-aware: Tag / Inline / Inline+bible ----
       const dm = state.descMode || 'tag';
       let charCtx, bgCtx, charHeader, bgHeader, mode1Rule;
@@ -4950,7 +4987,7 @@ ${bgHeader}
 ${bgCtx || '(không có)'}
 
 Với mỗi cảnh, TRƯỚC TIÊN xác định LOẠI CẢNH từ nội dung VO, sau đó viết prompt phù hợp:
-
+${brollRule}
 🔹 LOẠI 1 — NHÂN VẬT TRONG BỐI CẢNH (VO nói về hành động của người):
 ${mode1Rule}
 
@@ -5499,6 +5536,16 @@ async function runAutoTool2(){
       _autoSetStep(3, 'active');
       splitLongScenes();
       _autoSetStep(3, 'done');
+
+      // SO SÁNH cảnh vs kịch bản gốc — bắt lỗi chia sai/rác (vd AI trả suy luận thay vì cảnh)
+      const diff = _diffScenesScript();
+      if (!diff.exact && (diff.missN + diff.extraN) > Math.max(10, Math.round(diff.oLen * 0.05))) {
+        _autoSetStep(1, 'fail');
+        throw new Error(`Cảnh KHÔNG khớp kịch bản gốc (thiếu ${diff.missN} từ, thừa ${diff.extraN} từ) — có thể AI chia sai/trả rác. Bấm "🗑 Xoá hết" rồi chia lại bằng "Chia nhanh (regex)", hoặc đổi provider sang Claude/OpenAI cho bước chia.`);
+      }
+      setStatus2(diff.exact
+        ? `✓ Cảnh khớp 100% kịch bản gốc (${diff.oLen} từ).`
+        : `✓ Cảnh khớp kịch bản (lệch nhỏ: thiếu ${diff.missN}, thừa ${diff.extraN} từ).`, 'working');
     } else {
       _autoSetStep(0, 'skip');
       _autoSetStep(1, 'skip');
