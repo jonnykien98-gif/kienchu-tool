@@ -1138,6 +1138,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <option value="smart" selected>Chia thông minh (AI) ★</option>
           </select>
           <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
+          <button class="btn ghost" onclick="mergeFragmentScenes()" title="Nối các CÂU VỤN (mảnh chưa hoàn chỉnh / từ lẻ) thành câu trọn vẹn. Dùng sau 'Chia nhanh'. Tức thì, không gọi AI, không mất chữ.">🧩 Gộp câu vụn</button>
           <button class="btn ghost" onclick="splitLongScenes()" title="Tách các cảnh dài thành nhiều cảnh con (cắt tại dấu phẩy / — / :) để mỗi cảnh có 1 ảnh, nhịp nhanh hơn">✂ Tách cảnh dài</button>
           <div class="batch-control" title="Giây tối đa cho mỗi ảnh — cảnh dài hơn ngưỡng này sẽ bị tách"><span>s/ảnh:</span><input type="number" id="maxSecPerImg" value="8" min="3" max="30"></div>
           <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Đính file SRT để lấy ĐỘ DÀI THẬT từ giọng đọc — thay cho độ dài ước lượng. Chia cảnh trước, rồi bấm nút này.">
@@ -4332,11 +4333,17 @@ function calcDur(text){
 // Nếu không có mệnh đề → cắt theo từ. Trả về [text] nếu cảnh không cần tách.
 // realDur (tuỳ chọn): độ dài THẬT của cảnh (đã căn SRT) — dùng để quyết định tách chính xác thay vì ước lượng theo chữ.
 function _splitTextByDuration(text, maxSec, realDur){
-  // Dùng GIÁ TRỊ LỚN HƠN giữa độ dài thật (SRT) và ước lượng theo chữ → cảnh text dài vẫn bị tách
-  // dù SRT căn sai (vd dồn về 0.3s). Cảnh đọc chậm thì realDur lớn cũng bắt được.
-  const totalDur = Math.max((realDur && realDur > 0) ? realDur : 0, calcDur(text));
+  // Ước lượng theo CHỮ là thước đo chính (lượng nội dung trong cảnh).
+  const estDur = calcDur(text);
+  // realDur (SRT) chỉ được TĂNG split khi đọc CHẬM thật — nhưng KHÔNG vượt 2.2x ước lượng.
+  // → chống alignment gán giây sai (vd 1 câu 3 chữ bị gán 50s) khiến Tách cắt vụn thành từ lẻ.
+  const totalDur = (realDur && realDur > estDur) ? Math.min(realDur, estDur * 2.2) : estDur;
   if (totalDur <= maxSec) return [text];
-  const N = Math.max(2, Math.ceil(totalDur / maxSec));
+  let N = Math.max(2, Math.ceil(totalDur / maxSec));
+  // CHẶN cắt vụn: mỗi phần tối thiểu ~5 từ. Câu ngắn (vài từ) sẽ KHÔNG bị tách dù realDur lớn bất thường.
+  const wc = text.split(/\s+/).filter(Boolean).length;
+  N = Math.min(N, Math.max(1, Math.floor(wc / 5)));
+  if (N < 2) return [text];
   // Tách tại ranh giới CÂU (. ! ? …) TRƯỚC, rồi tới mệnh đề (, ; : — –) → ưu tiên câu trọn vẹn
   let units = [], buf = '';
   for (let i = 0; i < text.length; i++) {
@@ -4377,6 +4384,46 @@ function _expandByWords(units, N){
     units.splice(li, 1, w.slice(0, mid).join(' '), w.slice(mid).join(' '));
   }
   return units;
+}
+
+// 🧩 Gộp các CÂU VỤN (mảnh chưa hoàn chỉnh / từ lẻ) vào nhau → mỗi cảnh là 1 câu trọn vẹn.
+// Quy tắc: nối liên tiếp tới khi đoạn KẾT THÚC bằng . ! ? … . Không gọi AI, không mất chữ, tức thì.
+function mergeFragmentScenes(){
+  syncTool2();
+  if (!state.scenes || !state.scenes.length) return setStatus2('Chưa có cảnh để gộp. Bấm "Chia Cảnh" trước.', 'error');
+  const hasWork = Object.keys(state.scenePrompts || {}).length || Object.keys(state.sceneImages || {}).length;
+  if (hasWork && !confirm('Gộp câu sẽ đổi ranh giới cảnh → prompt/ảnh đã tạo sẽ bị xoá. Tiếp tục?')) return;
+
+  const endsComplete = t => /[.!?…]["')\]]*\s*$/.test((t || '').trim());
+  const out = [];
+  let cur = null;
+  for (const s of state.scenes) {
+    if (!cur) {
+      cur = { ...s };
+    } else {
+      cur.text = (cur.text.trim() + ' ' + (s.text || '').trim()).trim();
+      cur.duration = (parseFloat(cur.duration) || 0) + (parseFloat(s.duration) || 0);
+      if (!cur.character && s.character) cur.character = s.character;     // giữ nhân vật/bối cảnh đầu tiên có
+      if (!cur.background && s.background) cur.background = s.background;
+    }
+    if (endsComplete(cur.text)) { out.push(cur); cur = null; }
+  }
+  if (cur) {  // mảnh cuối chưa hoàn chỉnh → nối vào cảnh trước
+    if (out.length) {
+      const last = out[out.length - 1];
+      last.text = (last.text.trim() + ' ' + cur.text.trim()).trim();
+      last.duration = (parseFloat(last.duration) || 0) + (parseFloat(cur.duration) || 0);
+    } else out.push(cur);
+  }
+
+  const before = state.scenes.length;
+  state.scenes = out;
+  state.scenes.forEach((s, i) => { s.id = String(i + 1).padStart(3, '0'); s.duration = +(parseFloat(s.duration) || calcDur(s.text)).toFixed(1); });
+  state.scenePrompts = {}; state.scenePrompts2 = {}; state.veoPrompts = {}; state.sceneImages = {};
+  renderAllT2();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  saveState();
+  setStatus2(`✓ Đã gộp câu vụn: ${before} → ${state.scenes.length} cảnh (mỗi cảnh là 1 câu hoàn chỉnh).`, 'ok');
 }
 
 // ✂ Tách các cảnh dài (> ngưỡng giây/ảnh) thành nhiều cảnh con → nhiều ảnh minh hoạ
