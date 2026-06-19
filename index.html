@@ -4336,15 +4336,15 @@ function calcDur(text){
 // realDur (tuỳ chọn): độ dài THẬT của cảnh (đã căn SRT) — dùng để quyết định tách chính xác thay vì ước lượng theo chữ.
 function _splitTextByDuration(text, maxSec, realDur){
   const estDur = calcDur(text);
-  // Dùng độ dài THẬT (đã căn SRT/MP3) nếu lớn hơn ước lượng → cảnh >maxSec luôn bị tách đúng theo timing thật.
+  // Dùng độ dài THẬT (đã căn SRT/MP3) nếu lớn hơn ước lượng.
   const totalDur = Math.max((realDur && realDur > 0) ? realDur : 0, estDur);
   if (totalDur <= maxSec) return [text];
-  let N = Math.max(2, Math.ceil(totalDur / maxSec));
-  // CHẶN cắt vụn (đây mới là cái chống từ-lẻ): mỗi phần tối thiểu ~5 từ. Câu vài từ sẽ KHÔNG bị tách dù giây lớn.
-  const wc = text.split(/\s+/).filter(Boolean).length;
-  N = Math.min(N, Math.max(1, Math.floor(wc / 5)));
-  if (N < 2) return [text];
-  // Tách tại ranh giới CÂU (. ! ? …) TRƯỚC, rồi tới mệnh đề (, ; : — –) → ưu tiên câu trọn vẹn
+  // Số ký tự TƯƠNG ĐƯƠNG maxSec (theo tốc độ đọc của chính cảnh này) → mỗi phần ≤ maxSec dù phân bố giây không đều.
+  const charsPerSec = text.length / totalDur;
+  const maxChars = Math.max(24, Math.round(maxSec * charsPerSec));
+  // Câu cực ngắn (vài từ) → không tách dù giây lớn (chống từ-lẻ)
+  if (text.split(/\s+/).filter(Boolean).length < 8) return [text];
+  // 1) Tách thành units tại ranh giới CÂU (. ! ? …) rồi MỆNH ĐỀ (, ; : — –)
   let units = [], buf = '';
   for (let i = 0; i < text.length; i++) {
     buf += text[i];
@@ -4352,16 +4352,24 @@ function _splitTextByDuration(text, maxSec, realDur){
   }
   if (buf.trim()) units.push(buf.trim());
   units = units.filter(Boolean);
-  if (units.length < 2) units = _expandByWords([text], N);   // không có mệnh đề → cắt theo từ
-  else if (units.length < N) units = _expandByWords(units, N);
-  // Gói các mệnh đề thành N phần cân bằng theo độ dài ký tự
-  const targetLen = text.length / N;
+  // 2) Unit dài hơn maxChars → cắt nhỏ theo TỪ (mỗi mảnh ≥5 từ) để không có phần nào vượt ngưỡng
+  const fine = [];
+  for (const u of units) {
+    if (u.length <= maxChars) { fine.push(u); continue; }
+    const w = u.split(/\s+/); let cw = '';
+    for (const x of w) {
+      const t = cw ? cw + ' ' + x : x;
+      if (t.length > maxChars && cw.split(/\s+/).length >= 5) { fine.push(cw); cw = x; }
+      else cw = t;
+    }
+    if (cw) fine.push(cw);
+  }
+  // 3) GÓI THAM LAM: dồn units vào 1 phần tới khi sắp vượt maxChars → mỗi phần ~ ≤ maxSec
   const parts = [];
   let cur = '';
-  for (const u of units) {
-    const cand = cur ? cur + ' ' + u : u;
-    if (cur && cur.length >= targetLen && parts.length < N - 1) { parts.push(cur); cur = u; }
-    else cur = cand;
+  for (const u of fine) {
+    if (cur && (cur.length + 1 + u.length) > maxChars) { parts.push(cur); cur = u; }
+    else cur = cur ? cur + ' ' + u : u;
   }
   if (cur) parts.push(cur);
   return parts.length > 1 ? parts : [text];
@@ -4547,29 +4555,29 @@ function splitLongScenes(){
 
 // ⚖️ Cân đều cảnh: GỘP cảnh ngắn + TÁCH cảnh dài → mỗi ảnh nằm trong khoảng [minSec, maxSec] giây.
 function _balanceScenesCore(minSec, maxSec){
-  // 1) GỘP các cảnh NGẮN liền kề (chỉ nối, giữ thứ tự) — cho tới khi đạt min, không vượt max
-  const merged = [];
-  let cur = null;
+  // 1) TÁCH cảnh DÀI > maxSec thành các phần ≤ maxSec (gói theo ký tự tương đương giây) — gán giây theo tỉ lệ ký tự
+  const split = [];
   for (const s of state.scenes) {
+    const sdur = parseFloat(s.duration) || calcDur(s.text);
+    const parts = _splitTextByDuration(s.text, maxSec, sdur);
+    if (parts.length <= 1) { split.push({ ...s, duration: sdur }); continue; }
+    const totalChars = parts.reduce((a, t) => a + t.length, 0) || 1;
+    parts.forEach(t => split.push({ ...s, text: t, duration: +(sdur * t.length / totalChars).toFixed(1) }));
+  }
+  // 2) GỘP các cảnh NGẮN liền kề (kể cả đuôi vụn vừa tách ra) lên tới band, không vượt max → hết cảnh quá ngắn
+  const out = [];
+  let cur = null;
+  for (const s of split) {
     const sd = parseFloat(s.duration) || calcDur(s.text);
     if (!cur) { cur = { ...s }; cur.duration = sd; }
-    // Gộp khi: cảnh hiện tại còn NGẮN (cần thêm) HOẶC cảnh kế NGẮN (hút vào cho khỏi mồ côi) — miễn không vượt max
     else if ((cur.duration < minSec || sd < minSec) && (cur.duration + sd) <= maxSec) {
       cur.text = (cur.text.trim() + ' ' + (s.text || '').trim()).trim();
       cur.duration += sd;
       if (!cur.character && s.character) cur.character = s.character;
       if (!cur.background && s.background) cur.background = s.background;
-    } else { merged.push(cur); cur = { ...s }; cur.duration = sd; }
+    } else { out.push(cur); cur = { ...s }; cur.duration = sd; }
   }
-  if (cur) merged.push(cur);
-  // 2) TÁCH cảnh DÀI > maxSec (chia đều thời lượng cho các phần)
-  const out = [];
-  for (const s of merged) {
-    const parts = _splitTextByDuration(s.text, maxSec, s.duration);
-    if (parts.length <= 1) { out.push(s); continue; }
-    const each = (parseFloat(s.duration) || 0) / parts.length;
-    parts.forEach(t => out.push({ ...s, text: t, duration: +each.toFixed(1) }));
-  }
+  if (cur) out.push(cur);
   // Cap theo tier
   const maxScenes = getMaxScenes();
   if (out.length > maxScenes) out.length = maxScenes;
