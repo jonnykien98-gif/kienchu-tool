@@ -1140,8 +1140,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
           <button class="btn ghost" onclick="mergeFragmentScenes()" title="Nối các CÂU VỤN (mảnh chưa hoàn chỉnh / từ lẻ) thành câu trọn vẹn. Tức thì, không gọi AI, không mất chữ.">🧩 Gộp câu vụn</button>
           <button class="btn ghost" onclick="mergeScenesByMeaningAI()" title="AI gộp các cảnh LIÊN TIẾP cùng 1 ý hình ảnh (chỉ NỐI, không cắt) → bớt vụn. Dùng sau 'Chia nhanh' + 'Gộp câu vụn'.">🧩 Gộp theo ý (AI)</button>
-          <button class="btn ghost" onclick="splitLongScenes()" title="Tách các cảnh dài thành nhiều cảnh con (cắt tại dấu phẩy / — / :) để mỗi cảnh có 1 ảnh, nhịp nhanh hơn">✂ Tách cảnh dài</button>
-          <div class="batch-control" title="Giây tối đa cho mỗi ảnh — cảnh dài hơn ngưỡng này sẽ bị tách"><span>s/ảnh:</span><input type="number" id="maxSecPerImg" value="8" min="3" max="30"></div>
+          <button class="btn ghost" onclick="splitLongScenes()" title="Chỉ TÁCH các cảnh dài thành nhiều cảnh con. Cảnh ngắn giữ nguyên.">✂ Tách cảnh dài</button>
+          <button class="btn ghost" onclick="balanceScenes()" title="CÂN ĐỀU: gộp cảnh ngắn + tách cảnh dài → mỗi ảnh nằm trong khoảng min–max giây (đều tay, không quá ngắn/dài).">⚖️ Cân đều cảnh</button>
+          <div class="batch-control" title="Khoảng giây/ảnh: min (gộp cảnh ngắn hơn) – max (tách cảnh dài hơn)"><span>s/ảnh:</span><input type="number" id="minSecPerImg" value="3" min="1" max="20" style="width:48px" title="Tối thiểu — cảnh ngắn hơn sẽ bị gộp">–<input type="number" id="maxSecPerImg" value="8" min="3" max="30" style="width:48px" title="Tối đa — cảnh dài hơn sẽ bị tách"></div>
           <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Đính MP3 giọng đọc → transcribe (Whisper, key Tool 8) lấy ĐỘ DÀI THẬT từng cảnh. Chia cảnh trước, rồi bấm nút này.">
             🎤 Căn timing từ MP3
             <input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" style="display:none" onchange="applyAudioTiming(this)">
@@ -4334,14 +4335,12 @@ function calcDur(text){
 // Nếu không có mệnh đề → cắt theo từ. Trả về [text] nếu cảnh không cần tách.
 // realDur (tuỳ chọn): độ dài THẬT của cảnh (đã căn SRT) — dùng để quyết định tách chính xác thay vì ước lượng theo chữ.
 function _splitTextByDuration(text, maxSec, realDur){
-  // Ước lượng theo CHỮ là thước đo chính (lượng nội dung trong cảnh).
   const estDur = calcDur(text);
-  // realDur (SRT) chỉ được TĂNG split khi đọc CHẬM thật — nhưng KHÔNG vượt 2.2x ước lượng.
-  // → chống alignment gán giây sai (vd 1 câu 3 chữ bị gán 50s) khiến Tách cắt vụn thành từ lẻ.
-  const totalDur = (realDur && realDur > estDur) ? Math.min(realDur, estDur * 2.2) : estDur;
+  // Dùng độ dài THẬT (đã căn SRT/MP3) nếu lớn hơn ước lượng → cảnh >maxSec luôn bị tách đúng theo timing thật.
+  const totalDur = Math.max((realDur && realDur > 0) ? realDur : 0, estDur);
   if (totalDur <= maxSec) return [text];
   let N = Math.max(2, Math.ceil(totalDur / maxSec));
-  // CHẶN cắt vụn: mỗi phần tối thiểu ~5 từ. Câu ngắn (vài từ) sẽ KHÔNG bị tách dù realDur lớn bất thường.
+  // CHẶN cắt vụn (đây mới là cái chống từ-lẻ): mỗi phần tối thiểu ~5 từ. Câu vài từ sẽ KHÔNG bị tách dù giây lớn.
   const wc = text.split(/\s+/).filter(Boolean).length;
   N = Math.min(N, Math.max(1, Math.floor(wc / 5)));
   if (N < 2) return [text];
@@ -4544,6 +4543,56 @@ function splitLongScenes(){
   if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
   saveState();
   setStatus2(`✓ Đã tách ${affected} cảnh dài → +${added} cảnh (≤${maxSec}s/ảnh). Tổng ${newScenes.length} cảnh. Bấm "Tạo Prompt G-Labs" để sinh ảnh cho cảnh mới.${trimmedNotice}`, 'ok');
+}
+
+// ⚖️ Cân đều cảnh: GỘP cảnh ngắn + TÁCH cảnh dài → mỗi ảnh nằm trong khoảng [minSec, maxSec] giây.
+function _balanceScenesCore(minSec, maxSec){
+  // 1) GỘP các cảnh NGẮN liền kề (chỉ nối, giữ thứ tự) — cho tới khi đạt min, không vượt max
+  const merged = [];
+  let cur = null;
+  for (const s of state.scenes) {
+    const sd = parseFloat(s.duration) || calcDur(s.text);
+    if (!cur) { cur = { ...s }; cur.duration = sd; }
+    // Gộp khi: cảnh hiện tại còn NGẮN (cần thêm) HOẶC cảnh kế NGẮN (hút vào cho khỏi mồ côi) — miễn không vượt max
+    else if ((cur.duration < minSec || sd < minSec) && (cur.duration + sd) <= maxSec) {
+      cur.text = (cur.text.trim() + ' ' + (s.text || '').trim()).trim();
+      cur.duration += sd;
+      if (!cur.character && s.character) cur.character = s.character;
+      if (!cur.background && s.background) cur.background = s.background;
+    } else { merged.push(cur); cur = { ...s }; cur.duration = sd; }
+  }
+  if (cur) merged.push(cur);
+  // 2) TÁCH cảnh DÀI > maxSec (chia đều thời lượng cho các phần)
+  const out = [];
+  for (const s of merged) {
+    const parts = _splitTextByDuration(s.text, maxSec, s.duration);
+    if (parts.length <= 1) { out.push(s); continue; }
+    const each = (parseFloat(s.duration) || 0) / parts.length;
+    parts.forEach(t => out.push({ ...s, text: t, duration: +each.toFixed(1) }));
+  }
+  // Cap theo tier
+  const maxScenes = getMaxScenes();
+  if (out.length > maxScenes) out.length = maxScenes;
+  state.scenes = out;
+  state.scenes.forEach((s, i) => { s.id = String(i + 1).padStart(3, '0'); s.duration = +(parseFloat(s.duration) || calcDur(s.text)).toFixed(1); });
+  state.scenePrompts = {}; state.scenePrompts2 = {}; state.veoPrompts = {}; state.sceneImages = {};
+  renderAllT2();
+  if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+  saveState();
+}
+
+function balanceScenes(){
+  syncTool2();
+  if (!state.scenes || !state.scenes.length) return setStatus2('Chưa có cảnh. Bấm "Chia Cảnh" trước.', 'error');
+  const maxSec = parseInt(document.getElementById('maxSecPerImg')?.value) || 8;
+  let minSec = parseInt(document.getElementById('minSecPerImg')?.value);
+  if (!(minSec >= 1)) minSec = Math.max(2, Math.round(maxSec / 2.5));
+  if (minSec >= maxSec) minSec = Math.max(2, maxSec - 2);
+  const hasWork = Object.keys(state.scenePrompts || {}).length || Object.keys(state.sceneImages || {}).length;
+  if (hasWork && !confirm('Cân đều cảnh sẽ đổi ranh giới → prompt/ảnh đã tạo sẽ bị xoá. Tiếp tục?')) return;
+  const before = state.scenes.length;
+  _balanceScenesCore(minSec, maxSec);
+  setStatus2(`✓ Đã cân đều: ${before} → ${state.scenes.length} cảnh, mỗi ảnh ~${minSec}–${maxSec}s.`, 'ok');
 }
 
 // So sánh các cảnh đã chia với kịch bản gốc — phát hiện mất/thêm từ
@@ -5704,7 +5753,7 @@ const AUTO_STEPS = [
   { label: 'Lọc' },
   { label: 'Chia cảnh' },
   { label: 'Căn timing' },
-  { label: 'Tách cảnh dài' },
+  { label: 'Cân đều cảnh' },
   { label: 'Căn lại' },
   { label: 'Quét trước' },
   { label: 'Gán tài nguyên' },
@@ -5785,9 +5834,15 @@ async function runAutoTool2(){
       } catch(e){ console.warn('Auto căn timing 1 lỗi:', e); _autoSetStep(2, 'fail'); }
       if (stopped()) throw 'STOP';
 
-      // Tách cảnh dài → nhiều ảnh (dựa trên độ dài thật nếu đã căn ở bước trên)
+      // Cân đều cảnh: gộp cảnh ngắn + tách cảnh dài → mỗi ảnh trong khoảng min–max (dựa trên độ dài thật nếu đã căn)
       _autoSetStep(3, 'active');
-      splitLongScenes();
+      {
+        const _maxSec = parseInt(document.getElementById('maxSecPerImg')?.value) || 8;
+        let _minSec = parseInt(document.getElementById('minSecPerImg')?.value);
+        if (!(_minSec >= 1)) _minSec = Math.max(2, Math.round(_maxSec / 2.5));
+        if (_minSec >= _maxSec) _minSec = Math.max(2, _maxSec - 2);
+        _balanceScenesCore(_minSec, _maxSec);
+      }
       _autoSetStep(3, 'done');
 
       // SO SÁNH cảnh vs kịch bản gốc — bắt lỗi chia sai/rác (vd AI trả suy luận thay vì cảnh)
@@ -6521,15 +6576,22 @@ async function autoFillEra(force){
   const prevPh = el.placeholder;
   el.placeholder = '⏳ Đang suy bối cảnh & thời đại từ kịch bản...';
   try {
-    const prompt = `Đọc đoạn kịch bản dưới đây và trả về DUY NHẤT 1 dòng tiếng Anh ngắn gọn mô tả BỐI CẢNH + THỜI ĐẠI + VĂN HOÁ để chọn TRANG PHỤC và KIỂU TÓC/ĐỘI ĐẦU nhân vật cho đúng thời: gồm nơi chốn, thời kỳ (kèm năm/thời đại nếu suy được), vài món trang phục đặc trưng, VÀ kiểu tóc/đội đầu đặc trưng. KHÔNG giải thích, KHÔNG xuống dòng, KHÔNG ngoặc kép.
-Định dạng mẫu: Ancient Egypt, New Kingdom (~1300 BCE) — clothing: linen kilts, linen robes, wesekh collars, sandals; hair: shaved heads or black bob wigs, nemes headcloth; no modern clothing or hairstyles
+    const prompt = `Đọc đoạn kịch bản dưới đây. Trả về CHỈ 1 JSON object mô tả BỐI CẢNH + THỜI ĐẠI + VĂN HOÁ (tiếng Anh, 1 dòng) để chọn TRANG PHỤC + KIỂU TÓC/ĐỘI ĐẦU đúng thời: nơi chốn, thời kỳ (kèm năm nếu suy được), vài món trang phục đặc trưng, kiểu tóc/đội đầu đặc trưng.
+Định dạng: {"era":"<mô tả 1 dòng>"}
+VD: {"era":"Ancient Egypt, New Kingdom (~1300 BCE) — clothing: linen kilts, wesekh collars, sandals; hair: shaved heads or black bob wigs, nemes headcloth; no modern clothing or hairstyles"}
+CHỈ in JSON, KHÔNG giải thích.
 
 KỊCH BẢN:
 """
 ${script.slice(0, 2500)}
 """`;
-    let reply = (await callClaude(prompt, 150)) || '';
-    reply = reply.trim().split('\n')[0].replace(/^["'\s]+|["'\s]+$/g, '');
+    const raw = (await callClaude(prompt, 300)) || '';
+    let reply = '';
+    try { const o = parseJSON(raw); if (o && o.era) reply = String(o.era).trim(); } catch (_) {}
+    if (!reply) {  // không có JSON → tìm dòng đúng format (có "clothing:"/"—"/"hair:"), bỏ suy luận
+      const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
+      reply = (lines.find(l => /clothing:|hair:|—/i.test(l)) || lines[lines.length - 1] || '').replace(/^["'\s]+|["'\s]+$/g, '');
+    }
     if (!reply) throw new Error('AI trả về rỗng');
     el.value = reply;
     state.t3Era = reply;
@@ -7538,14 +7600,23 @@ function renderSceneSearchList(){
 }
 
 async function generateSearchKeywords(voText){
+  // fallback: rút vài từ khoá từ chính VO nếu AI lỗi
+  const fallback = () => (voText.replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length > 3).slice(0, 4).join(', ')) || voText.slice(0, 40);
   try {
     const reply = await callClaude(
-      `Tạo 2-4 từ khoá tiếng Anh ngắn gọn để tìm ảnh/video stock phù hợp với nội dung sau. Chỉ trả về từ khoá, cách nhau bởi dấu phẩy, không giải thích.\n\nNội dung: "${voText}"`,
-      100
+      `Sinh 2-4 từ khoá tiếng Anh NGẮN để tìm ảnh/video stock cho nội dung dưới.\nTrả về CHỈ 1 JSON array các từ khoá, KHÔNG giải thích, KHÔNG văn bản ngoài JSON.\nVD: ["old woman","eye contact","ashamed"]\n\nNội dung: "${voText}"`,
+      200
     );
-    return reply.trim().replace(/"/g, '');
+    try {
+      const arr = parseJSON(reply);
+      if (Array.isArray(arr) && arr.length) return arr.map(s => String(s).trim()).filter(Boolean).slice(0, 5).join(', ');
+    } catch (_) {}
+    // Không có JSON (model trả suy luận) → lấy cụm sau dấu ':' cuối nếu trông như từ khoá, else fallback
+    const after = reply.split(':').pop().trim().replace(/^["'\[\s]+|["'\]\s]+$/g, '');
+    if (after && after.length <= 80 && !/[.?!]\s/.test(after) && after.split(',').length <= 6) return after;
+    return fallback();
   } catch (e) {
-    return voText.slice(0, 50);
+    return fallback();
   }
 }
 
