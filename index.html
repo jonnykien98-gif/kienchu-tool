@@ -1109,9 +1109,15 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <div class="panel">
           <div class="panel-head">
             <span><span class="led"></span>KỊCH BẢN</span>
-            <span class="count" id="scriptCount">0 ký tự</span>
+            <span style="display:flex;align-items:center;gap:10px">
+              <label class="btn ghost sm" style="cursor:pointer;white-space:nowrap;border-color:var(--accent);color:var(--accent)" title="Tải file văn bản (.txt .md .srt ...) lên thay vì paste tay">
+                📄 Tải file
+                <input type="file" accept=".txt,.md,.text,.srt,.vtt,text/*" onchange="loadScriptFile(this)" style="display:none">
+              </label>
+              <span class="count" id="scriptCount">0 ký tự</span>
+            </span>
           </div>
-          <textarea id="scriptInput" placeholder="Paste kịch bản vào đây..."></textarea>
+          <textarea id="scriptInput" placeholder="Paste kịch bản vào đây — hoặc bấm 📄 Tải file để nạp file .txt"></textarea>
         </div>
         <div class="panel">
           <div class="panel-head">
@@ -1170,6 +1176,13 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <option value="inline">📝 Tả inline tự do</option>
             <option value="inline_bible">📋 Tả inline + hồ sơ (nhất quán)</option>
           </select>
+        </div>
+
+        <!-- 🎯 LOGLINE TOÀN VIDEO -->
+        <div class="t2-group" style="flex-wrap:wrap">
+          <span class="t2-glabel">🎯 Logline</span>
+          <textarea id="videoLogline" rows="2" placeholder="Tóm tắt toàn video (tự sinh khi tạo prompt) — mọi cảnh sẽ bám theo đây để không lạc chủ đề. Có thể sửa tay." oninput="state.videoLogline=this.value" style="flex:1;min-width:260px;font-size:12px;padding:6px 10px;resize:vertical"></textarea>
+          <button class="btn ghost" style="border-color:#0d9488;color:#0d9488;font-weight:600" onclick="regenVideoLogline()" title="Tóm tắt lại toàn video từ kịch bản">🎯 Tạo lại logline</button>
         </div>
 
         <!-- ③ TẠO PROMPT -->
@@ -2275,6 +2288,7 @@ const state = {
   minChars: 30,
   maxChars: 150,
   splitMode: 'smart',
+  videoLogline: '',   // 🎯 tóm tắt toàn video — nhồi vào MỌI prompt cảnh để không lạc chủ đề
   charactersV: [],
   backgroundsV: [],
   descMode: 'tag',
@@ -2924,8 +2938,8 @@ async function callLLMJson(prompt, opts = {}){
 }
 
 // Parse không ném lỗi — batch hỏng trả [] thay vì làm dừng cả run
-function safeParseJSON(text){
-  try { return parseJSON(text); } catch(e){ return []; }
+function safeParseJSON(text, validate){
+  try { return parseJSON(text, validate); } catch(e){ return []; }
 }
 
 /* ============================================================
@@ -3629,7 +3643,8 @@ function createEmptyWorkData(){
     charBible: {},
     bgBible: {},
     t3Era: '',
-    t3BgLayout: 'single'
+    t3BgLayout: 'single',
+    videoLogline: ''
   };
 }
 
@@ -3655,6 +3670,7 @@ function syncStateToCurrentProfile(){
   p.workData.bgBible = state.bgBible || {};
   p.workData.t3Era = state.t3Era || '';
   p.workData.t3BgLayout = state.t3BgLayout || 'single';
+  p.workData.videoLogline = state.videoLogline || '';
 }
 
 // Pull profile's workData → state.{script,scenes,...} (gọi sau khi switch / load)
@@ -3677,6 +3693,12 @@ function loadStateFromProfile(p){
   state.bgBible = wd.bgBible || {};
   state.t3Era = wd.t3Era || '';
   state.t3BgLayout = wd.t3BgLayout || 'single';
+  state.videoLogline = wd.videoLogline || '';
+  // logline đã lưu coi như khớp kịch bản đã lưu → set chữ ký để khỏi sinh lại thừa sau reload
+  const _lgScript = (wd.script || '').trim();
+  state.videoLoglineSig = (state.videoLogline && _lgScript) ? (_lgScript.length + '|' + _lgScript.slice(0, 60)) : '';
+  const loglineEl = document.getElementById('videoLogline');
+  if (loglineEl) loglineEl.value = state.videoLogline;
   const eraEl2 = document.getElementById('t3Era');
   if (eraEl2) eraEl2.value = state.t3Era;
   const bgLayoutEl2 = document.getElementById('t3BgLayout');
@@ -4262,12 +4284,51 @@ function switchSub(name){
   });
 }
 
+// 📄 Tải file văn bản lên ô kịch bản (.txt .md .srt .vtt ...)
+function loadScriptFile(input){
+  const file = input.files && input.files[0];
+  if (!file) return;
+  // Chặn file quá lớn (>5MB) — kịch bản text không bao giờ to vậy, tránh treo trình duyệt
+  if (file.size > 5 * 1024 * 1024) {
+    setStatus2('File quá lớn (>5MB) — đây có phải file văn bản kịch bản không?', 'error');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    let txt = String(reader.result || '');
+    // File .srt/.vtt: bỏ số thứ tự + dòng thời gian, chỉ giữ lời thoại
+    if (/\.(srt|vtt)$/i.test(file.name)) {
+      txt = txt.replace(/^WEBVTT.*$/im, '')
+        .replace(/^\d+\s*$/gm, '')
+        .replace(/^\d{1,2}:\d{2}:\d{2}[.,]\d{1,3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[.,]\d{1,3}.*$/gm, '')
+        .replace(/\n{3,}/g, '\n\n').trim();
+    }
+    const ta = document.getElementById('scriptInput');
+    if (ta) ta.value = txt;
+    state.script = txt;
+    state.videoLogline = ''; state.videoLoglineSig = '';   // kịch bản mới → bỏ logline cũ
+    const lgEl = document.getElementById('videoLogline'); if (lgEl) lgEl.value = '';
+    updateScriptCount();
+    saveState();
+    setStatus2(`✓ Đã nạp file "${file.name}" (${txt.length.toLocaleString()} ký tự). Bấm Chia Cảnh hoặc 🚀 Auto.`, 'ok');
+    input.value = '';   // reset để chọn lại cùng file vẫn kích hoạt
+  };
+  reader.onerror = () => { setStatus2('Không đọc được file: ' + (reader.error?.message || 'lỗi không rõ'), 'error'); input.value = ''; };
+  reader.readAsText(file, 'utf-8');
+}
+
 function cleanScript(){
   const ta = document.getElementById('scriptInput');
   let s = ta.value;
-  // Loại bỏ markdown headers, đường gạch, comment
-  s = s.replace(/^#+\s.*$/gm, '').replace(/^[-=*]{3,}$/gm, '').replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '');
-  s = s.replace(/\n{3,}/g, '\n\n').trim();
+  // Loại bỏ markdown headers + đường gạch ngang (markup nguyên dòng — an toàn)
+  s = s.replace(/^#+\s.*$/gm, '').replace(/^[-=*]{3,}$/gm, '');
+  // Marker đạo diễn/chú thích trong ngoặc (cười, nhạc, pause, cảnh 1, 0:05...) → bỏ.
+  // CHỈ bỏ khi nội dung trong ngoặc TRÔNG NHƯ chỉ dẫn — GIỮ nguyên ngoặc chứa nội dung thật.
+  const cueWords = /^(cười|khóc|thở dài|ngừng|im lặng|lặng|nhạc|nhạc nền|âm thanh|hiệu ứng|sfx|sound|music|pause|beat|laughs?|sighs?|silence|cut|fade|transition|b-?roll|cảnh\s*\d+|scene\s*\d+|\d{1,2}:\d{2}(?::\d{2})?)\b/i;
+  s = s.replace(/\(([^()]{0,40})\)/g, (m, inner) => cueWords.test(inner.trim()) ? '' : m);
+  s = s.replace(/\[([^\[\]]{0,40})\]/g, (m, inner) => cueWords.test(inner.trim()) ? '' : m);
+  s = s.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   ta.value = s;
   state.script = s;
   updateScriptCount();
@@ -5333,6 +5394,51 @@ const VISUAL_METAPHOR_RULE = `
 - Reuse a small set of recurring motifs within one video for cohesion.
 `;
 
+// 🎯 Sinh LOGLINE toàn video (1 lần) → nhồi vào MỌI prompt cảnh để không lạc chủ đề.
+// force=true: tạo lại dù đã có. Cache ở state.videoLogline. Trả chuỗi logline (hoặc '' nếu không có kịch bản).
+async function genVideoLogline(force){
+  const script = (state.script || '').trim();
+  if (!script) return state.videoLogline || '';
+  // Chữ ký kịch bản → đổi kịch bản thì logline cũ coi như hết hạn, tự sinh lại
+  const sig = script.length + '|' + script.slice(0, 60);
+  const fresh = state.videoLogline && state.videoLogline.trim() && state.videoLoglineSig === sig;
+  if (!force && fresh) return state.videoLogline;
+  const p = getProfile();
+  const ngach = p && p.ngach ? p.ngach : '';
+  const prompt = `Đọc kịch bản video dưới đây và viết LOGLINE tóm tắt TOÀN VIDEO để mọi cảnh bám đúng chủ đề khi tạo ảnh.
+${ngach ? 'Ngách kênh: ' + ngach + '\n' : ''}Trả về CHỈ 1 JSON object:
+{"logline":"<2-4 câu tiếng Việt: nội dung/câu chuyện chính + nhân vật xuyên suốt + bối cảnh & thời đại chính + tông cảm xúc. Cụ thể, gọn. KHÔNG liệt kê từng cảnh, KHÔNG kể tuần tự.>"}
+
+KỊCH BẢN:
+"""
+${script.slice(0, 6000)}
+"""`;
+  try {
+    const o = await callLLMJson(prompt, {
+      maxTokens: 400,
+      validate: o => o && typeof o.logline === 'string' && o.logline.trim().length > 10
+    });
+    state.videoLogline = o.logline.trim();
+    state.videoLoglineSig = sig;
+    const el = document.getElementById('videoLogline');
+    if (el) el.value = state.videoLogline;
+    saveState();
+    return state.videoLogline;
+  } catch (e) {
+    console.warn('genVideoLogline:', e.message);
+    return state.videoLogline || '';
+  }
+}
+
+// Nút 🎯 Tạo lại logline (UI)
+async function regenVideoLogline(){
+  syncTool2();
+  if (!state.script || !state.script.trim()) return setStatus2('Cần kịch bản trước khi tạo logline.', 'error');
+  setStatus2('🎯 Đang tóm tắt toàn video (logline)...', 'working');
+  const lg = await genVideoLogline(true);
+  setStatus2(lg ? '✓ Đã tạo logline — kiểm tra/sửa nếu cần. Mọi prompt cảnh sẽ bám theo nó.' : '⚠️ Chưa tạo được logline.', lg ? 'ok' : 'info');
+}
+
 function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO){
   const highDetail = document.getElementById('highDetailMode')?.checked;
   // Hai chế độ ĐỘC LẬP: shortMode = nhân vật do ảnh reference lo (đồng nhất); highDetail = môi trường tả dày.
@@ -5418,11 +5524,15 @@ ${dm === 'tag' ? `- Nhân vật chính: ghi tag [tên-nhân-vật] + kèm cụm 
 🎨 Môi trường: giữ đúng tông màu và phong cách của kênh, nhất quán mọi cảnh.
 ` : '';
 
+      // 🎯 Logline toàn video — áp cho MỌI cảnh để không lạc chủ đề / không đứt mạch giữa batch
+      const loglineBlock = (state.videoLogline && state.videoLogline.trim())
+        ? `\n🎯 BỐI CẢNH TOÀN VIDEO (mọi cảnh PHẢI bám vào đây):\n"${state.videoLogline.trim()}"\n- Mọi cảnh — kể cả cảnh trừu tượng / câu hỏi tu từ / câu chuyển ý — phải nằm trong THẾ GIỚI HÌNH ẢNH của video này (đúng nhân vật, bối cảnh, thời đại, tông màu nêu trên). KHÔNG vẽ hình generic lạc khỏi câu chuyện.\n`
+        : '';
       const prompt = `Bạn là prompt engineer G-Labs (Imagen / Nano Banana). Tạo prompt cảnh cho mỗi cảnh bên dưới.
 
 PROFILE KÊNH:
 ${profileContext}
-
+${loglineBlock}
 SCENE AESTHETIC (dùng cho MỌI cảnh): "${p.sceneStyle || 'consistent visual style across all scenes'}"
 
 PROMPT RULES / NEGATIVE: "${p.promptRules || ''}"
@@ -5535,6 +5645,7 @@ async function genSingleScenePrompt(id){
   if (!p) return setStatus2('Cần Profile trước.', 'error');
   const idx = state.scenes.findIndex(s => s.id === id);
   if (idx < 0) return;
+  await genVideoLogline(false);
   const scene = state.scenes[idx];
   const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}`;
   // Lấy cảnh ngay trước làm ngữ cảnh liên tục
@@ -5553,9 +5664,13 @@ async function genSingleScenePrompt(id){
   setStatus2(`Đang tạo lại prompt cảnh [${id}]...`, 'working');
   try {
     const prompt = buildSceneGenPrompt([scene], prevSceneCtx, p, profileContext, neighborVO);
-    let reply = await callClaude(prompt, 1000);
-    let parsed = safeParseJSON(reply);
-    if (!parsed.length) { reply = await callClaude(prompt, 1000); parsed = safeParseJSON(reply); }
+    // Thinking OFF + validate (mảng có ít nhất 1 {prompt})
+    const vArr = a => Array.isArray(a) && a.some(x => x && x.prompt);
+    let parsed = [];
+    for (let attempt = 0; attempt < 2 && !parsed.length; attempt++) {
+      const reply = await callLLM(prompt, { maxTokens: 1000, _override: { thinking: false } });
+      parsed = safeParseJSON(reply, vArr);
+    }
     // Lấy prompt đầu tiên trả về (chỉ có 1 cảnh) — không phụ thuộc ID AI trả
     const got = parsed.find(x => x && x.prompt);
     if (got && got.prompt) {
@@ -5765,6 +5880,10 @@ async function doGenerateScenePrompts(){
     return setStatus2(`Tất cả ${state.scenes.length} cảnh đã có prompt. Muốn tạo lại từ đầu? Bấm "🗑 Xoá hết" rồi tạo lại.`, 'info');
   }
 
+  // 🎯 Đảm bảo có logline (tự sinh lại nếu kịch bản đã đổi) → mọi cảnh bám chủ đề toàn video
+  setStatus2('🎯 Kiểm tra logline toàn video...', 'working');
+  await genVideoLogline(false);
+
   setStatus2(already > 0
     ? `Chạy tiếp: đã có ${already} prompt, còn ${todo.length} cảnh...`
     : 'AI đang sinh prompt G-Labs...', 'working');
@@ -5793,9 +5912,13 @@ async function doGenerateScenePrompts(){
     if (bPrev) neighborVO += `Cảnh trước batch [${bPrev.id}]: "${(bPrev.text || '').slice(0, 180)}"\n`;
     if (bNext) neighborVO += `Cảnh sau batch [${bNext.id}]: "${(bNext.text || '').slice(0, 180)}"`;
     const prompt = buildSceneGenPrompt(batch, seedCtx, p, profileContext, neighborVO);
-    let reply = await callClaude(prompt, 4000);
-    let parsed = safeParseJSON(reply);
-    if (!parsed.length) { reply = await callClaude(prompt, 4000); parsed = safeParseJSON(reply); }
+    // Thinking OFF + validate (mảng có ít nhất 1 {prompt}) — chống DeepSeek nhét suy luận vào output
+    const vArr = a => Array.isArray(a) && a.some(x => x && x.prompt);
+    let parsed = [];
+    for (let attempt = 0; attempt < 2 && !parsed.length; attempt++) {
+      const reply = await callLLM(prompt, { maxTokens: 4000, _override: { thinking: false } });
+      parsed = safeParseJSON(reply, vArr);
+    }
     // CHỈ gán cho cảnh thuộc batch này → không đè nhầm cảnh khác
     const batchIds = batch.map(s => s.id);
     const batchIdSet = new Set(batchIds);
@@ -5815,8 +5938,18 @@ async function doGenerateScenePrompts(){
 
   try {
     if (lanes > 1) {
-      // SONG SONG (nhiều key): chạy các batch cùng lúc — đổi liên kết mạch giữa batch lấy tốc độ
-      await runConcurrent(batches, b => processSceneBatch(b, ''), lanes, () => state.cancelRequested);
+      // SONG SONG (nhiều key): chạy batch ĐẦU trước làm "mỏ neo" phong cách mở đầu,
+      // rồi chạy các batch còn lại song song — mỗi batch tự lấy prompt cảnh NGAY TRƯỚC làm mồi NẾU đã có
+      // → đỡ đứt tông ở mối nối batch. Mối nối sâu vẫn dựa vào 🎯 logline + VO lân cận.
+      const seedFor = (b) => {
+        const fi = state.scenes.findIndex(s => s.id === b[0].id);
+        if (fi > 0) { const pv = state.scenes[fi - 1]; const pp = state.scenePrompts[pv.id]; if (pp && pp.trim()) return `[${pv.id}] ${pp.slice(0, 220)}`; }
+        return '';
+      };
+      if (batches.length) await processSceneBatch(batches[0], prevSceneCtx);
+      const rest = batches.slice(1);
+      if (!state.cancelRequested && rest.length)
+        await runConcurrent(rest, b => processSceneBatch(b, seedFor(b)), lanes, () => state.cancelRequested);
     } else {
       // TUẦN TỰ (1 key): giữ liên kết mạch hình ảnh giữa các batch
       for (const batch of batches) {
@@ -6081,6 +6214,11 @@ async function runAutoTool2(){
     } else {
       _autoSetStep(6, 'skip');
     }
+    if (stopped()) throw 'STOP';
+
+    // 🎯 Logline toàn video — tạo TRƯỚC bước prompt để mọi cảnh bám đúng chủ đề (tự sinh lại nếu kịch bản đổi)
+    setStatus2('🎯 Đang tóm tắt toàn video (logline)...', 'working');
+    await genVideoLogline(false);
     if (stopped()) throw 'STOP';
 
     // BƯỚC 7 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
@@ -8356,11 +8494,12 @@ ${batch.map(s => {
   return `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | duration: ${dur}s${gLabsPrompt}`;
 }).join('\n\n')}`;
 
-      let reply = await callClaude(prompt, 4000);
-      let parsed = safeParseJSON(reply);
-      if (!parsed.length) {
-        reply = await callClaude(prompt, 4000);
-        parsed = safeParseJSON(reply);
+      // Thinking OFF + validate (mảng có ít nhất 1 {prompt})
+      const vArr = a => Array.isArray(a) && a.some(x => x && x.prompt);
+      let parsed = [];
+      for (let attempt = 0; attempt < 2 && !parsed.length; attempt++) {
+        const reply = await callLLM(prompt, { maxTokens: 4000, _override: { thinking: false } });
+        parsed = safeParseJSON(reply, vArr);
       }
       const batchIds = batch.map(s => s.id);
       const batchIdSet = new Set(batchIds);
