@@ -2813,22 +2813,32 @@ async function callClaudeWithImage(prompt, base64, mediaType, maxTokens = 800){
    PARSE JSON (chịu được markdown wrappers)
 ============================================================ */
 function parseJSON(text){
-  const c = text.replace(/```json|```/g, '').trim();
-  const s = c.search(/[\[{]/);
-  if (s === -1) throw new Error('Không tìm thấy JSON');
-  const o = c[s], cl = o === '[' ? ']' : '}';
-  let d = 0, e = -1, inS = false, esc = false;
-  for (let i = s; i < c.length; i++) {
-    const ch = c[i];
-    if (esc) { esc = false; continue; }
-    if (ch === '\\') { esc = true; continue; }
-    if (ch === '"') { inS = !inS; continue; }
-    if (inS) continue;
-    if (ch === o) d++;
-    if (ch === cl) { d--; if (d === 0) { e = i; break; } }
+  const c = String(text || '').replace(/```json|```/g, '').trim();
+  // Quét MỌI khối JSON top-level (chống DeepSeek chèn suy luận có dấu [ ] { } rải rác trước/sau JSON thật)
+  const blocks = [];
+  let i = 0;
+  while (i < c.length) {
+    const o = c[i];
+    if (o !== '[' && o !== '{') { i++; continue; }
+    const cl = o === '[' ? ']' : '}';
+    let d = 0, end = -1, inS = false, esc = false;
+    for (let k = i; k < c.length; k++) {
+      const ch = c[k];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inS = !inS; continue; }
+      if (inS) continue;
+      if (ch === o) d++;
+      else if (ch === cl) { d--; if (d === 0) { end = k; break; } }
+    }
+    if (end === -1) { i++; continue; }
+    try { blocks.push(JSON.parse(c.slice(i, end + 1))); } catch (_) {}
+    i = end + 1;   // bỏ qua khối đã xét → chỉ lấy top-level
   }
-  if (e === -1) throw new Error('JSON không hợp lệ');
-  return JSON.parse(c.slice(s, e + 1));
+  if (!blocks.length) throw new Error('Không tìm thấy JSON hợp lệ');
+  // Chọn khối TO NHẤT (nhiều nội dung nhất) — thường là câu trả lời thật, không phải ví dụ trong suy luận
+  blocks.sort((a, b) => JSON.stringify(b).length - JSON.stringify(a).length);
+  return blocks[0];
 }
 
 // Parse không ném lỗi — batch hỏng trả [] thay vì làm dừng cả run
