@@ -1122,6 +1122,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
               <input type="file" accept=".srt,.txt,.vtt" style="display:none" onchange="loadAutoSrt(this)">
             </label>
             <button class="btn ghost sm" id="autoSrtClear" style="display:none;color:var(--red);border-color:var(--red)" onclick="clearAutoSrt()" title="Bỏ file SRT đã đính">✗</button>
+            <label class="t2-opt" style="border:1px solid var(--border);border-radius:8px;padding:5px 10px;background:var(--surface)" title="Cuối Auto: tự rà chất lượng prompt (cảnh đã gán nhân vật/bối cảnh nhưng prompt không có, prompt trống/lẫn rác, sai chế độ không-nhân-vật...) và TẠO LẠI những cảnh lỗi 1 lượt.">
+              <input type="checkbox" id="autoVerifyMode" style="width:auto;margin:0"> 🔍 Kiểm tra + tạo lại cảnh lỗi cuối Auto
+            </label>
             <span class="auto-hint">Một nút: Lọc → Chia cảnh → <strong>Căn timing</strong> → Tách cảnh dài → <strong>Căn lại</strong> → Quét → Gán → Prompt G-Labs → Ảnh B.<br>Đính SRT → căn độ dài thật TRƯỚC khi tách (tách chính xác), rồi căn lại cho cảnh con. Dừng giữa chừng vẫn giữ tiến độ.<br><span id="autoSrtInfo" style="color:#0d9488;font-weight:600"></span></span>
           </div>
           <div id="autoBar"></div>
@@ -4441,6 +4444,51 @@ function _diffScenesScript(){
   return { exact: missN === 0 && extraN === 0, missN, extraN, oLen: oW.length, sLen: sW.length };
 }
 
+// Kiểm tra CHẤT LƯỢNG 1 prompt cảnh (local, không gọi AI). Trả về mảng vấn đề (rỗng = đạt).
+function _validateScenePrompt(s, prompt){
+  const issues = [];
+  const pr = String(prompt || '').trim();
+  const words = pr.split(/\s+/).filter(Boolean);
+  if (!pr || words.length < 12) { issues.push('trống/quá ngắn'); return issues; }
+  if (words.length > 200) issues.push('quá dài bất thường');
+  // Lẫn nhãn phân loại / ID cảnh / suy luận
+  if (/\bLO[ẠA]I\s*\d|\bType\s*\d|\[\s*\d{3}\s*\]/.test(pr)) issues.push('lẫn nhãn loại/ID');
+  if (/(dấu chấm|Tuy nhiên|kịch bản|viết thường|câu hoàn chỉnh|===SCENE===)/i.test(pr)) issues.push('lẫn suy luận');
+  const lower = pr.toLowerCase();
+  const dm = state.descMode || 'tag';
+  const noChar = document.getElementById('noCharMode')?.checked;
+  if (noChar) {
+    if (/\b(person|people|man|woman|men|women|boy|girl|child|children|human|humans|character|narrator|gardener|farmer|figure|someone|she|he)\b/.test(lower))
+      issues.push('CÓ NGƯỜI dù chế độ Không-nhân-vật');
+  } else if (dm === 'tag') {
+    // Chỉ ở chế độ Tag: nhân vật/bối cảnh đã gán PHẢI xuất hiện trong prompt (dạng [tag])
+    const nm = (s.character || '').trim();
+    if (nm) {
+      const tok = nm.toLowerCase().split(/[\s,\[\]\-]+/).filter(w => w.length >= 3);
+      if (tok.length && !tok.some(t => lower.includes(t))) issues.push('THIẾU nhân vật đã gán: ' + nm);
+    }
+    const bg = (s.background || '').trim();
+    if (bg) {
+      const btok = bg.toLowerCase().split(/[\s,\[\]\-]+/).filter(w => w.length >= 3);
+      if (btok.length && !btok.some(t => lower.includes(t))) issues.push('THIẾU bối cảnh đã gán: ' + bg);
+    }
+  }
+  // Còn dính style người-que khi kênh KHÔNG phải 2D
+  const sc = (getProfile()?.sceneStyle || '').toLowerCase();
+  const isCartoon = /cartoon|flat|2d|anime|stick|hand.drawn/.test(sc);
+  if (!isCartoon && /(stick limbs|off-white face|mitten)/i.test(pr)) issues.push('còn style người-que');
+  return issues;
+}
+
+// Quét tất cả cảnh CÓ prompt → trả về danh sách cảnh lỗi {id, issues}
+function _scanBadPrompts(){
+  return state.scenes
+    .map(s => ({ s, pr: state.scenePrompts[s.id] }))
+    .filter(x => x.pr && x.pr.trim())
+    .map(x => ({ id: x.s.id, issues: _validateScenePrompt(x.s, x.pr) }))
+    .filter(x => x.issues.length);
+}
+
 function verifyScenesAgainstScript(){
   syncTool2();
   if (!state.script || !state.script.trim()) return setStatus2('Chưa có kịch bản gốc.', 'error');
@@ -4925,6 +4973,18 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
   }
 }
 
+// Luật biến câu TRỪU TƯỢNG thành cảnh CỤ THỂ qua ẩn dụ thị giác (không talking-head, không panel chữ)
+const VISUAL_METAPHOR_RULE = `
+🎭 VISUAL METAPHOR RULE — many narration lines are abstract (ideas, emotions, the passing of time, cause and effect, statistics, generalizations). NEVER render such a line as a plain talking head or a text panel. Instead invent ONE concrete, depictable scene that carries the idea through tangible objects, actions and staging.
+- Map the concept to props: lost opportunity → a door closing or a path forking away; passing time → an hourglass, a burning-down candle, a clock; growth → a rising stack or tower; a hidden deal → a sealed or unfurling document; looming danger → a long shadow or cracking ground; a hard choice → a fork in the road; a burden → a heavy weight on the shoulders. Pick objects that fit the script's era and setting.
+- MATCH THE METAPHOR TO THE STYLE'S REALISM. For stylized looks (2D cartoon, illustration, infographic, anime) overt symbolic props and exaggerated staging are welcome. For photorealistic / live-action-cinematic looks, keep metaphors grounded and subtle — real objects in plausible real settings, carrying meaning through composition, lighting, gesture and depth of field rather than floating or glowing symbols, so the shot never looks fake or absurd.
+- Respect whatever character design, era and style are defined for this profile; the metaphor only adds props, staging and mood — it never overrides them.
+- Convey meaning through what is visibly in the frame; describe only the scene, WITHOUT "symbolizing/representing" clauses. Follow this profile's own rule on whether any text may appear in the image.
+- Vary camera framing/angle across neighboring scenes for rhythm.
+- If a line is ALREADY concrete (a specific action, place or event), depict it directly — do not force a metaphor.
+- Reuse a small set of recurring motifs within one video for cohesion.
+`;
+
 function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO){
   const highDetail = document.getElementById('highDetailMode')?.checked;
   // Hai chế độ ĐỘC LẬP: shortMode = nhân vật do ảnh reference lo (đồng nhất); highDetail = môi trường tả dày.
@@ -5027,7 +5087,7 @@ ${bgHeader}
 ${bgCtx || '(không có)'}
 
 Với mỗi cảnh, TRƯỚC TIÊN xác định LOẠI CẢNH từ nội dung VO, sau đó viết prompt phù hợp:
-${brollRule}
+${brollRule}${VISUAL_METAPHOR_RULE}
 🔹 LOẠI 1 — NHÂN VẬT TRONG BỐI CẢNH (VO nói về hành động của người):
 ${mode1Rule}
 
@@ -5652,13 +5712,30 @@ async function runAutoTool2(){
     await autoAddPromptBForLongScenes(true);
     _autoSetStep(8, 'done');
 
+    // KIỂM TRA CUỐI (tuỳ chọn) — rà chất lượng prompt + tạo lại cảnh lỗi 1 lượt
+    let verifyNote = '';
+    if (document.getElementById('autoVerifyMode')?.checked && !stopped()) {
+      let bad = _scanBadPrompts();
+      if (bad.length) {
+        setStatus2(`🔍 Kiểm tra: ${bad.length} cảnh prompt nghi lỗi → đang tạo lại...`, 'working');
+        bad.forEach(b => { delete state.scenePrompts[b.id]; });   // xoá để gen lại
+        clearCancel();
+        await doGenerateScenePrompts();                           // chỉ gen các cảnh vừa xoá
+        const still = _scanBadPrompts();
+        verifyNote = ` · 🔍 đã tạo lại ${bad.length} cảnh lỗi${still.length ? `, còn ${still.length} cảnh nghi lỗi (xem Console)` : ' — ok'}.`;
+        if (still.length) console.warn('Cảnh prompt còn nghi lỗi:', still);
+      } else {
+        verifyNote = ' · 🔍 tất cả prompt đạt.';
+      }
+    }
+
     // --- Tổng kết ---
     const secs = Math.round((Date.now() - t0) / 1000);
     const missing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
     setStatus2(
       missing > 0
-        ? `✓ Auto xong (${secs}s) — còn ${missing} cảnh prompt lỗi. Bấm "🔧 Tạo nốt cảnh thiếu", rồi sang tab "🎨 Prompt G-Labs" để copy.`
-        : `🎉 Auto xong toàn bộ ${state.scenes.length} cảnh trong ${secs}s! Mở tab "🎨 Prompt G-Labs" → "📋 Sao chép tất cả" → paste sang G-Labs/Flow để gen ảnh.`,
+        ? `✓ Auto xong (${secs}s) — còn ${missing} cảnh prompt lỗi. Bấm "🔧 Tạo nốt cảnh thiếu", rồi sang tab "🎨 Prompt G-Labs" để copy.${verifyNote}`
+        : `🎉 Auto xong toàn bộ ${state.scenes.length} cảnh trong ${secs}s!${verifyNote} Mở tab "🎨 Prompt G-Labs" → "📋 Sao chép tất cả" → paste sang G-Labs/Flow để gen ảnh.`,
       missing > 0 ? 'info' : 'ok'
     );
     saveState(true);
