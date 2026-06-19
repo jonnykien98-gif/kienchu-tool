@@ -2570,6 +2570,24 @@ async function runConcurrent(items, worker, limit, shouldStop){
   return results;
 }
 
+// Tự thử lại khi lỗi MẠNG (Failed to fetch / Load failed) hoặc server bận (429 / 5xx) — giãn nhịp tăng dần.
+// Lỗi nội dung (400 sai model, 401 sai key...) KHÔNG retry.
+async function _withRetry(fn){
+  const MAX = 3;        // tổng số lần thử
+  let delay = 600;      // ms, nhân dần
+  for (let attempt = 1; ; attempt++){
+    try { return await fn(); }
+    catch (e) {
+      const msg = String(e?.message || e);
+      const retryable = /failed to fetch|load failed|networkerror|network error/i.test(msg)
+        || /\bAPI (429|5\d\d)\b/.test(msg);
+      if (!retryable || attempt >= MAX) throw e;
+      await new Promise(r => setTimeout(r, delay + Math.random() * 300));
+      delay *= 2.2;
+    }
+  }
+}
+
 async function callLLM(prompt, opts = {}){
   const provider = opts._override?.provider || localStorage.getItem('api_provider') || 'anthropic';
   const model = opts._override?.model || localStorage.getItem('api_model') || MODELS[provider][0].id;
@@ -2586,13 +2604,15 @@ async function callLLM(prompt, opts = {}){
     throw new Error(`${provider} không đọc được ảnh. Đổi sang Anthropic/OpenAI cho tác vụ phân tích ảnh.`);
   }
 
-  if (provider === 'anthropic') return callAnthropic(messages, model, key, maxTokens);
-  if (provider === 'openai')    return callOpenAI(messages, model, key, maxTokens);
-  if (provider === 'deepseek') {
-    const thinking = opts._override?.thinking ?? (localStorage.getItem('api_thinking') === '1');
-    return callOpenAICompat(messages, model, key, maxTokens, 'https://api.deepseek.com/v1/chat/completions', { thinking });
-  }
-  throw new Error('Provider không hỗ trợ: ' + provider);
+  const thinking = opts._override?.thinking ?? (localStorage.getItem('api_thinking') === '1');
+  const json = !!opts.json;   // ép JSON mode (OpenAI/DeepSeek)
+  const doCall = () => {
+    if (provider === 'anthropic') return callAnthropic(messages, model, key, maxTokens);
+    if (provider === 'openai')    return callOpenAI(messages, model, key, maxTokens, { json });
+    if (provider === 'deepseek')  return callOpenAICompat(messages, model, key, maxTokens, 'https://api.deepseek.com/v1/chat/completions', { thinking, json });
+    throw new Error('Provider không hỗ trợ: ' + provider);
+  };
+  return _withRetry(doCall);
 }
 
 async function callAnthropic(messages, model, key, maxTokens){
@@ -2650,7 +2670,7 @@ async function callAnthropic(messages, model, key, maxTokens){
   return d.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
 }
 
-async function callOpenAI(messages, model, key, maxTokens){
+async function callOpenAI(messages, model, key, maxTokens, opts = {}){
   // Convert Anthropic-style image content to OpenAI format if needed
   const oaMessages = messages.map(m => {
     if (typeof m.content === 'string') return m;
@@ -2671,6 +2691,7 @@ async function callOpenAI(messages, model, key, maxTokens){
   } else {
     payload.max_tokens = maxTokens;
   }
+  if (opts.json) payload.response_format = { type: 'json_object' };
   const body = JSON.stringify(payload);
 
   // Try Vercel proxy first
@@ -2715,6 +2736,8 @@ async function callOpenAICompat(messages, model, key, maxTokens, endpoint, opts 
   // 🧠 Bật Thinking cho model hybrid (DeepSeek). Tắt = không gửi field → dùng mặc định của model (an toàn).
   // Nếu DeepSeek V4 dùng cú pháp khác (vd model id riêng, hay field "reasoning"), chỉ cần sửa đúng 1 dòng dưới.
   if (opts.thinking === true) payload.thinking = { type: 'enabled' };
+  // Ép trả JSON hợp lệ (tránh model trả văn xuôi → parse lỗi)
+  if (opts.json) payload.response_format = { type: 'json_object' };
   const body = JSON.stringify(payload);
   const r = await fetch(endpoint, {
     method: 'POST',
@@ -4725,8 +4748,14 @@ ${allText.slice(0, 8000)}
 
 Trả về CHỈ JSON:
 {"characters": ["name1", "name2"], "backgrounds": ["bg1", "bg2"]}`;
-    const reply = await callClaude(prompt, bibleMode ? 1500 : 800);
-    const data = parseJSON(reply);
+    const maxTok = bibleMode ? 1500 : 800;
+    let data;
+    try {
+      data = parseJSON(await callLLM(prompt, { maxTokens: maxTok, json: true }));
+    } catch (e1) {
+      // Thử lại 1 lần (model đôi khi trả văn xuôi) — vẫn bật JSON mode
+      data = parseJSON(await callLLM(prompt, { maxTokens: maxTok, json: true }));
+    }
     if (bibleMode) {
       state.charBible = {}; state.bgBible = {};
       state.charactersV = (data.characters || []).map(c => {
