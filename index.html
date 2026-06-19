@@ -1117,15 +1117,15 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <div class="auto-row">
             <button class="auto-btn" id="autoRunBtn" onclick="runAutoTool2()">🚀 Auto: Chạy hết Tool 2</button>
             <button class="auto-stop" id="autoStopBtn" style="display:none" onclick="stopAutoTool2()">⏸ Dừng</button>
-            <label class="btn ghost sm" style="cursor:pointer;border-color:#0d9488;color:#0d9488;white-space:nowrap" title="Đính file SRT (timing thật từ giọng đọc) → Auto sẽ tự căn độ dài từng cảnh khớp audio. Để trống thì dùng độ dài ước lượng.">
-              ⏱ SRT căn timing
-              <input type="file" accept=".srt,.txt,.vtt" style="display:none" onchange="loadAutoSrt(this)">
+            <label class="btn ghost sm" style="cursor:pointer;border-color:#0d9488;color:#0d9488;white-space:nowrap" title="Đính file MP3 giọng đọc → Auto sẽ transcribe (Whisper, dùng key/model ở Tool 8) & căn độ dài từng cảnh khớp audio. Để trống thì dùng độ dài ước lượng.">
+              🎤 MP3 căn timing
+              <input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" style="display:none" onchange="loadAutoAudio(this)">
             </label>
             <button class="btn ghost sm" id="autoSrtClear" style="display:none;color:var(--red);border-color:var(--red)" onclick="clearAutoSrt()" title="Bỏ file SRT đã đính">✗</button>
             <label class="t2-opt" style="border:1px solid var(--border);border-radius:8px;padding:5px 10px;background:var(--surface)" title="Cuối Auto: tự rà chất lượng prompt (cảnh đã gán nhân vật/bối cảnh nhưng prompt không có, prompt trống/lẫn rác, sai chế độ không-nhân-vật...) và TẠO LẠI những cảnh lỗi 1 lượt.">
               <input type="checkbox" id="autoVerifyMode" style="width:auto;margin:0"> 🔍 Kiểm tra + tạo lại cảnh lỗi cuối Auto
             </label>
-            <span class="auto-hint">Một nút: Lọc → Chia cảnh → <strong>Căn timing</strong> → Tách cảnh dài → <strong>Căn lại</strong> → Quét → Gán → Prompt G-Labs → Ảnh B.<br>Đính SRT → căn độ dài thật TRƯỚC khi tách (tách chính xác), rồi căn lại cho cảnh con. Dừng giữa chừng vẫn giữ tiến độ.<br><span id="autoSrtInfo" style="color:#0d9488;font-weight:600"></span></span>
+            <span class="auto-hint">Một nút: Lọc → Chia cảnh (+ <strong>Gộp theo ý AI</strong>) → Căn timing → Tách → Căn lại → Quét → Gán → Prompt → Ảnh B.<br>Đính <strong>MP3</strong> → transcribe (Whisper, key Tool 8) + căn độ dài thật. Dừng giữa chừng vẫn giữ tiến độ.<br><span id="autoSrtInfo" style="color:#0d9488;font-weight:600"></span></span>
           </div>
           <div id="autoBar"></div>
         </div>
@@ -1138,12 +1138,13 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             <option value="smart" selected>Chia thông minh (AI) ★</option>
           </select>
           <button class="btn primary" onclick="doSplit()">⊟ Chia Cảnh</button>
-          <button class="btn ghost" onclick="mergeFragmentScenes()" title="Nối các CÂU VỤN (mảnh chưa hoàn chỉnh / từ lẻ) thành câu trọn vẹn. Dùng sau 'Chia nhanh'. Tức thì, không gọi AI, không mất chữ.">🧩 Gộp câu vụn</button>
+          <button class="btn ghost" onclick="mergeFragmentScenes()" title="Nối các CÂU VỤN (mảnh chưa hoàn chỉnh / từ lẻ) thành câu trọn vẹn. Tức thì, không gọi AI, không mất chữ.">🧩 Gộp câu vụn</button>
+          <button class="btn ghost" onclick="mergeScenesByMeaningAI()" title="AI gộp các cảnh LIÊN TIẾP cùng 1 ý hình ảnh (chỉ NỐI, không cắt) → bớt vụn. Dùng sau 'Chia nhanh' + 'Gộp câu vụn'.">🧩 Gộp theo ý (AI)</button>
           <button class="btn ghost" onclick="splitLongScenes()" title="Tách các cảnh dài thành nhiều cảnh con (cắt tại dấu phẩy / — / :) để mỗi cảnh có 1 ảnh, nhịp nhanh hơn">✂ Tách cảnh dài</button>
           <div class="batch-control" title="Giây tối đa cho mỗi ảnh — cảnh dài hơn ngưỡng này sẽ bị tách"><span>s/ảnh:</span><input type="number" id="maxSecPerImg" value="8" min="3" max="30"></div>
-          <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Đính file SRT để lấy ĐỘ DÀI THẬT từ giọng đọc — thay cho độ dài ước lượng. Chia cảnh trước, rồi bấm nút này.">
-            ⏱ Căn độ dài từ SRT
-            <input type="file" accept=".srt,.txt" style="display:none" onchange="applySRTTiming(this)">
+          <label class="btn ghost" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Đính MP3 giọng đọc → transcribe (Whisper, key Tool 8) lấy ĐỘ DÀI THẬT từng cảnh. Chia cảnh trước, rồi bấm nút này.">
+            🎤 Căn timing từ MP3
+            <input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" style="display:none" onchange="applyAudioTiming(this)">
           </label>
           <button class="btn ghost" onclick="verifyScenesAgainstScript()" title="So sánh tất cả cảnh với kịch bản gốc — phát hiện mất từ / thêm từ">🔍 So Sánh</button>
         </div>
@@ -4426,6 +4427,69 @@ function mergeFragmentScenes(){
   setStatus2(`✓ Đã gộp câu vụn: ${before} → ${state.scenes.length} cảnh (mỗi cảnh là 1 câu hoàn chỉnh).`, 'ok');
 }
 
+// 🧩 Gộp theo Ý (AI): AI quyết định các cảnh LIÊN TIẾP nào thuộc cùng 1 ý hình ảnh → gộp.
+// AI CHỈ trả về cách NHÓM (không sửa chữ) → app tự nối text → KHÔNG mất chữ, KHÔNG ra từ lẻ.
+async function mergeScenesByMeaningAI(silent){
+  if (!silent) syncTool2();
+  if (!state.scenes || !state.scenes.length) { if (!silent) setStatus2('Chưa có cảnh để gộp.', 'error'); return; }
+  if (state.scenes.length < 2) return;
+  const hasWork = Object.keys(state.scenePrompts || {}).length || Object.keys(state.sceneImages || {}).length;
+  if (!silent && hasWork && !confirm('Gộp theo ý sẽ đổi ranh giới cảnh → prompt/ảnh đã tạo sẽ bị xoá. Tiếp tục?')) return;
+
+  const N = state.scenes.length;
+  const maxChars = state.maxChars || 150;
+  const list = state.scenes.map((s, i) => `${i + 1}. ${(s.text || '').replace(/\s+/g, ' ').trim()}`).join('\n');
+  const prompt = `Dưới đây là danh sách CẢNH đã đánh số (mỗi dòng 1 cảnh, là 1 câu).
+Nhiệm vụ: GỘP các cảnh LIÊN TIẾP thuộc CÙNG 1 Ý HÌNH ẢNH (vẽ được chung 1 khung hình) vào 1 nhóm, để bớt vụn.
+
+QUY TẮC BẮT BUỘC:
+- CHỈ gộp các cảnh LIÊN TIẾP. TUYỆT ĐỐI KHÔNG cắt, KHÔNG đổi thứ tự, KHÔNG bỏ sót cảnh nào.
+- 1 ý/đối tượng/khoảnh khắc = 1 nhóm. Câu mô tả tiếp cùng 1 cảnh → gộp chung. Sang ý mới → nhóm mới.
+- ĐỪNG gộp quá to: mỗi nhóm tối đa ~3 câu hoặc ~${maxChars} ký tự.
+- Câu đã đủ 1 ý rõ → để riêng 1 nhóm.
+
+Trả về JSON array các nhóm, mỗi nhóm là mảng SỐ THỨ TỰ cảnh. MỖI số từ 1 đến ${N} xuất hiện ĐÚNG 1 LẦN, đúng thứ tự tăng dần.
+VD: [[1],[2,3],[4],[5,6,7]]
+CHỈ in JSON, không giải thích.
+
+DANH SÁCH (${N} cảnh):
+${list}`;
+
+  try {
+    if (!silent) setStatus2('AI đang gộp cảnh theo ý...', 'working');
+    const reply = await callLLM(prompt, { maxTokens: Math.min(8000, 1500 + N * 12) });
+    const groups = parseJSON(reply);
+    // Kiểm tra hợp lệ: phải phủ đúng 1..N, mỗi số 1 lần, đúng thứ tự
+    const flat = Array.isArray(groups) ? groups.flat() : [];
+    const valid = Array.isArray(groups) && flat.length === N && flat.every((n, i) => n === i + 1);
+    if (!valid) {
+      console.warn('Gộp theo ý: nhóm không hợp lệ → giữ nguyên.', groups);
+      if (!silent) setStatus2('⚠️ AI gộp ý không hợp lệ → giữ nguyên cảnh.', 'info');
+      return;
+    }
+    const out = groups.map(g => {
+      const items = g.map(n => state.scenes[n - 1]);
+      const base = { ...items[0] };
+      base.text = items.map(s => (s.text || '').trim()).join(' ').replace(/\s+/g, ' ').trim();
+      base.duration = items.reduce((a, s) => a + (parseFloat(s.duration) || 0), 0);
+      base.character = (items.find(s => s.character) || {}).character || '';
+      base.background = (items.find(s => s.background) || {}).background || '';
+      return base;
+    });
+    const before = N;
+    state.scenes = out;
+    state.scenes.forEach((s, i) => { s.id = String(i + 1).padStart(3, '0'); s.duration = +(parseFloat(s.duration) || calcDur(s.text)).toFixed(1); });
+    state.scenePrompts = {}; state.scenePrompts2 = {}; state.veoPrompts = {}; state.sceneImages = {};
+    renderAllT2();
+    if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
+    saveState();
+    if (!silent) setStatus2(`✓ Gộp theo ý (AI): ${before} → ${state.scenes.length} cảnh.`, 'ok');
+  } catch (e) {
+    console.error(e);
+    if (!silent) setStatus2('Lỗi gộp theo ý: ' + e.message, 'error');
+  }
+}
+
 // ✂ Tách các cảnh dài (> ngưỡng giây/ảnh) thành nhiều cảnh con → nhiều ảnh minh hoạ
 function splitLongScenes(){
   syncTool2();
@@ -5581,42 +5645,59 @@ function regenAllScenePrompts(){
 ============================================================ */
 let _autoRunning = false;
 let _autoStopFlag = false;
-let _autoSrtText = null;   // SRT đính cho Auto để tự căn độ dài
+let _autoAudioFile = null;    // MP3 VO đính cho Auto để căn timing (Whisper)
+let _autoAudioWords = null;   // cache word-timestamps đã transcribe (transcribe 1 lần, dùng cho cả 2 lần căn)
 
-function loadAutoSrt(input){
+function loadAutoAudio(input){
   const f = input.files[0];
   if (!f) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    _autoSrtText = e.target.result || '';
-    const cues = (typeof parseSRT === 'function') ? parseSRT(_autoSrtText) : [];
-    const info = document.getElementById('autoSrtInfo');
-    if (info) info.textContent = cues.length
-      ? `✓ Đã đính SRT: ${f.name} (${cues.length} dòng) — Auto sẽ căn timing.`
-      : `⚠️ File SRT không đọc được mốc thời gian.`;
-    const clr = document.getElementById('autoSrtClear');
-    if (clr) clr.style.display = cues.length ? 'inline-flex' : 'none';
-  };
-  reader.readAsText(f);
+  _autoAudioFile = f;
+  _autoAudioWords = null;     // file mới → xoá cache
+  const info = document.getElementById('autoSrtInfo');
+  if (info) info.textContent = `✓ Đã đính audio: ${f.name} — Auto sẽ transcribe (Whisper) & căn timing.`;
+  const clr = document.getElementById('autoSrtClear');
+  if (clr) clr.style.display = 'inline-flex';
   input.value = '';
 }
-function clearAutoSrt(){
-  _autoSrtText = null;
+function clearAutoSrt(){   // giữ tên cũ cho nút ✗
+  _autoAudioFile = null; _autoAudioWords = null;
   const info = document.getElementById('autoSrtInfo'); if (info) info.textContent = '';
   const clr = document.getElementById('autoSrtClear'); if (clr) clr.style.display = 'none';
 }
 
-// Căn độ dài tất cả cảnh hiện tại theo SRT đã đính (theo từ + lấp khoảng lặng). Trả về số cảnh đã căn, hoặc null nếu không có SRT.
-function _autoAlignSrtOnce(){
-  if (!(_autoSrtText && _autoSrtText.trim())) return null;
-  const cues = parseSRT(_autoSrtText);
-  const words = cues.length ? t8SrtToWords(cues) : [];
-  if (!words.length) return null;
-  const results = t8AlignScenesToWords(state.scenes, words);
+// Căn độ dài tất cả cảnh theo MP3 (Whisper từ Tool 8). Transcribe 1 lần rồi cache. Trả về số cảnh đã căn, hoặc null nếu không có audio.
+async function _autoAlignAudioOnce(){
+  if (!_autoAudioFile) return null;
+  if (!_autoAudioWords) {
+    const prov = (document.getElementById('t8Provider')?.value) || (typeof t8GetProvider === 'function' ? t8GetProvider() : 'groq');
+    setStatus2(`🎤 Đang transcribe audio (Whisper ${prov})...`, 'working');
+    _autoAudioWords = await t8TranscribeAPI(prov, _autoAudioFile);
+  }
+  if (!_autoAudioWords || !_autoAudioWords.length) return null;
+  const results = t8AlignScenesToWords(state.scenes, _autoAudioWords);
   let upd = 0;
   results.forEach((r, i) => { if (r.newDur != null && state.scenes[i]){ state.scenes[i].duration = r.newDur; upd++; } });
   renderAllT2();
   return upd;
+}
+
+// Căn timing thủ công từ MP3 (nút ở nhóm ① Chia cảnh)
+async function applyAudioTiming(input){
+  const f = input.files[0];
+  if (!f) return;
+  input.value = '';
+  if (!state.scenes || !state.scenes.length) return setStatus2('❌ Chưa có cảnh. Bấm "Chia Cảnh" trước.', 'error');
+  _autoAudioFile = f; _autoAudioWords = null;
+  try {
+    const n = await _autoAlignAudioOnce();
+    if (n == null) return setStatus2('❌ Không transcribe được audio (kiểm tra key/provider ở Tool 8).', 'error');
+    const total = state.scenes.reduce((s, x) => s + (x.duration || 0), 0);
+    saveState();
+    setStatus2(`✓ Đã căn timing ${n}/${state.scenes.length} cảnh theo MP3 (Whisper). Tổng: ${fmtDur(total)}.`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus2('Lỗi căn timing từ MP3: ' + e.message, 'error');
+  }
 }
 
 const AUTO_STEPS = [
@@ -5690,12 +5771,16 @@ async function runAutoTool2(){
       _autoSetStep(1, 'active');
       await doSplit();
       if (!state.scenes.length){ _autoSetStep(1, 'fail'); throw new Error('Chia cảnh không ra cảnh nào — kiểm tra lại kịch bản.'); }
+      // Gộp câu vụn (local, tức thì) + Gộp theo Ý (AI) — chỉ NỐI, không cắt → mỗi cảnh 1 ý trọn vẹn, không ra từ lẻ
+      mergeFragmentScenes();
+      setStatus2('AI đang gộp cảnh theo ý...', 'working');
+      await mergeScenesByMeaningAI(true);
       _autoSetStep(1, 'done');
       if (stopped()) throw 'STOP';
 
-      // Căn timing LẦN 1 (TRƯỚC tách) — để tách cảnh dài dựa trên độ dài THẬT, không phải ước lượng theo chữ
+      // Căn timing LẦN 1 (TRƯỚC tách) từ MP3 — để tách cảnh dài dựa trên độ dài THẬT
       try {
-        const n1 = _autoAlignSrtOnce();
+        const n1 = await _autoAlignAudioOnce();
         _autoSetStep(2, n1 == null ? 'skip' : 'done');
       } catch(e){ console.warn('Auto căn timing 1 lỗi:', e); _autoSetStep(2, 'fail'); }
       if (stopped()) throw 'STOP';
@@ -5722,12 +5807,12 @@ async function runAutoTool2(){
     }
     if (stopped()) throw 'STOP';
 
-    // BƯỚC 4 — Căn LẠI độ dài theo SRT (SAU tách — gán độ dài thật cho các cảnh con mới)
-    if (_autoSrtText && _autoSrtText.trim()){
+    // BƯỚC 4 — Căn LẠI độ dài theo MP3 (SAU tách — gán độ dài thật cho cảnh con; dùng lại bản transcribe đã cache)
+    if (_autoAudioFile){
       _autoSetStep(4, 'active');
       try {
-        const n2 = _autoAlignSrtOnce();
-        if (n2 != null) setStatus2(`✓ Đã căn lại timing ${n2}/${state.scenes.length} cảnh theo SRT.`, 'working');
+        const n2 = await _autoAlignAudioOnce();
+        if (n2 != null) setStatus2(`✓ Đã căn lại timing ${n2}/${state.scenes.length} cảnh theo MP3.`, 'working');
         _autoSetStep(4, n2 == null ? 'skip' : 'done');
       } catch(e){ console.warn('Auto căn lại lỗi:', e); _autoSetStep(4, 'fail'); }
     } else {
