@@ -947,6 +947,16 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </label>
       </div>
       <div class="api-row">
+        <label class="label">🛟 JSON fallback <span style="font-weight:400;opacity:.6;font-size:10px">— khi provider chính trả JSON rác (Quét/Gán/Gộp ý) sẽ thử lại bằng provider này</span></label>
+        <select id="jsonFbProvider" style="font-size:11px">
+          <option value="">— Tắt —</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI (GPT)</option>
+        </select>
+        <input type="text" id="jsonFbModel" placeholder="model (để trống = mặc định provider)" style="font-size:11px;margin-top:6px">
+        <input type="password" id="jsonFbKey" placeholder="API key cho fallback" style="font-size:11px;margin-top:6px">
+      </div>
+      <div class="api-row">
         <label class="label">BASE URL <span style="font-weight:400;opacity:.6;font-size:10px">(tuỳ chọn — dùng API bên thứ 3)</span></label>
         <input type="text" id="apiBaseUrl" placeholder="https://api.anthropic.com (để trống = mặc định)" style="font-size:11px">
       </div>
@@ -2505,6 +2515,9 @@ function loadApiSettings(){
   if (concEl) concEl.value = localStorage.getItem('api_concurrency') || '';
   const baseUrlEl = document.getElementById('apiBaseUrl');
   if (baseUrlEl) baseUrlEl.value = localStorage.getItem('api_base_url') || '';
+  const fbP = document.getElementById('jsonFbProvider'); if (fbP) fbP.value = localStorage.getItem('json_fb_provider') || '';
+  const fbM = document.getElementById('jsonFbModel');    if (fbM) fbM.value = localStorage.getItem('json_fb_model') || '';
+  const fbK = document.getElementById('jsonFbKey');      if (fbK) fbK.value = localStorage.getItem('json_fb_key') || '';
   updateApiStatus();
 }
 
@@ -2520,6 +2533,9 @@ function saveApiSettings(){
   const conc = parseInt(document.getElementById('apiConcurrency')?.value);
   localStorage.setItem('api_concurrency', (conc >= 1) ? String(conc) : '');
   localStorage.setItem('api_base_url', baseUrl);
+  localStorage.setItem('json_fb_provider', document.getElementById('jsonFbProvider')?.value || '');
+  localStorage.setItem('json_fb_model', (document.getElementById('jsonFbModel')?.value || '').trim());
+  localStorage.setItem('json_fb_key', (document.getElementById('jsonFbKey')?.value || '').trim());
   updateApiStatus();
   setApiStatus(baseUrl ? `✓ Đã lưu. Dùng Base URL: ${baseUrl}` : '✓ Đã lưu cấu hình API.', 'ok');
 }
@@ -2812,7 +2828,9 @@ async function callClaudeWithImage(prompt, base64, mediaType, maxTokens = 800){
 /* ============================================================
    PARSE JSON (chịu được markdown wrappers)
 ============================================================ */
-function parseJSON(text){
+// validate (tuỳ chọn): hàm (block)=>bool. Khi có → chọn khối TO NHẤT mà PASS validate
+// (chống trường hợp đoạn suy luận DeepSeek dài hơn cả JSON thật → khối to nhất sai).
+function parseJSON(text, validate){
   const c = String(text || '').replace(/```json|```/g, '').trim();
   // Quét MỌI khối JSON top-level (chống DeepSeek chèn suy luận có dấu [ ] { } rải rác trước/sau JSON thật)
   const blocks = [];
@@ -2836,9 +2854,73 @@ function parseJSON(text){
     i = end + 1;   // bỏ qua khối đã xét → chỉ lấy top-level
   }
   if (!blocks.length) throw new Error('Không tìm thấy JSON hợp lệ');
-  // Chọn khối TO NHẤT (nhiều nội dung nhất) — thường là câu trả lời thật, không phải ví dụ trong suy luận
+  // To nhất trước (nhiều nội dung nhất) — thường là câu trả lời thật, không phải ví dụ trong suy luận
   blocks.sort((a, b) => JSON.stringify(b).length - JSON.stringify(a).length);
+  if (typeof validate === 'function') {
+    const ok = blocks.find(b => { try { return !!validate(b); } catch (_) { return false; } });
+    if (ok !== undefined) return ok;
+    throw new Error('Không có khối JSON nào đúng định dạng yêu cầu');
+  }
   return blocks[0];
+}
+
+// Thêm nhắc nhở "chỉ JSON" vào block text cuối của messages (cho tác vụ JSON kèm ảnh)
+function _appendStrict(messages, strict){
+  const ms = messages.map(m => ({ ...m, content: Array.isArray(m.content) ? m.content.map(c => ({ ...c })) : m.content }));
+  const last = ms[ms.length - 1];
+  if (typeof last.content === 'string') last.content += strict;
+  else {
+    const t = [...last.content].reverse().find(c => c.type === 'text');
+    if (t) t.text += strict; else last.content.push({ type: 'text', text: strict });
+  }
+  return ms;
+}
+
+// Provider dự phòng cho tác vụ JSON (Tier 2): khi DeepSeek trả rác hết số lần → thử 1 lần bằng Claude/OpenAI.
+// Cấu hình ở API Settings (JSON fallback). Trả null nếu không cấu hình / trùng provider đang dùng.
+function _jsonFallbackOverride(){
+  const provider = localStorage.getItem('json_fb_provider') || '';
+  if (!provider) return null;
+  const cur = localStorage.getItem('api_provider') || 'anthropic';
+  if (provider === cur) return null;   // fallback phải khác provider chính
+  const key = (localStorage.getItem('json_fb_key') || '').split(/[\n,]+/).map(s => s.trim()).filter(Boolean)[0] || '';
+  if (!key) return null;
+  const model = localStorage.getItem('json_fb_model') || (MODELS[provider] && MODELS[provider][0].id) || '';
+  return { provider, model, key };
+}
+
+/* ============================================================
+   callLLMJson — GỌI LLM ÉP JSON (chống DeepSeek trả rác triệt để)
+   - Tier 1: lặp lại tối đa `tries` lần, từ lần 2 thêm nhắc nhở "CHỈ JSON".
+   - Tier 3: parseJSON nhận `validate` → chỉ nhận khối đúng định dạng.
+   - Tier 4: ép Thinking OFF (Thinking làm DeepSeek viết suy luận tràn vào content).
+   - Tier 2: hết lượt mà vẫn fail → thử 1 lần bằng provider dự phòng (nếu cấu hình).
+   opts: { validate, maxTokens, tries, messages, _override }
+============================================================ */
+async function callLLMJson(prompt, opts = {}){
+  const validate = opts.validate || null;
+  const maxTokens = opts.maxTokens || 1500;
+  const tries = opts.tries || 3;
+  const baseMessages = opts.messages || null;
+  const STRICT = '\n\n⚠️ BẮT BUỘC: CHỈ in JSON THUẦN (bắt đầu bằng [ hoặc {). KHÔNG suy luận, KHÔNG markdown, KHÔNG văn xuôi, KHÔNG ```. Không có ký tự nào ngoài JSON.';
+  const baseOverride = { ...(opts._override || {}), thinking: false };
+  let lastErr = null;
+  const run = async (strict, override) => {
+    const o = { maxTokens, json: true, _override: override };
+    if (baseMessages) o.messages = strict ? _appendStrict(baseMessages, STRICT) : baseMessages;
+    const reply = await callLLM((strict && !baseMessages) ? (prompt + STRICT) : prompt, o);
+    return parseJSON(reply, validate);
+  };
+  for (let a = 0; a < tries; a++) {
+    try { return await run(a > 0, baseOverride); }
+    catch (e) { lastErr = e; }
+  }
+  const fb = _jsonFallbackOverride();
+  if (fb) {
+    try { return await run(true, { ...fb, thinking: false }); }
+    catch (e) { lastErr = e; }
+  }
+  throw new Error('AI trả JSON không hợp lệ sau ' + tries + ' lần' + (fb ? ' (kể cả fallback)' : '') + (lastErr ? ' — ' + lastErr.message : ''));
 }
 
 // Parse không ném lỗi — batch hỏng trả [] thay vì làm dừng cả run
@@ -4069,8 +4151,11 @@ Trả về CHÍNH XÁC 1 JSON object (không markdown, không giải thích):
 Phân tích THỰC TẾ từ ảnh, KHÔNG suy đoán.`
     });
 
-    const reply = await callLLM('', { maxTokens: 2000, messages: [{ role: 'user', content }] });
-    const data = parseJSON(reply);
+    const data = await callLLMJson('', {
+      maxTokens: 2000,
+      messages: [{ role: 'user', content }],
+      validate: d => d && typeof d === 'object' && !Array.isArray(d) && (d.characterStyle || d.backgroundStyle || d.sceneStyle)
+    });
     if (data.characterStyle) document.getElementById('pCharStyle').value = data.characterStyle;
     if (data.backgroundStyle) document.getElementById('pBgStyle').value = data.backgroundStyle;
     if (data.sceneStyle) document.getElementById('pSceneStyle').value = data.sceneStyle;
@@ -4122,8 +4207,10 @@ Trả về CHÍNH XÁC 1 JSON object (không markdown):
 }
 
 Character/Background/Scene style prompts PHẢI bằng tiếng Anh.`;
-    const reply = await callClaude(prompt, 3000);
-    const data = parseJSON(reply);
+    const data = await callLLMJson(prompt, {
+      maxTokens: 3000,
+      validate: d => d && typeof d === 'object' && !Array.isArray(d) && (d.tenKenh || d.ngach || d.characterStyle || d.visualStyle)
+    });
     if (data.tenKenh) document.getElementById('pTenKenh').value = data.tenKenh;
     if (data.ngach) document.getElementById('pNgach').value = data.ngach;
     if (data.visualStyle) document.getElementById('pVisualStyle').value = data.visualStyle;
@@ -4314,9 +4401,10 @@ ${batchText}
     let parts;
     try {
       const prompt = buildPrompt(batchText);
-      let reply = await callClaude(prompt, 4000);
+      // Thinking OFF: tránh DeepSeek viết suy luận tràn vào output (định dạng ===SCENE===)
+      let reply = await callLLM(prompt, { maxTokens: 4000, _override: { thinking: false } });
       parts = parse(reply);
-      if (!valid(reply, parts, batchText)) { reply = await callClaude(prompt, 4000); parts = parse(reply); }
+      if (!valid(reply, parts, batchText)) { reply = await callLLM(prompt, { maxTokens: 4000, _override: { thinking: false } }); parts = parse(reply); }
       if (!valid(reply, parts, batchText)) {
         console.warn('Smart split đoạn ' + (bi + 1) + ' không hợp lệ → fallback regex');
         parts = splitScenesFast(batchText, min, max);
@@ -4474,13 +4562,15 @@ ${list}`;
 
   try {
     if (!silent) setStatus2('AI đang gộp cảnh theo ý...', 'working');
-    const reply = await callLLM(prompt, { maxTokens: Math.min(8000, 1500 + N * 12) });
-    const groups = parseJSON(reply);
-    // Kiểm tra hợp lệ: phải phủ đúng 1..N, mỗi số 1 lần, đúng thứ tự
-    const flat = Array.isArray(groups) ? groups.flat() : [];
-    const valid = Array.isArray(groups) && flat.length === N && flat.every((n, i) => n === i + 1);
-    if (!valid) {
-      console.warn('Gộp theo ý: nhóm không hợp lệ → giữ nguyên.', groups);
+    // callLLMJson: lặp + ép JSON + chỉ nhận nhóm phủ ĐÚNG 1..N, mỗi số 1 lần, đúng thứ tự
+    let groups;
+    try {
+      groups = await callLLMJson(prompt, {
+        maxTokens: Math.min(8000, 1500 + N * 12),
+        validate: g => { const f = Array.isArray(g) ? g.flat() : []; return Array.isArray(g) && f.length === N && f.every((n, i) => n === i + 1); }
+      });
+    } catch (e) {
+      console.warn('Gộp theo ý: nhóm không hợp lệ → giữ nguyên.', e.message);
       if (!silent) setStatus2('⚠️ AI gộp ý không hợp lệ → giữ nguyên cảnh.', 'info');
       return;
     }
@@ -5081,13 +5171,11 @@ ${allText.slice(0, 8000)}
 Trả về CHỈ JSON:
 {"characters": ["name1", "name2"], "backgrounds": ["bg1", "bg2"]}`;
     const maxTok = bibleMode ? 1500 : 800;
-    let data;
-    try {
-      data = parseJSON(await callLLM(prompt, { maxTokens: maxTok, json: true }));
-    } catch (e1) {
-      // Thử lại 1 lần (model đôi khi trả văn xuôi) — vẫn bật JSON mode
-      data = parseJSON(await callLLM(prompt, { maxTokens: maxTok, json: true }));
-    }
+    // callLLMJson: lặp + ép JSON + chỉ nhận khối có ít nhất 1 mảng characters/backgrounds
+    const data = await callLLMJson(prompt, {
+      maxTokens: maxTok,
+      validate: d => d && typeof d === 'object' && (Array.isArray(d.characters) || Array.isArray(d.backgrounds))
+    });
     if (bibleMode) {
       state.charBible = {}; state.bgBible = {};
       state.charactersV = (data.characters || []).map(c => {
@@ -5188,15 +5276,15 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
     await runConcurrent(batches, async (batch) => {
       if (state.cancelRequested) return;
       const batchIds = new Set(batch.map(s => s.id));
-      // CHECK + RETRY: thử tối đa 2 lần, ép JSON mode; chỉ chấp nhận khi parse ra object/array hợp lệ
+      // callLLMJson: lặp + ép JSON + chỉ nhận khối normalize ra ≥1 cảnh hợp lệ
       let obj = null;
-      for (let attempt = 0; attempt < 2 && !obj; attempt++) {
-        try {
-          const reply = await callLLM(buildAssignPrompt(batch), { maxTokens: 1500, json: true });
-          const got = normalize(parseJSON(reply));
-          if (Object.keys(got).length) obj = got;
-        } catch (e) { if (attempt === 1) console.warn('Gán batch lỗi sau 2 lần:', e.message); }
-      }
+      try {
+        const got = await callLLMJson(buildAssignPrompt(batch), {
+          maxTokens: 1500,
+          validate: p => Object.keys(normalize(p)).length > 0
+        });
+        obj = normalize(got);
+      } catch (e) { console.warn('Gán batch lỗi:', e.message); }
       if (obj) {
         for (const [id, x] of Object.entries(obj)) {
           if (!batchIds.has(id)) continue;            // chỉ ghi cho cảnh thuộc batch này
@@ -6675,10 +6763,14 @@ KỊCH BẢN:
 """
 ${script.slice(0, 2500)}
 """`;
-    const raw = (await callClaude(prompt, 300)) || '';
     let reply = '';
-    try { const o = parseJSON(raw); if (o && o.era) reply = String(o.era).trim(); } catch (_) {}
-    if (!reply) {  // không có JSON → tìm dòng đúng format (có "clothing:"/"—"/"hair:"), bỏ suy luận
+    // callLLMJson: lặp + ép JSON + chỉ nhận khối có era là chuỗi không rỗng
+    try {
+      const o = await callLLMJson(prompt, { maxTokens: 300, validate: o => o && typeof o.era === 'string' && o.era.trim() });
+      reply = String(o.era).trim();
+    } catch (_) {}
+    if (!reply) {  // fallback: model trả văn xuôi → quét dòng đúng format (có "clothing:"/"—"/"hair:")
+      const raw = (await callClaude(prompt, 300)) || '';
       const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
       reply = (lines.find(l => /clothing:|hair:|—/i.test(l)) || lines[lines.length - 1] || '').replace(/^["'\s]+|["'\s]+$/g, '');
     }
@@ -6907,62 +6999,26 @@ async function genOneCharPrompt(rawName, ctx, opts = {}){
 
   const img = state.characterImages?.[name];
   const anchor = (state.styleRefImages && state.styleRefImages[0]) || null;
-  let promptText;
+
+  // AI CHỈ tả NGOẠI HÌNH riêng của nhân vật (trang phục/tóc/đặc điểm theo thời đại).
+  // Còn STYLE đầy đủ + LAYOUT (5 góc/7 biểu cảm) + luật NO-TEXT → app tự RÁP CỐ ĐỊNH → mọi nhân vật đồng nhất, không bị AI bỏ sót.
+  const descReq = (extra) => `Mô tả NGOẠI HÌNH RIÊNG của nhân vật [${name}] cho kênh "${ctx.p?.tenKenh || ''} — ${ctx.p?.ngach || ''}".${ctx.eraCtx}
+${extra}
+Trả về 1-3 câu tiếng Anh NGẮN (40-80 từ), BẮT ĐẦU bằng "The character [${name}] wears", mô tả: TRANG PHỤC đúng thời đại, KIỂU TÓC/ĐỘI ĐẦU, tuổi/giới, đặc điểm nhận dạng riêng.
+KHÔNG tả lại art-style chung của kênh, KHÔNG mô tả layout/bố cục, KHÔNG luật no-text. Trả về CHỈ câu mô tả.`;
+
+  let desc;
   if (img) {
-    promptText = `Phân tích ảnh reference của nhân vật [${name}] và tạo 1 prompt G-Labs chi tiết cho character reference sheet.
-
-Style template PHẢI tuân theo:
-"""
-${useStyle}
-"""
-
-NEGATIVE/RULES: ${ctx.rules}
-
-Yêu cầu:
-- Mô tả CHÍNH XÁC visual của nhân vật trong ảnh (hình dạng đầu, mắt, miệng, tỷ lệ cơ thể, quần áo, màu sắc)
-- Ghi tên nhân vật [${name}] trong prompt
-- ${charLayout}
-- 90-150 từ tiếng Anh
-- Trả về CHỈ prompt text, không giải thích.`;
-    state.assetCharPrompts[name] = await callClaudeWithImage(promptText, img.base64, img.mediaType, 700);
+    desc = await callClaudeWithImage(descReq('Dựa CHÍNH XÁC vào ảnh reference đính kèm (trang phục, màu sắc, kiểu tóc, đặc điểm khuôn mặt).'), img.base64, img.mediaType, 400);
   } else if (anchor) {
-    // 📌 STYLE ANCHOR — không có ảnh riêng của nhân vật, nhưng có ảnh anchor của kênh → cho Claude nhìn anchor để bám cách dựng cơ thể
-    promptText = `Đây là ẢNH STYLE ANCHOR của kênh. Hãy bám CHÍNH XÁC cách dựng cơ thể và nét vẽ trong ảnh này (vd tay/chân là nét que đen mảnh, bàn tay mitten trắng, mặt off-white có đổ khối nhẹ — tuỳ ảnh). Tạo 1 prompt G-Labs cho character reference sheet nhân vật [${name}] theo ĐÚNG style đó.
-
-Style template (chữ, để tham chiếu thêm):
-"""
-${useStyle}
-"""
-
-NEGATIVE/RULES: ${ctx.rules}
-Kênh: ${ctx.p?.tenKenh || ''} — ${ctx.p?.ngach || ''}${ctx.eraCtx}
-
-Yêu cầu:
-- Suy luận đặc điểm RIÊNG của [${name}] (tuổi, giới, trang phục, tóc) từ tên + context kênh — NHƯNG cách dựng cơ thể, tay/chân, bàn tay và mặt PHẢI giống y ảnh anchor, KHÔNG vẽ thành người cartoon tỉ lệ thường${ctx.eraRule}
-- Ghi tên nhân vật [${name}] trong prompt
-- ${charLayout}
-- 90-150 từ tiếng Anh
-- Trả về CHỈ prompt text.`;
-    state.assetCharPrompts[name] = await callClaudeWithImage(promptText, anchor.base64, anchor.mediaType, 700);
+    desc = await callClaudeWithImage(descReq('Suy trang phục/tóc/đặc điểm từ TÊN nhân vật + thời đại + ngách kênh (ảnh đính kèm chỉ để tham khảo tinh thần style).'), anchor.base64, anchor.mediaType, 400);
   } else {
-    promptText = `Tạo 1 prompt G-Labs chi tiết cho character reference sheet nhân vật [${name}].
-
-Style template:
-"""
-${useStyle}
-"""
-
-NEGATIVE/RULES: ${ctx.rules}
-Kênh: ${ctx.p?.tenKenh || ''} — ${ctx.p?.ngach || ''}${ctx.eraCtx}
-
-Yêu cầu:
-- Suy luận đặc điểm nhân vật từ tên và context kênh${ctx.eraRule}
-- Ghi tên nhân vật [${name}] trong prompt
-- ${charLayout}
-- 90-150 từ tiếng Anh
-- Trả về CHỈ prompt text.`;
-    state.assetCharPrompts[name] = await callClaude(promptText, 500);
+    desc = await callClaude(descReq('Suy trang phục/tóc/đặc điểm từ TÊN nhân vật + thời đại + ngách kênh.'), 400);
   }
+  desc = cleanPrompt(String(desc || '').trim());
+  if (desc && !desc.includes('[' + name + ']')) desc = `The character [${name}]. ` + desc;   // đảm bảo có tag
+  // 🧩 RÁP CỐ ĐỊNH: [style đầy đủ] + [mô tả nhân vật] + [LAYOUT kèm no-text] → luôn đủ định dạng
+  state.assetCharPrompts[name] = `${useStyle} ${desc} ${charLayout}`.replace(/\s+/g, ' ').trim();
   return { name, pulled: false };
 }
 
@@ -7692,20 +7748,13 @@ function renderSceneSearchList(){
 async function generateSearchKeywords(voText){
   // fallback: rút vài từ khoá từ chính VO nếu AI lỗi
   const fallback = () => (voText.replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length > 3).slice(0, 4).join(', ')) || voText.slice(0, 40);
+  const kwPrompt = `Sinh 2-4 từ khoá tiếng Anh NGẮN để tìm ảnh/video stock cho nội dung dưới.\nTrả về CHỈ 1 JSON array các từ khoá, KHÔNG giải thích, KHÔNG văn bản ngoài JSON.\nVD: ["old woman","eye contact","ashamed"]\n\nNội dung: "${voText}"`;
   try {
-    const reply = await callClaude(
-      `Sinh 2-4 từ khoá tiếng Anh NGẮN để tìm ảnh/video stock cho nội dung dưới.\nTrả về CHỈ 1 JSON array các từ khoá, KHÔNG giải thích, KHÔNG văn bản ngoài JSON.\nVD: ["old woman","eye contact","ashamed"]\n\nNội dung: "${voText}"`,
-      200
-    );
-    try {
-      const arr = parseJSON(reply);
-      if (Array.isArray(arr) && arr.length) return arr.map(s => String(s).trim()).filter(Boolean).slice(0, 5).join(', ');
-    } catch (_) {}
-    // Không có JSON (model trả suy luận) → lấy cụm sau dấu ':' cuối nếu trông như từ khoá, else fallback
-    const after = reply.split(':').pop().trim().replace(/^["'\[\s]+|["'\]\s]+$/g, '');
-    if (after && after.length <= 80 && !/[.?!]\s/.test(after) && after.split(',').length <= 6) return after;
-    return fallback();
-  } catch (e) {
+    // callLLMJson: lặp + ép JSON + chỉ nhận array không rỗng
+    const arr = await callLLMJson(kwPrompt, { maxTokens: 200, validate: a => Array.isArray(a) && a.length > 0 });
+    return arr.map(s => String(s).trim()).filter(Boolean).slice(0, 5).join(', ');
+  } catch (_) {
+    // Hết lượt vẫn không ra JSON → fallback rút từ chính VO
     return fallback();
   }
 }
