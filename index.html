@@ -913,6 +913,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <select id="apiProvider" onchange="onProviderChange()">
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT)</option>
+          <option value="deepseek">DeepSeek</option>
         </select>
       </div>
       <div class="api-row">
@@ -920,8 +921,21 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         <select id="apiModel"></select>
       </div>
       <div class="api-row">
-        <label class="label">API Key</label>
-        <input type="password" id="apiKey" placeholder="sk-...">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <label class="label" style="margin:0">API Key <span style="font-weight:400;opacity:.6;font-size:10px">— nhiều key = chạy song song</span></label>
+          <span style="display:flex;align-items:center;gap:10px;white-space:nowrap">
+            <a id="getKeyLink" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent);font-weight:600;text-decoration:none">Lấy Key ↗</a>
+            <span id="keyEye" onclick="toggleKeyVisibility()" style="cursor:pointer;font-size:13px" title="Ẩn/hiện key">👁</span>
+          </span>
+        </div>
+        <div id="apiKeyList" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
+        <button class="btn ghost sm" onclick="addKeyField('')" style="margin-top:6px;width:100%">+ Thêm key</button>
+      </div>
+      <div class="api-row" id="thinkingRow" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px">
+          <input type="checkbox" id="apiThinking" style="width:auto;margin:0">
+          🧠 Bật chế độ Thinking <span style="opacity:.6;font-size:10px">— suy luận kỹ hơn (chậm & tốn token hơn)</span>
+        </label>
       </div>
       <div class="api-row">
         <label class="label">BASE URL <span style="font-weight:400;opacity:.6;font-size:10px">(tuỳ chọn — dùng API bên thứ 3)</span></label>
@@ -1099,7 +1113,7 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
               <input type="file" accept=".srt,.txt,.vtt" style="display:none" onchange="loadAutoSrt(this)">
             </label>
             <button class="btn ghost sm" id="autoSrtClear" style="display:none;color:var(--red);border-color:var(--red)" onclick="clearAutoSrt()" title="Bỏ file SRT đã đính">✗</button>
-            <span class="auto-hint">Một nút: Lọc → Chia cảnh → Tách cảnh dài → Quét → Gán → <strong>Căn timing (nếu có SRT)</strong> → Prompt G-Labs → Ảnh B.<br>Đính SRT để tự khớp độ dài audio. Dừng giữa chừng vẫn giữ tiến độ — bấm lại để chạy tiếp.<br><span id="autoSrtInfo" style="color:#0d9488;font-weight:600"></span></span>
+            <span class="auto-hint">Một nút: Lọc → Chia cảnh → <strong>Căn timing</strong> → Tách cảnh dài → <strong>Căn lại</strong> → Quét → Gán → Prompt G-Labs → Ảnh B.<br>Đính SRT → căn độ dài thật TRƯỚC khi tách (tách chính xác), rồi căn lại cho cảnh con. Dừng giữa chừng vẫn giữ tiến độ.<br><span id="autoSrtInfo" style="color:#0d9488;font-weight:600"></span></span>
           </div>
           <div id="autoBar"></div>
         </div>
@@ -2273,15 +2287,77 @@ const MODELS = {
     { id: 'gpt-4o-mini',  name: 'GPT-4o mini (rẻ)' },
     { id: 'gpt-5',        name: 'GPT-5 (mạnh nhất)' },
     { id: 'gpt-5-mini',   name: 'GPT-5 mini (cân bằng)' }
+  ],
+  deepseek: [
+    { id: 'deepseek-v3.1',     name: 'DeepSeek V3.1 (chat, ngữ cảnh dài)' },
+    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (preview, nhanh)' },
+    { id: 'deepseek-v4-pro',   name: 'DeepSeek V4 Pro (preview, mạnh nhất)' }
   ]
 };
+
+// DeepSeek KHÔNG hỗ trợ ảnh (vision). Các tác vụ phân tích ảnh sẽ tự fallback.
+const VISION_PROVIDERS = ['anthropic', 'openai'];
 
 function onProviderChange(){
   const provider = document.getElementById('apiProvider').value;
   const sel = document.getElementById('apiModel');
-  sel.innerHTML = MODELS[provider].map(m =>
+  sel.innerHTML = (MODELS[provider] || []).map(m =>
     `<option value="${m.id}">${m.name}</option>`
   ).join('');
+  updateGetKeyLink();
+  // Toggle Thinking chỉ hiện cho DeepSeek
+  const tr = document.getElementById('thinkingRow');
+  if (tr) tr.style.display = (provider === 'deepseek') ? '' : 'none';
+}
+
+// Link "Lấy Key" theo provider
+const KEY_URLS = {
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  openai:    'https://platform.openai.com/api-keys',
+  deepseek:  'https://platform.deepseek.com/api_keys'
+};
+function updateGetKeyLink(){
+  const provider = document.getElementById('apiProvider').value;
+  const a = document.getElementById('getKeyLink');
+  if (a) a.href = KEY_URLS[provider] || '#';
+}
+
+/* ---- Nhiều khung API key (mỗi key 1 ô) ---- */
+let _keyVisible = false;
+function _keyRowHTML(val){
+  const v = String(val || '').replace(/"/g, '&quot;');
+  return `<div class="key-row" style="display:flex;align-items:center;gap:6px">
+    <input type="${_keyVisible ? 'text' : 'password'}" class="api-key-field" value="${v}" placeholder="sk-..." autocomplete="off" spellcheck="false" style="flex:1;font-family:monospace;font-size:11px">
+    <button class="btn ghost sm" onclick="removeKeyRow(this)" title="Xoá key này" style="color:var(--red);padding:4px 9px">×</button>
+  </div>`;
+}
+function renderKeyFields(keys){
+  const box = document.getElementById('apiKeyList');
+  if (!box) return;
+  if (!keys || !keys.length) keys = [''];
+  box.innerHTML = keys.map(_keyRowHTML).join('');
+}
+function addKeyField(val){
+  const box = document.getElementById('apiKeyList');
+  if (!box) return;
+  box.insertAdjacentHTML('beforeend', _keyRowHTML(val || ''));
+  const inputs = box.querySelectorAll('.api-key-field');
+  inputs[inputs.length - 1]?.focus();
+}
+function removeKeyRow(btn){
+  const box = document.getElementById('apiKeyList');
+  btn.closest('.key-row')?.remove();
+  if (box && !box.querySelector('.key-row')) addKeyField('');  // luôn còn ít nhất 1 ô
+}
+function collectKeys(){
+  return Array.from(document.querySelectorAll('#apiKeyList .api-key-field'))
+    .map(i => i.value.trim()).filter(Boolean);
+}
+function toggleKeyVisibility(){
+  _keyVisible = !_keyVisible;
+  document.querySelectorAll('#apiKeyList .api-key-field').forEach(i => i.type = _keyVisible ? 'text' : 'password');
+  const eye = document.getElementById('keyEye');
+  if (eye) eye.textContent = _keyVisible ? '🙈' : '👁';
 }
 
 /* ============================================================
@@ -2377,7 +2453,10 @@ function loadApiSettings(){
   document.getElementById('apiProvider').value = provider;
   onProviderChange();
   if (model) document.getElementById('apiModel').value = model;
-  document.getElementById('apiKey').value = key;
+  renderKeyFields((key || '').split(/[\n,]+/).map(s => s.trim()).filter(Boolean));
+  updateGetKeyLink();
+  const thinkEl = document.getElementById('apiThinking');
+  if (thinkEl) thinkEl.checked = localStorage.getItem('api_thinking') === '1';
   const baseUrlEl = document.getElementById('apiBaseUrl');
   if (baseUrlEl) baseUrlEl.value = localStorage.getItem('api_base_url') || '';
   updateApiStatus();
@@ -2386,23 +2465,26 @@ function loadApiSettings(){
 function saveApiSettings(){
   const provider = document.getElementById('apiProvider').value;
   const model = document.getElementById('apiModel').value;
-  const key = document.getElementById('apiKey').value.trim();
+  const keys = collectKeys();
   const baseUrl = document.getElementById('apiBaseUrl').value.trim().replace(/\/+$/, '');
   localStorage.setItem('api_provider', provider);
   localStorage.setItem('api_model', model);
-  localStorage.setItem('api_key', key);
+  localStorage.setItem('api_key', keys.join('\n'));
+  localStorage.setItem('api_thinking', document.getElementById('apiThinking')?.checked ? '1' : '');
   localStorage.setItem('api_base_url', baseUrl);
   updateApiStatus();
   setApiStatus(baseUrl ? `✓ Đã lưu. Dùng Base URL: ${baseUrl}` : '✓ Đã lưu cấu hình API.', 'ok');
 }
 
+const PROVIDER_LABEL = { anthropic: 'Claude', openai: 'OpenAI', deepseek: 'DeepSeek' };
 function updateApiStatus(){
-  const key = localStorage.getItem('api_key');
+  const keys = _apiKeyPool();
   const provider = localStorage.getItem('api_provider');
   const model = localStorage.getItem('api_model');
   const el = document.getElementById('apiStatus');
-  if (key && provider && model) {
-    el.innerHTML = `<span class="api-status ok"></span> ${provider === 'anthropic' ? 'Claude' : 'OpenAI'} · ${model}`;
+  if (keys.length && provider && model) {
+    const multi = keys.length > 1 ? ` · ⚡ ${keys.length} key song song` : '';
+    el.innerHTML = `<span class="api-status ok"></span> ${PROVIDER_LABEL[provider] || provider} · ${model}${multi}`;
   } else {
     el.innerHTML = `<span class="api-status"></span> Chưa cấu hình`;
   }
@@ -2420,7 +2502,7 @@ function setApiStatus(msg, type){
 async function testApi(){
   const provider = document.getElementById('apiProvider').value;
   const model = document.getElementById('apiModel').value;
-  const key = document.getElementById('apiKey').value.trim();
+  const key = collectKeys()[0];
   if (!key) return setApiStatus('Thiếu API key', 'err');
 
   setApiStatus('Đang test...', 'info');
@@ -2439,17 +2521,64 @@ async function testApi(){
 /* ============================================================
    LLM ROUTER — Anthropic + OpenAI, with proxy fallback
 ============================================================ */
+// Pool nhiều API key (mỗi dòng/ dấu phẩy 1 key) → xoay vòng để chạy song song nhiều luồng
+let _apiKeyIdx = 0;
+function _apiKeyPool(){
+  return (localStorage.getItem('api_key') || '')
+    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+}
+function _nextApiKey(){
+  const pool = _apiKeyPool();
+  if (!pool.length) return '';
+  const k = pool[_apiKeyIdx % pool.length];
+  _apiKeyIdx++;
+  return k;
+}
+// Số luồng chạy song song = số key (1 key → 1 luồng, an toàn rate-limit)
+function _concurrency(){ return Math.max(1, _apiKeyPool().length); }
+
+// Chạy worker(item) trên `items` với tối đa `limit` luồng đồng thời. Dừng nhận việc mới khi shouldStop().
+async function runConcurrent(items, worker, limit, shouldStop){
+  limit = Math.max(1, limit | 0);
+  let idx = 0;
+  const results = new Array(items.length);
+  async function lane(){
+    while (true) {
+      if (shouldStop && shouldStop()) return;
+      const i = idx++;
+      if (i >= items.length) return;
+      try { results[i] = await worker(items[i], i); }
+      catch (e) { results[i] = { __error: e }; console.warn('runConcurrent item lỗi:', e); }
+    }
+  }
+  const lanes = [];
+  for (let k = 0; k < Math.min(limit, items.length); k++) lanes.push(lane());
+  await Promise.all(lanes);
+  return results;
+}
+
 async function callLLM(prompt, opts = {}){
   const provider = opts._override?.provider || localStorage.getItem('api_provider') || 'anthropic';
   const model = opts._override?.model || localStorage.getItem('api_model') || MODELS[provider][0].id;
-  const key = opts._override?.key || localStorage.getItem('api_key') || '';
+  // Mỗi lần gọi lấy 1 key kế tiếp trong pool → nhiều key sẽ tự chia tải khi chạy song song
+  const key = opts._override?.key || _nextApiKey();
   const maxTokens = opts.maxTokens || 1500;
   const messages = opts.messages || [{ role: 'user', content: prompt }];
 
   if (!key) throw new Error('Chưa cài API key (mục API Settings ở sidebar)');
 
+  // Tác vụ có ảnh nhưng provider không hỗ trợ vision (DeepSeek) → báo lỗi rõ ràng
+  const hasImage = messages.some(m => Array.isArray(m.content) && m.content.some(c => c.type === 'image'));
+  if (hasImage && !VISION_PROVIDERS.includes(provider)) {
+    throw new Error(`${provider} không đọc được ảnh. Đổi sang Anthropic/OpenAI cho tác vụ phân tích ảnh.`);
+  }
+
   if (provider === 'anthropic') return callAnthropic(messages, model, key, maxTokens);
-  if (provider === 'openai') return callOpenAI(messages, model, key, maxTokens);
+  if (provider === 'openai')    return callOpenAI(messages, model, key, maxTokens);
+  if (provider === 'deepseek') {
+    const thinking = opts._override?.thinking ?? (localStorage.getItem('api_thinking') === '1');
+    return callOpenAICompat(messages, model, key, maxTokens, 'https://api.deepseek.com/v1/chat/completions', { thinking });
+  }
   throw new Error('Provider không hỗ trợ: ' + provider);
 }
 
@@ -2559,6 +2688,31 @@ async function callOpenAI(messages, model, key, maxTokens){
   if (!r.ok) { const e = await r.text(); throw new Error(`API ${r.status}: ${e.slice(0, 200)}`); }
   const d = await r.json();
   return d.choices[0].message.content;
+}
+
+// OpenAI-compatible endpoint (DeepSeek...) — gọi THẲNG, không qua proxy Vercel
+async function callOpenAICompat(messages, model, key, maxTokens, endpoint, opts = {}){
+  const oaMessages = messages.map(m => {
+    if (typeof m.content === 'string') return m;
+    // endpoint kiểu này thường text-only → chỉ giữ phần text
+    const text = m.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+    return { role: m.role, content: text };
+  });
+  const payload = { model, messages: oaMessages, max_tokens: maxTokens };
+  // 🧠 Bật Thinking cho model hybrid (DeepSeek). Tắt = không gửi field → dùng mặc định của model (an toàn).
+  // Nếu DeepSeek V4 dùng cú pháp khác (vd model id riêng, hay field "reasoning"), chỉ cần sửa đúng 1 dòng dưới.
+  if (opts.thinking === true) payload.thinking = { type: 'enabled' };
+  const body = JSON.stringify(payload);
+  const r = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body
+  });
+  if (!r.ok) { const e = await r.text(); throw new Error(`API ${r.status}: ${e.slice(0, 200)}`); }
+  const d = await r.json();
+  const msg = d.choices?.[0]?.message || {};
+  // Model thinking trả lời ở content; phần suy luận nằm ở reasoning_content (bỏ qua, chỉ lấy đáp án)
+  return msg.content || msg.reasoning_content || '';
 }
 
 // Backward-compatible alias (logic cũ dùng callClaude)
@@ -4079,8 +4233,9 @@ function calcDur(text){
 
 // Tách 1 đoạn text dài thành N phần cân bằng, ưu tiên cắt tại mệnh đề (, ; : — –).
 // Nếu không có mệnh đề → cắt theo từ. Trả về [text] nếu cảnh không cần tách.
-function _splitTextByDuration(text, maxSec){
-  const totalDur = calcDur(text);
+// realDur (tuỳ chọn): độ dài THẬT của cảnh (đã căn SRT) — dùng để quyết định tách chính xác thay vì ước lượng theo chữ.
+function _splitTextByDuration(text, maxSec, realDur){
+  const totalDur = (realDur && realDur > 0) ? realDur : calcDur(text);
   if (totalDur <= maxSec) return [text];
   const N = Math.max(2, Math.ceil(totalDur / maxSec));
   // Tách theo mệnh đề (giữ nguyên dấu câu ở cuối mỗi mệnh đề)
@@ -4137,7 +4292,8 @@ function splitLongScenes(){
   const built = []; // { scene, sourceId | null }
   let affected = 0, added = 0;
   for (const s of state.scenes) {
-    const parts = _splitTextByDuration(s.text, maxSec);
+    // Dùng độ dài THẬT (đã căn SRT) để quyết định tách; nếu chưa căn thì rơi về ước lượng theo chữ
+    const parts = _splitTextByDuration(s.text, maxSec, s.duration);
     if (parts.length <= 1) { built.push({ scene: { ...s }, sourceId: s.id }); continue; }
     affected++;
     added += parts.length - 1;
@@ -5090,49 +5246,57 @@ async function doGenerateScenePrompts(){
     }
   }
 
+  // Xử lý 1 batch (độc lập). seedCtx = ngữ cảnh mồi (chỉ dùng khi chạy tuần tự).
+  const processSceneBatch = async (batch, seedCtx) => {
+    let neighborVO = '';
+    const fi = state.scenes.findIndex(s => s.id === batch[0].id);
+    const li = state.scenes.findIndex(s => s.id === batch[batch.length - 1].id);
+    const bPrev = fi > 0 ? state.scenes[fi - 1] : null;
+    const bNext = li >= 0 && li < state.scenes.length - 1 ? state.scenes[li + 1] : null;
+    if (bPrev) neighborVO += `Cảnh trước batch [${bPrev.id}]: "${(bPrev.text || '').slice(0, 180)}"\n`;
+    if (bNext) neighborVO += `Cảnh sau batch [${bNext.id}]: "${(bNext.text || '').slice(0, 180)}"`;
+    const prompt = buildSceneGenPrompt(batch, seedCtx, p, profileContext, neighborVO);
+    let reply = await callClaude(prompt, 4000);
+    let parsed = safeParseJSON(reply);
+    if (!parsed.length) { reply = await callClaude(prompt, 4000); parsed = safeParseJSON(reply); }
+    // CHỈ gán cho cảnh thuộc batch này → không đè nhầm cảnh khác
+    const batchIds = batch.map(s => s.id);
+    const batchIdSet = new Set(batchIds);
+    parsed.forEach((x, idx) => {
+      let id = String(x.id || '').padStart(3, '0');
+      if (!batchIdSet.has(id)) id = batchIds[idx];   // AI trả ID sai → khớp theo vị trí
+      if (id && batchIdSet.has(id) && x.prompt) state.scenePrompts[id] = cleanPrompt(x.prompt);
+    });
+    renderPromptsV();
+    const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
+    setStatus2(`Tạo prompt... ${done}/${state.scenes.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
+  };
+
+  const lanes = _concurrency();
+  const batches = [];
+  for (let i = 0; i < todo.length; i += bs) batches.push(todo.slice(i, i + bs));
+
   try {
-    for (let i = 0; i < todo.length; i += bs) {
-      if (state.cancelRequested) {
-        clearCancel();
-        const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
-        setStatus2(`⏸ Đã dừng. Đã tạo ${done}/${state.scenes.length}. Bấm "Tạo Prompt G-Labs" để chạy TIẾP từ chỗ dừng.`, 'info');
-        saveState();
-        return;
+    if (lanes > 1) {
+      // SONG SONG (nhiều key): chạy các batch cùng lúc — đổi liên kết mạch giữa batch lấy tốc độ
+      await runConcurrent(batches, b => processSceneBatch(b, ''), lanes, () => state.cancelRequested);
+    } else {
+      // TUẦN TỰ (1 key): giữ liên kết mạch hình ảnh giữa các batch
+      for (const batch of batches) {
+        if (state.cancelRequested) break;
+        await processSceneBatch(batch, prevSceneCtx);
+        for (let k = batch.length - 1; k >= 0; k--) {
+          const pp = state.scenePrompts[batch[k].id];
+          if (pp && pp.trim()) { prevSceneCtx = `[${batch[k].id}] ${pp.slice(0, 220)}`; break; }
+        }
       }
-      const batch = todo.slice(i, i + bs);
-      // Lời thoại cảnh trước batch + sau batch (mượn bối cảnh cho cảnh thiếu hình)
-      let neighborVO = '';
-      const fi = state.scenes.findIndex(s => s.id === batch[0].id);
-      const li = state.scenes.findIndex(s => s.id === batch[batch.length - 1].id);
-      const bPrev = fi > 0 ? state.scenes[fi - 1] : null;
-      const bNext = li >= 0 && li < state.scenes.length - 1 ? state.scenes[li + 1] : null;
-      if (bPrev) neighborVO += `Cảnh trước batch [${bPrev.id}]: "${(bPrev.text || '').slice(0, 180)}"\n`;
-      if (bNext) neighborVO += `Cảnh sau batch [${bNext.id}]: "${(bNext.text || '').slice(0, 180)}"`;
-      const prompt = buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO);
-      let reply = await callClaude(prompt, 4000);
-      let parsed = safeParseJSON(reply);
-      // Retry 1 lần nếu batch trả về rỗng (parse lỗi)
-      if (!parsed.length) {
-        reply = await callClaude(prompt, 4000);
-        parsed = safeParseJSON(reply);
-      }
-      // Map prompt → cảnh: ưu tiên khớp ID trong batch; nếu AI trả ID sai (001,002...) → dùng VỊ TRÍ.
-      // CHỈ gán cho cảnh thuộc batch này → không bao giờ đè nhầm cảnh khác.
-      const batchIds = batch.map(s => s.id);
-      const batchIdSet = new Set(batchIds);
-      parsed.forEach((x, idx) => {
-        let id = String(x.id || '').padStart(3, '0');
-        if (!batchIdSet.has(id)) id = batchIds[idx];   // AI trả ID sai → khớp theo vị trí
-        if (id && batchIdSet.has(id) && x.prompt) state.scenePrompts[id] = cleanPrompt(x.prompt);
-      });
-      renderPromptsV();
-      // Cập nhật ngữ cảnh: lấy prompt của cảnh CUỐI trong batch làm mồi cho batch sau
-      for (let k = batch.length - 1; k >= 0; k--) {
-        const pp = state.scenePrompts[batch[k].id];
-        if (pp && pp.trim()) { prevSceneCtx = `[${batch[k].id}] ${pp.slice(0, 220)}`; break; }
-      }
+    }
+    if (state.cancelRequested) {
+      clearCancel();
       const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
-      setStatus2(`Tạo prompt... ${done}/${state.scenes.length}`, 'working');
+      setStatus2(`⏸ Đã dừng. Đã tạo ${done}/${state.scenes.length}. Bấm "Tạo Prompt G-Labs" để chạy TIẾP từ chỗ dừng.`, 'info');
+      saveState();
+      return;
     }
     const finalMissing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
     setStatus2(finalMissing > 0
@@ -5187,13 +5351,27 @@ function clearAutoSrt(){
   const clr = document.getElementById('autoSrtClear'); if (clr) clr.style.display = 'none';
 }
 
+// Căn độ dài tất cả cảnh hiện tại theo SRT đã đính (theo từ + lấp khoảng lặng). Trả về số cảnh đã căn, hoặc null nếu không có SRT.
+function _autoAlignSrtOnce(){
+  if (!(_autoSrtText && _autoSrtText.trim())) return null;
+  const cues = parseSRT(_autoSrtText);
+  const words = cues.length ? t8SrtToWords(cues) : [];
+  if (!words.length) return null;
+  const results = t8AlignScenesToWords(state.scenes, words);
+  let upd = 0;
+  results.forEach((r, i) => { if (r.newDur != null && state.scenes[i]){ state.scenes[i].duration = r.newDur; upd++; } });
+  renderAllT2();
+  return upd;
+}
+
 const AUTO_STEPS = [
   { label: 'Lọc' },
   { label: 'Chia cảnh' },
+  { label: 'Căn timing' },
   { label: 'Tách cảnh dài' },
+  { label: 'Căn lại' },
   { label: 'Quét trước' },
   { label: 'Gán tài nguyên' },
-  { label: 'Căn timing' },
   { label: 'Prompt G-Labs' },
   { label: 'Ảnh B (cảnh dài)' }
 ];
@@ -5247,7 +5425,7 @@ async function runAutoTool2(){
   const stopped = () => _autoStopFlag;  // inner funcs tự clearCancel, nên dựa vào cờ riêng
 
   try {
-    // BƯỚC 1+2+3 — Lọc + Chia cảnh + Tách cảnh dài (CHỈ khi chưa có cảnh → tránh xoá prompt cũ khi chạy tiếp)
+    // BƯỚC 0→3 — Lọc + Chia cảnh + Căn timing (lần 1) + Tách cảnh dài (CHỈ khi chưa có cảnh → tránh xoá prompt cũ khi chạy tiếp)
     if (state.scenes.length === 0){
       _autoSetStep(0, 'active');
       cleanScript(); syncTool2();
@@ -5260,78 +5438,79 @@ async function runAutoTool2(){
       _autoSetStep(1, 'done');
       if (stopped()) throw 'STOP';
 
-      // Tách cảnh dài → nhiều ảnh (theo ngưỡng s/ảnh ở ô bên cạnh nút Chia Cảnh)
-      _autoSetStep(2, 'active');
+      // Căn timing LẦN 1 (TRƯỚC tách) — để tách cảnh dài dựa trên độ dài THẬT, không phải ước lượng theo chữ
+      try {
+        const n1 = _autoAlignSrtOnce();
+        _autoSetStep(2, n1 == null ? 'skip' : 'done');
+      } catch(e){ console.warn('Auto căn timing 1 lỗi:', e); _autoSetStep(2, 'fail'); }
+      if (stopped()) throw 'STOP';
+
+      // Tách cảnh dài → nhiều ảnh (dựa trên độ dài thật nếu đã căn ở bước trên)
+      _autoSetStep(3, 'active');
       splitLongScenes();
-      _autoSetStep(2, 'done');
+      _autoSetStep(3, 'done');
     } else {
       _autoSetStep(0, 'skip');
       _autoSetStep(1, 'skip');
       _autoSetStep(2, 'skip');
-    }
-    if (stopped()) throw 'STOP';
-
-    // BƯỚC 4 — Quét trước nhân vật/bối cảnh (bỏ qua nếu đã quét)
-    if (!(state.charactersV.length || state.backgroundsV.length)){
-      _autoSetStep(3, 'active');
-      clearCancel();
-      await doPrescan();
-      _autoSetStep(3, 'done');
-    } else {
       _autoSetStep(3, 'skip');
     }
     if (stopped()) throw 'STOP';
 
-    // BƯỚC 5 — Gán tài nguyên (bỏ qua nếu đã gán hoặc không có nhân vật/bối cảnh)
-    if (state.charactersV.length || state.backgroundsV.length){
-      const alreadyAssigned = state.scenes.some(s => s.character || s.background);
-      if (!alreadyAssigned){
-        _autoSetStep(4, 'active');
-        clearCancel();
-        await doAssign();
-        _autoSetStep(4, 'done');
-      } else {
-        _autoSetStep(4, 'skip');
-      }
+    // BƯỚC 4 — Căn LẠI độ dài theo SRT (SAU tách — gán độ dài thật cho các cảnh con mới)
+    if (_autoSrtText && _autoSrtText.trim()){
+      _autoSetStep(4, 'active');
+      try {
+        const n2 = _autoAlignSrtOnce();
+        if (n2 != null) setStatus2(`✓ Đã căn lại timing ${n2}/${state.scenes.length} cảnh theo SRT.`, 'working');
+        _autoSetStep(4, n2 == null ? 'skip' : 'done');
+      } catch(e){ console.warn('Auto căn lại lỗi:', e); _autoSetStep(4, 'fail'); }
     } else {
       _autoSetStep(4, 'skip');
     }
     if (stopped()) throw 'STOP';
 
-    // BƯỚC 6 — Căn độ dài theo SRT (nếu có đính SRT cho Auto) — căn theo từ + lấp khoảng lặng, không gọi AI
-    if (_autoSrtText && _autoSrtText.trim()){
+    // BƯỚC 5 — Quét trước nhân vật/bối cảnh (bỏ qua nếu đã quét)
+    if (!(state.charactersV.length || state.backgroundsV.length)){
       _autoSetStep(5, 'active');
-      try {
-        const cues = parseSRT(_autoSrtText);
-        const words = cues.length ? t8SrtToWords(cues) : [];
-        if (words.length){
-          const results = t8AlignScenesToWords(state.scenes, words);
-          let upd = 0;
-          results.forEach((r, i) => { if (r.newDur != null && state.scenes[i]){ state.scenes[i].duration = r.newDur; upd++; } });
-          renderAllT2();
-          setStatus2(`✓ Đã căn timing ${upd}/${state.scenes.length} cảnh theo SRT.`, 'working');
-        }
-        _autoSetStep(5, 'done');
-      } catch(e){ console.warn('Auto SRT timing lỗi:', e); _autoSetStep(5, 'fail'); }
+      clearCancel();
+      await doPrescan();
+      _autoSetStep(5, 'done');
     } else {
       _autoSetStep(5, 'skip');
     }
     if (stopped()) throw 'STOP';
 
+    // BƯỚC 6 — Gán tài nguyên (bỏ qua nếu đã gán hoặc không có nhân vật/bối cảnh)
+    if (state.charactersV.length || state.backgroundsV.length){
+      const alreadyAssigned = state.scenes.some(s => s.character || s.background);
+      if (!alreadyAssigned){
+        _autoSetStep(6, 'active');
+        clearCancel();
+        await doAssign();
+        _autoSetStep(6, 'done');
+      } else {
+        _autoSetStep(6, 'skip');
+      }
+    } else {
+      _autoSetStep(6, 'skip');
+    }
+    if (stopped()) throw 'STOP';
+
     // BƯỚC 7 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
-    _autoSetStep(6, 'active');
+    _autoSetStep(7, 'active');
     clearCancel();
     await doGenerateScenePrompts();
     const promptCount = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
-    if (promptCount === 0){ _autoSetStep(6, 'fail'); throw new Error('AI chưa tạo được prompt nào — thử giảm Batch xuống 2-3.'); }
-    _autoSetStep(6, 'done');
+    if (promptCount === 0){ _autoSetStep(7, 'fail'); throw new Error('AI chưa tạo được prompt nào — thử giảm Batch xuống 2-3.'); }
+    _autoSetStep(7, 'done');
     if (stopped()) throw 'STOP';  // user bấm Dừng trong lúc gen prompt
 
     // BƯỚC 8 — Tự thêm ảnh B cho cảnh dài (autoMode = bỏ confirm)
-    _autoSetStep(7, 'active');
+    _autoSetStep(8, 'active');
     clearCancel();
     await autoAddPromptBForLongScenes(true);
-    _autoSetStep(7, 'done');
+    _autoSetStep(8, 'done');
 
     // --- Tổng kết ---
     const secs = Math.round((Date.now() - t0) / 1000);
@@ -6341,26 +6520,26 @@ async function genAllAssetPrompts(){
   clearCancel();
 
   try {
-    // Character prompts (check Library first → skip AI if exists)
+    // Character prompts — chạy SONG SONG theo số key (mỗi nhân vật độc lập). Check Library → skip AI nếu có.
     let libPulledChars = 0;
-    for (const rawName of chars) {
-      if (state.cancelRequested) {
-        clearCancel();
-        setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật. Bấm lại để chạy tiếp.`, 'info');
-        saveState();
-        return;
-      }
-      // Đã có prompt rồi → bỏ qua (chạy tiếp sau khi Dừng, không làm lại)
+    const charsToDo = chars.filter(rawName => {
       const name = rawName.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
-      if (state.assetCharPrompts[name] && state.assetCharPrompts[name].trim()) continue;
+      return !(state.assetCharPrompts[name] && state.assetCharPrompts[name].trim());
+    });
+    const charLanes = _concurrency();
+    await runConcurrent(charsToDo, async (rawName) => {
+      if (state.cancelRequested) return;
       const res = await genOneCharPrompt(rawName, ctx);
+      if (res && res.pulled) libPulledChars++;
       renderAssetCharPrompts(chars);
-      if (res.pulled) {
-        libPulledChars++;
-        setStatus3(`📚 ${res.name}: pull từ Library (${libPulledChars} char đã pull, đỡ gọi AI)`, 'info');
-        continue;
-      }
-      setStatus3(`Nhân vật ${Object.keys(state.assetCharPrompts).length}/${chars.length}...`, 'working');
+      const done = Object.keys(state.assetCharPrompts).length;
+      setStatus3(`Nhân vật ${done}/${chars.length}...${charLanes > 1 ? ` (⚡ ${charLanes} luồng)` : ''}${libPulledChars ? ` · 📚 ${libPulledChars} từ Library` : ''}`, 'working');
+    }, charLanes, () => state.cancelRequested);
+    if (state.cancelRequested) {
+      clearCancel();
+      setStatus3(`⏸ Đã dừng. Đã tạo ${Object.keys(state.assetCharPrompts).length}/${chars.length} prompt nhân vật. Bấm lại để chạy tiếp.`, 'info');
+      saveState();
+      return;
     }
 
     // Background prompts — GỘP tất cả vào 1 lần gọi API (tiết kiệm chi phí)
