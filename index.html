@@ -5855,14 +5855,20 @@ CÁC CẢNH:
 ${sceneBlocks}
 
 Trả về JSON object, key là id cảnh, value là prompt B (tiếng Anh). VD: {"007":"...","012":"..."}
-CHỈ trả JSON, không giải thích.`;
+CHỈ trả JSON, không giải thích, không suy luận.`;
 
-  const reply = await callClaude(sysPrompt, 2500);
+  // callLLMJson: ép JSON + thinking off + validate (object có ≥1 value chuỗi cho id trong batch)
+  // → chống DeepSeek xả nguyên đoạn suy luận vào prompt B
+  const ids = new Set(batch.map(s => String(s.id).padStart(3, '0')));
   let obj;
   try {
-    const clean = reply.replace(/```json|```/g, '').trim();
-    obj = JSON.parse(clean);
+    obj = await callLLMJson(sysPrompt, {
+      maxTokens: 2500,
+      validate: o => o && typeof o === 'object' && !Array.isArray(o)
+        && Object.entries(o).some(([k, v]) => ids.has(String(k).padStart(3, '0')) && typeof v === 'string' && v.trim())
+    });
   } catch (e) {
+    // Hết cách ở dạng batch → thử từng cảnh (cũng đã JSON-hardened)
     for (const s of batch) {
       if (state.cancelRequested) break;
       await genSingleScenePromptB(s.id);
@@ -5870,9 +5876,12 @@ CHỈ trả JSON, không giải thích.`;
     return;
   }
 
+  // Chuẩn hoá key về 3 chữ số rồi gán đúng cảnh
+  const norm = {};
+  for (const [k, v] of Object.entries(obj)) norm[String(k).padStart(3, '0')] = v;
   if (!state.scenePrompts2) state.scenePrompts2 = {};
   for (const s of batch) {
-    const b = obj[s.id];
+    const b = norm[s.id];
     if (b && typeof b === 'string' && b.trim()) {
       state.scenePrompts2[s.id] = cleanPrompt(b.trim());
     }
@@ -5906,9 +5915,13 @@ VO cảnh: "${scene.text}"
 Thời lượng: ${scene.duration}s
 Prompt A: "${promptA}"
 
-Trả về CHỈ text prompt B, không có prefix, không có JSON.`;
-    const reply = await callClaude(sysPrompt, 400);
-    const clean = cleanPrompt(reply.trim());
+Trả về CHỈ 1 JSON object: {"prompt":"<prompt B tiếng Anh, bắt đầu ngay bằng mô tả visual, KHÔNG prefix>"}. KHÔNG giải thích, KHÔNG suy luận, KHÔNG văn xuôi ngoài JSON.`;
+    // callLLMJson: ép JSON + thinking off → chống DeepSeek xả suy luận thành prompt
+    const got = await callLLMJson(sysPrompt, {
+      maxTokens: 500,
+      validate: o => o && typeof o.prompt === 'string' && o.prompt.trim().length > 20
+    });
+    const clean = cleanPrompt(String(got.prompt).trim());
     if (clean) {
       if (!state.scenePrompts2) state.scenePrompts2 = {};
       state.scenePrompts2[id] = clean;
