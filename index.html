@@ -5719,9 +5719,9 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO)
 🎬 STYLE RULES (BẮT BUỘC áp dụng cho MỌI cảnh — đây là style cố định của kênh):
 Scene aesthetic: ${p.sceneStyle || 'consistent flat 2D style'} --ar 16:9
 
-📐 ĐẶC ĐIỂM NHÂN VẬT BẮT BUỘC (lấy từ Character Style của kênh — phải LẶP LẠI trong MỖI prompt, KHÔNG được bỏ qua hay tự ý đổi):
+📐 ĐẶC ĐIỂM NHÂN VẬT BẮT BUỘC — CHÈN NGUYÊN VĂN cụm sau vào MỖI prompt có nhân vật (COPY Y HỆT, KHÔNG rút gọn, KHÔNG diễn giải lại, KHÔNG thay bằng cụm chung chung):
 "${charStyleShort || 'giữ đúng style nhân vật của kênh'}"
-- Mỗi khi nhắc nhân vật trong prompt, PHẢI kèm các đặc điểm nhận dạng chính ở trên (hình dạng đầu, kiểu tay chân, tỉ lệ cơ thể, nét vẽ)
+- Liệt kê CỤ THỂ TỪNG chi tiết ở trên (hình dạng đầu, MẮT/MŨI/MIỆNG, kiểu cổ–tay–chân, tỉ lệ cơ thể, nét vẽ). VD ĐÚNG: "pale-cream rounded head with small black dot eyes and a small mouth, slender black stick neck, black stick arms and gloved hands". VD SAI (TUYỆT ĐỐI TRÁNH): gộp thành "gentle facial features", "slender limbs" — vì làm rụng đặc điểm khoá.
 - TUYỆT ĐỐI giữ nhất quán với Character Style — KHÔNG tự ý vẽ khác kiểu (VD nếu kênh dùng người que thì giữ người que, KHÔNG đổi sang người thật; nếu kênh dùng chibi thì giữ chibi)
 ${dm === 'tag' ? `- Nhân vật chính: ghi tag [tên-nhân-vật] + kèm cụm đặc điểm nhận dạng chính ngay sau tag. Nhân vật phụ: tả tự do nhưng cùng style.` : '- Tả nhân vật kèm đầy đủ đặc điểm style của kênh ở trên.'}
 
