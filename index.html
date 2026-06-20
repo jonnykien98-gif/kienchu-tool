@@ -7179,6 +7179,18 @@ function _t3StyleCtx(){
 
 // Gen prompt cho 1 nhân vật. opts.forceAI=true → bỏ qua Library, luôn gọi AI (dùng cho 🎲 tạo lại).
 // Trả về { name, pulled } — pulled=true nếu lấy từ Library thay vì gọi AI. Caller tự render + set status.
+// 🛡 Gỡ các cụm dễ chạm bộ lọc child-safety của tool tạo ảnh (nhân vật trẻ em + mô tả cởi trần)
+// → tránh prompt nhân vật bị "Nội dung vi phạm chính sách". Cắt theo câu, bỏ câu chứa cụm nhạy cảm.
+const _CHAR_RISKY = /\b(topless|bare[-\s]?chest(ed)?|shirtless|hip[-\s]?wrap|loin[-\s]?cloth|no body hair|chest dots|naked|nude|underwear|undressed)\b/i;
+function _sanitizeCharPrompt(text){
+  return String(text || '')
+    .split(/(?<=[.!?])\s+/)               // tách theo câu
+    .filter(seg => !_CHAR_RISKY.test(seg)) // bỏ câu chứa cụm cởi trần
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function genOneCharPrompt(rawName, ctx, opts = {}){
   const tagMatch = rawName.match(/^(.*?)\s*\[\s*(\w+)\s*\]\s*$/);
   const name    = tagMatch ? tagMatch[1].trim() : rawName.trim();
@@ -7234,7 +7246,8 @@ KHÔNG tả lại art-style chung của kênh, KHÔNG mô tả layout/bố cục
   desc = cleanPrompt(String(desc || '').trim());
   if (desc && !desc.includes('[' + name + ']')) desc = `The character [${name}]. ` + desc;   // đảm bảo có tag
   // 🧩 RÁP CỐ ĐỊNH: [style đầy đủ] + [mô tả nhân vật] + [LAYOUT kèm no-text] → luôn đủ định dạng
-  state.assetCharPrompts[name] = `${useStyle} ${desc} ${charLayout}`.replace(/\s+/g, ' ').trim();
+  // 🛡 Lọc cụm cởi trần (chống nhân vật trẻ em bị bộ lọc child-safety chặn "vi phạm chính sách")
+  state.assetCharPrompts[name] = _sanitizeCharPrompt(`${useStyle} ${desc} ${charLayout}`);
   return { name, pulled: false };
 }
 
