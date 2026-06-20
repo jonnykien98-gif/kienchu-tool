@@ -2992,6 +2992,23 @@ function cleanPrompt(p){
   return s;
 }
 
+// 🔒 ÉP TAG bằng code (chế độ Tag): đảm bảo prompt có [nhân-vật] + [bối-cảnh] để tool tạo ảnh
+// đính ĐÚNG ảnh tham chiếu → không ra ảnh lạc nhân vật/chủ đề. KHÔNG tin AI giữ tag (DeepSeek hay bỏ).
+function _ensureSceneTags(promptText, scene){
+  if ((state.descMode || 'tag') !== 'tag' || !scene) return promptText;   // chỉ chế độ Tag mới cần [tag]
+  let t = String(promptText || '').trim();
+  if (!t) return t;
+  const need = [];
+  // Bối cảnh: luôn nên có (kể cả cảnh b-roll vẫn có địa điểm)
+  if (scene.background && !t.includes('[' + scene.background + ']')) need.push('[' + scene.background + ']');
+  // Nhân vật: CHỈ chèn nếu prompt có nhắc tới người → tránh phá cảnh b-roll thuần đồ vật
+  const mentionsPerson = /\b(he|she|they|his|her|him|their|boy|girl|man|woman|men|women|child|children|person|people|figure|character|sister|sisters|father|mother|dealer|narrator|protagonist)\b/i.test(t)
+    || (scene.character && t.toLowerCase().includes(String(scene.character).toLowerCase()));
+  if (scene.character && mentionsPerson && !t.includes('[' + scene.character + ']')) need.unshift('[' + scene.character + ']');
+  if (need.length) t += (t.endsWith('.') ? ' ' : '. ') + 'Consistent reference: ' + need.join(', ') + '.';
+  return t;
+}
+
 /* ============================================================
    INLINE PROMPT EDIT — Tool 2/3/6
 ============================================================ */
@@ -5733,7 +5750,7 @@ async function genSingleScenePrompt(id){
     // Lấy prompt đầu tiên trả về (chỉ có 1 cảnh) — không phụ thuộc ID AI trả
     const got = parsed.find(x => x && x.prompt);
     if (got && got.prompt) {
-      state.scenePrompts[id] = cleanPrompt(got.prompt);
+      state.scenePrompts[id] = _ensureSceneTags(cleanPrompt(got.prompt), scene);
       renderPromptsV();
       setStatus2(`✓ Đã tạo lại prompt cảnh [${id}].`, 'ok');
       saveState();
@@ -5885,7 +5902,7 @@ CHỈ trả JSON, không giải thích, không suy luận.`;
   for (const s of batch) {
     const b = norm[s.id];
     if (b && typeof b === 'string' && b.trim()) {
-      state.scenePrompts2[s.id] = cleanPrompt(b.trim());
+      state.scenePrompts2[s.id] = _ensureSceneTags(cleanPrompt(b.trim()), s);
     }
   }
 }
@@ -5927,7 +5944,7 @@ Trả về CHỈ 1 JSON object: {"prompt":"<prompt B tiếng Anh, bắt đầu n
     const clean = cleanPrompt(String(got.prompt).trim());
     if (clean) {
       if (!state.scenePrompts2) state.scenePrompts2 = {};
-      state.scenePrompts2[id] = clean;
+      state.scenePrompts2[id] = _ensureSceneTags(clean, scene);
       renderPromptsV();
       setStatus2(`✓ Đã tạo Prompt B cảnh [${id}].`, 'ok');
       saveState(true);
@@ -5999,7 +6016,10 @@ async function doGenerateScenePrompts(){
     parsed.forEach((x, idx) => {
       let id = String(x.id || '').padStart(3, '0');
       if (!batchIdSet.has(id)) id = batchIds[idx];   // AI trả ID sai → khớp theo vị trí
-      if (id && batchIdSet.has(id) && x.prompt) state.scenePrompts[id] = cleanPrompt(x.prompt);
+      if (id && batchIdSet.has(id) && x.prompt) {
+        const sc = state.scenes.find(s => s.id === id);
+        state.scenePrompts[id] = _ensureSceneTags(cleanPrompt(x.prompt), sc);
+      }
     });
     renderPromptsV();
     const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
