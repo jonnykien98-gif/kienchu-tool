@@ -2184,8 +2184,21 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
             </div>
           </div>
           <div>
-            <label class="label">Claude (Anthropic) key <span style="font-weight:400;color:var(--text-muted);font-size:11px">— cho bước Reduce (tổng hợp)</span></label>
+            <label class="label">Claude (Anthropic) key <span style="font-weight:400;color:var(--text-muted);font-size:11px">— cho Reduce + đọc-vị packaging (vision) + đẻ tiêu đề</span></label>
             <input type="password" id="t11ClaudeKey" placeholder="sk-ant-..." style="width:100%">
+          </div>
+          <div class="grid-2" style="grid-template-columns:200px 1fr;gap:12px">
+            <div>
+              <label class="label">🌐 Ngôn ngữ tiêu đề</label>
+              <select id="t11TitleLang" onchange="localStorage.setItem('t11_title_lang', this.value)">
+                <option value="en" selected>English 🇬🇧</option>
+                <option value="vi">Tiếng Việt 🇻🇳</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">📺 Channel của TÔI <span style="font-weight:400;color:var(--text-muted);font-size:11px">(tuỳ chọn — để gắn cờ "đã làm" cho topic trùng)</span></label>
+              <input type="text" id="t11MyChannel" placeholder="URL / @handle / channelId kênh bạn">
+            </div>
           </div>
         </div>
       </div>
@@ -2214,13 +2227,24 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
         </div>
       </div>
 
-      <div class="actions mb-24">
-        <button class="btn primary" id="t11RunBtn" onclick="t11Analyze()">🚀 Phân tích</button>
+      <div class="actions mb-24" style="flex-wrap:wrap;gap:8px">
+        <button class="btn primary" id="t11RunBtn" onclick="t11Analyze()">① 🚀 Phân tích nhu cầu</button>
+        <button class="btn ghost" onclick="t11Packaging()" title="Đọc vị title + thumbnail của top video đối thủ (Claude vision)">② 🔍 Đọc vị packaging</button>
+        <button class="btn ghost" onclick="t11GenTitles()" title="Đẻ 3-5 biến thể tiêu đề/topic, bám pattern đối thủ">③ 🎬 Đẻ tiêu đề</button>
+        <button class="btn ghost" onclick="t11Supply()" title="⚠️ search.list tốn 100 unit/topic — chạy theo yêu cầu">⚖️ Tính Supply</button>
+        <button class="btn ghost" onclick="t11FlagDone()" title="So khớp với video đã đăng trên channel của bạn → gắn cờ 'đã làm'">🔁 Lọc 'đã làm'</button>
         <button class="btn ghost" onclick="t11ExportXLSX()">📊 Xuất XLSX</button>
-        <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t11Reset()">🗑 Xoá kết quả</button>
+        <button class="btn ghost" style="color:var(--red);margin-left:auto" onclick="t11Reset()">🗑 Xoá</button>
       </div>
 
-      <div class="status-bar" id="status11">Sẵn sàng. Cài key → dán URL → bấm Phân tích.</div>
+      <div class="status-bar" id="status11">Sẵn sàng. Cài key → dán URL → ① Phân tích nhu cầu.</div>
+
+      <div id="t11Meta" style="font-size:11.5px;color:var(--text-muted);margin-top:10px"></div>
+
+      <div class="panel" id="t11PkgPanel" style="display:none;margin-top:16px">
+        <div class="panel-head"><span>🔍 Đọc vị packaging đối thủ</span></div>
+        <div id="t11PkgBody" style="padding:14px;font-size:12.5px;line-height:1.7"></div>
+      </div>
 
       <div class="panel" id="t11ResultPanel" style="display:none;margin-top:16px">
         <div class="panel-head"><span>📊 Chủ đề theo nhu cầu khán giả</span><span class="count" id="t11TopicCount">0</span></div>
@@ -10287,21 +10311,36 @@ function t9Init(){
    - Cache raw comment vào IndexedDB; key/settings ở localStorage. KHÔNG đụng Firestore schema.
 ============================================================ */
 const setStatus11 = (m, t) => setStatusBar('status11', m, t);
-let _t11Topics = [];                     // kết quả reduce hiện tại (để export)
+let _t11Topics = [];                     // chủ đề + score + titles + supply + done (để render/export)
+let _t11Meta = null;                     // nguồn, số comment, thời điểm, channelId
+let _t11Packaging = null;                // insight title + thumbnail đối thủ
 const YT_API = 'https://www.googleapis.com/youtube/v3';
 const _T11_SIGNAL = { direct_request: '🎯 Yêu cầu trực tiếp', question: '❓ Câu hỏi', gap: '🕳 Khoảng trống' };
+// Trọng số loại tín hiệu cho xếp hạng có trọng số — CHỈNH Ở ĐÂY
+const T11_SIGNAL_WEIGHT = { direct_request: 3, gap: 2, question: 1 };
 
 function t11Init(){
-  const yt = document.getElementById('t11YtKey'); if (yt) yt.value = localStorage.getItem('yt_api_key') || '';
-  const ck = document.getElementById('t11ClaudeKey'); if (ck) ck.value = localStorage.getItem('t11_claude_key') || '';
+  const g = id => document.getElementById(id);
+  if (g('t11YtKey')) g('t11YtKey').value = localStorage.getItem('yt_api_key') || '';
+  if (g('t11ClaudeKey')) g('t11ClaudeKey').value = localStorage.getItem('t11_claude_key') || '';
+  if (g('t11MyChannel')) g('t11MyChannel').value = localStorage.getItem('t11_my_channel') || '';
+  if (g('t11TitleLang')) g('t11TitleLang').value = localStorage.getItem('t11_title_lang') || 'en';
 }
 function t11SaveKeys(){
   try {
-    localStorage.setItem('yt_api_key', (document.getElementById('t11YtKey')?.value || '').trim());
-    localStorage.setItem('t11_claude_key', (document.getElementById('t11ClaudeKey')?.value || '').trim());
-    setStatus11('✓ Đã lưu khoá API.', 'ok');
-  } catch (e) { setStatus11('Lỗi lưu key: ' + e.message, 'error'); }
+    const v = id => (document.getElementById(id)?.value || '').trim();
+    localStorage.setItem('yt_api_key', v('t11YtKey'));
+    localStorage.setItem('t11_claude_key', v('t11ClaudeKey'));
+    localStorage.setItem('t11_my_channel', v('t11MyChannel'));
+    setStatus11('✓ Đã lưu khoá & cấu hình.', 'ok');
+  } catch (e) { setStatus11('Lỗi lưu: ' + e.message, 'error'); }
 }
+// helpers dùng chung
+const _t11Yt = () => (document.getElementById('t11YtKey')?.value || '').trim();
+const _t11Claude = () => (document.getElementById('t11ClaudeKey')?.value || '').trim();
+const _t11Lang = () => (document.getElementById('t11TitleLang')?.value === 'vi') ? 'Vietnamese (tiếng Việt)' : 'English';
+const _t11ClaudeOv = key => ({ provider: 'anthropic', model: MODELS.anthropic[0].id, key });   // Sonnet 4.6, không hardcode chuỗi
+const _uploadsOf = channelId => 'UU' + String(channelId).slice(2);
 
 // URL → {type:'video',id} | {type:'channel',channelId|handle}
 function _t11ParseUrl(raw){
@@ -10358,10 +10397,26 @@ async function _t11TopVideos(uploadsId, topN, ytKey, shouldStop){
   for (let i = 0; i < ids.length; i += 50) {
     if (shouldStop && shouldStop()) break;
     const d = await _ytFetch('videos', { part: 'statistics,snippet', id: ids.slice(i, i + 50).join(',') }, ytKey);
-    (d.items || []).forEach(v => withViews.push({ id: v.id, title: v.snippet?.title || '', views: parseInt(v.statistics?.viewCount || '0') }));
+    (d.items || []).forEach(v => withViews.push({
+      id: v.id, title: v.snippet?.title || '', views: parseInt(v.statistics?.viewCount || '0'),
+      thumb: v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || ''
+    }));
   }
   withViews.sort((a, b) => b.views - a.views);
   return withViews.slice(0, topN);
+}
+
+// Xác định channelId từ src (channelId trực tiếp / handle / video)
+async function _t11ChannelId(src, ytKey){
+  if (src.channelId) return src.channelId;
+  if (src.handle) {
+    let d = await _ytFetch('channels', { part: 'id', forHandle: src.handle }, ytKey);
+    let cid = d.items?.[0]?.id;
+    if (!cid) { const s = await _ytFetch('search', { part: 'snippet', q: src.handle, type: 'channel', maxResults: 1 }, ytKey); cid = s.items?.[0]?.snippet?.channelId; }
+    return cid || null;
+  }
+  if (src.type === 'video' && src.id) { const d = await _ytFetch('videos', { part: 'snippet', id: src.id }, ytKey); return d.items?.[0]?.snippet?.channelId || null; }
+  return null;
 }
 
 // kéo comment 1 video (phân trang đến maxComments)
@@ -10430,12 +10485,11 @@ ${batchComments.map((c, i) => (i + 1) + '. ' + c).join('\n')}`;
 async function _t11Reduce(mapResults, claudeKey){
   const merged = { topicRequests: [], openQuestions: [], strongReactions: [], painPoints: [] };
   mapResults.forEach(r => ['topicRequests', 'openQuestions', 'strongReactions', 'painPoints'].forEach(k => { if (Array.isArray(r[k])) merged[k].push(...r[k]); }));
-  const prompt = `Dưới đây là dữ liệu trích xuất từ HÀNG NGHÌN bình luận khán giả (đã gộp theo lô). CLUSTER các ý trùng thành CHỦ ĐỀ, đếm tần suất, xếp hạng theo nhu cầu khán giả, và ĐẶT LUÔN tiêu đề video.
+  const prompt = `Dưới đây là dữ liệu trích xuất từ HÀNG NGHÌN bình luận khán giả (đã gộp theo lô). CLUSTER các ý trùng thành CHỦ ĐỀ, đếm tần suất, phân loại tín hiệu.
 Trả về CHỈ 1 JSON array (không markdown), mỗi phần tử:
-{"topic":"<tên chủ đề ngắn>","title":"<tiêu đề video HẤP DẪN chuẩn CTR, 8-14 từ, khơi tò mò, dựa trên chủ đề + đúng nhu cầu khán giả>","mentionCount":<số lần nhắc ước tính>,"signalType":"direct_request|question|gap","exampleComments":["<2-3 ý ví dụ ngắn>"]}
+{"topic":"<tên chủ đề ngắn>","mentionCount":<số lần nhắc ước tính>,"signalType":"direct_request|question|gap","exampleComments":["<2-3 ý ví dụ ngắn>"]}
 - signalType: direct_request = yêu cầu trực tiếp; question = câu hỏi cần giải đáp; gap = khoảng trống nội dung chưa ai làm.
-- title: viết bằng tiếng Việt, giật tít tự nhiên (không clickbait lố), bám đúng điều khán giả muốn biết.
-- Gộp mạnh chủ đề trùng. Tối đa 30 chủ đề, xếp mentionCount giảm dần.
+- Gộp mạnh chủ đề trùng. Tối đa 30 chủ đề, xếp mentionCount giảm dần. (KHÔNG cần đặt tiêu đề ở bước này.)
 
 DỮ LIỆU:
 - Yêu cầu chủ đề: ${JSON.stringify(merged.topicRequests).slice(0, 6000)}
@@ -10452,11 +10506,21 @@ DỮ LIỆU:
   const arr = _toArr(raw) || [];
   return arr.map(t => ({
     topic: String(t.topic || '').trim(),
-    title: String(t.title || '').trim(),
     mentionCount: parseInt(t.mentionCount) || 0,
     signalType: ['direct_request', 'question', 'gap'].includes(t.signalType) ? t.signalType : 'gap',
-    exampleComments: Array.isArray(t.exampleComments) ? t.exampleComments.slice(0, 3).map(x => String(x)) : []
-  })).sort((a, b) => b.mentionCount - a.mentionCount);
+    exampleComments: Array.isArray(t.exampleComments) ? t.exampleComments.slice(0, 3).map(x => String(x)) : [],
+    titles: [], supply: null, done: false
+  }));
+}
+
+// Xếp hạng CÓ TRỌNG SỐ: normalized_freq (nhắc/1k comment) × trọng số tín hiệu
+function _t11Rerank(){
+  const total = (_t11Meta && _t11Meta.commentsAnalyzed) || 1;
+  _t11Topics.forEach(t => {
+    t.normFreq = +((t.mentionCount / total) * 1000).toFixed(2);
+    t.score = +(t.normFreq * (T11_SIGNAL_WEIGHT[t.signalType] || 1)).toFixed(2);
+  });
+  _t11Topics.sort((a, b) => b.score - a.score);
 }
 
 async function t11Analyze(){
@@ -10531,8 +10595,20 @@ async function t11Analyze(){
     try { _t11Topics = await _t11Reduce(validMaps, claudeKey); }
     finally { clearInterval(_rtimer); }
 
+    // Meta nguồn (improvement 5) + xếp hạng có trọng số (improvement 6)
+    _t11Meta = {
+      sourceLabel: src.type === 'video' ? ('video ' + src.id) : ('channel ' + (src.channelId || ('@' + src.handle))),
+      channelId: null,
+      commentsAnalyzed: clean.length,
+      rawComments: allComments.length,
+      videoCount: videos.length,
+      at: new Date().toLocaleString('vi-VN')
+    };
+    try { _t11Meta.channelId = await _t11ChannelId(src, ytKey); } catch (_) {}
+    _t11Rerank();
+    t11RenderMeta();
     t11RenderResults();
-    setStatus11(`✓ Xong: ${_t11Topics.length} chủ đề từ ${clean.length} comment (${videos.length} video).`, 'ok');
+    setStatus11(`✓ Xong: ${_t11Topics.length} chủ đề từ ${clean.length} comment (${videos.length} video). Tiếp: ② Đọc vị packaging → ③ Đẻ tiêu đề.`, 'ok');
   } catch (e) {
     if (e === 'STOP') setStatus11('⏸ Đã dừng. Kết quả (nếu có) được giữ.', 'info');
     else { console.error(e); setStatus11('Lỗi: ' + (e.message || e), 'error'); }
@@ -10540,6 +10616,19 @@ async function t11Analyze(){
     clearCancel();
     const b = document.getElementById('t11RunBtn'); if (b) b.disabled = false;
   }
+}
+
+function t11RenderMeta(){
+  const el = document.getElementById('t11Meta');
+  if (!el) return;
+  if (!_t11Meta) { el.innerHTML = ''; return; }
+  el.innerHTML = `📌 Nguồn: <b>${escapeHtml(_t11Meta.sourceLabel)}</b> · ${_t11Meta.videoCount} video · phân tích <b>${_t11Meta.commentsAnalyzed}</b>/${_t11Meta.rawComments} comment (đã lọc) · ${escapeHtml(_t11Meta.at)}`;
+}
+
+function _t11TitleCell(t){
+  if (!t.titles || !t.titles.length) return '<span style="color:var(--text-muted)">— bấm ③ Đẻ tiêu đề</span>';
+  const items = t.titles.map(v => `<div style="padding:3px 0;cursor:pointer" title="Bấm để sao chép" onclick="t11CopyTitle(this)" data-title="${escapeHtml(v.text)}"><span style="opacity:.5;font-size:10px;text-transform:uppercase">${escapeHtml(v.angle)}</span> ${escapeHtml(v.text)} <span style="opacity:.45">(${v.text.length})</span></div>`).join('');
+  return `<details><summary style="cursor:pointer;color:var(--accent);font-weight:500">${escapeHtml(t.titles[0].text)} <span style="opacity:.6">+${t.titles.length - 1} ▾</span></summary><div style="margin-top:4px">${items}</div></details>`;
 }
 
 function t11RenderResults(){
@@ -10550,16 +10639,25 @@ function t11RenderResults(){
   if (cnt) cnt.textContent = _t11Topics.length;
   if (!_t11Topics.length) { if (panel) panel.style.display = 'none'; return; }
   panel.style.display = '';
+  const hasSupply = _t11Topics.some(t => t.supply);
   box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
-      <th style="padding:8px 10px">Chủ đề</th><th style="padding:8px 10px">🎬 Tiêu đề gợi ý</th><th style="padding:8px 10px;white-space:nowrap">Số lần nhắc</th><th style="padding:8px 10px">Loại tín hiệu</th><th style="padding:8px 10px">Comment ví dụ</th>
+      <th style="padding:8px 10px">Chủ đề</th>
+      <th style="padding:8px 10px;white-space:nowrap" title="normalized_freq × trọng số tín hiệu">Điểm</th>
+      <th style="padding:8px 10px;white-space:nowrap" title="số lần nhắc / 1.000 comment">Nhắc/1k</th>
+      <th style="padding:8px 10px">Tín hiệu</th>
+      ${hasSupply ? '<th style="padding:8px 10px;white-space:nowrap" title="số video YouTube đã có (search.list)">Supply</th><th style="padding:8px 10px;white-space:nowrap" title="demand cao + supply thấp = cơ hội">Cơ hội</th>' : ''}
+      <th style="padding:8px 10px;min-width:240px">🎬 Tiêu đề (biến thể)</th>
+      <th style="padding:8px 10px">Ví dụ</th>
     </tr></thead><tbody>
-    ${_t11Topics.map(t => `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:8px 10px;font-weight:600">${escapeHtml(t.topic)}</td>
-      <td style="padding:8px 10px;color:var(--accent);font-weight:500;cursor:pointer" title="Bấm để sao chép tiêu đề" onclick="t11CopyTitle(this)" data-title="${escapeHtml(t.title || '')}">${escapeHtml(t.title || '')}</td>
-      <td style="padding:8px 10px;text-align:center">${t.mentionCount}</td>
+    ${_t11Topics.map(t => `<tr style="border-bottom:1px solid var(--border)${t.done ? ';opacity:.5' : ''}">
+      <td style="padding:8px 10px;font-weight:600">${t.done ? '<span title="đã làm" style="color:var(--green)">✅ </span>' : ''}${escapeHtml(t.topic)}</td>
+      <td style="padding:8px 10px;text-align:center;font-weight:700;color:var(--accent)">${t.score ?? '—'}</td>
+      <td style="padding:8px 10px;text-align:center">${t.normFreq ?? '—'}</td>
       <td style="padding:8px 10px;white-space:nowrap">${_T11_SIGNAL[t.signalType] || escapeHtml(t.signalType)}</td>
-      <td style="padding:8px 10px;color:var(--text-muted)">${escapeHtml(t.exampleComments.join(' · '))}</td>
+      ${hasSupply ? `<td style="padding:8px 10px;text-align:center">${t.supply ? (t.supply.count < 0 ? 'lỗi' : t.supply.count.toLocaleString()) : '—'}</td><td style="padding:8px 10px;text-align:center;font-weight:600">${t.opportunity ?? '—'}</td>` : ''}
+      <td style="padding:8px 10px">${_t11TitleCell(t)}</td>
+      <td style="padding:8px 10px;color:var(--text-muted);font-size:11.5px">${escapeHtml((t.exampleComments || []).join(' · '))}</td>
     </tr>`).join('')}
     </tbody></table>`;
 }
@@ -10579,16 +10677,34 @@ async function t11ExportXLSX(){
     }
     const rows = _t11Topics.map(t => ({
       'Chủ đề': t.topic,
-      'Tiêu đề gợi ý': t.title || '',
-      'Số lần nhắc': t.mentionCount,
-      'Loại tín hiệu': _T11_SIGNAL[t.signalType] || t.signalType,
-      'Comment ví dụ': t.exampleComments.join(' | ')
+      'Điểm': t.score ?? '',
+      'Nhắc/1k': t.normFreq ?? '',
+      'Số nhắc': t.mentionCount,
+      'Tín hiệu': _T11_SIGNAL[t.signalType] || t.signalType,
+      'Supply': t.supply ? (t.supply.count < 0 ? '' : t.supply.count) : '',
+      'Cơ hội': t.opportunity ?? '',
+      'Đã làm': t.done ? 'x' : '',
+      'Tiêu đề (biến thể)': (t.titles || []).map(v => `[${v.angle}] ${v.text}`).join(' | '),
+      'Comment ví dụ': (t.exampleComments || []).join(' | ')
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'topics');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'topics');
+    if (_t11Packaging) {
+      const tp = _t11Packaging.titlePatterns || {}, th = _t11Packaging.thumbPatterns || {};
+      const pkgRows = [
+        { 'Mục': 'Title — cấu trúc', 'Giá trị': (tp.structures || []).join('; ') },
+        { 'Mục': 'Title — power words', 'Giá trị': (tp.powerWords || []).join(', ') },
+        { 'Mục': 'Title — dùng số', 'Giá trị': tp.usesNumbers ? 'có' : 'ít' },
+        { 'Mục': 'Title — chốt', 'Giá trị': tp.note || '' },
+        { 'Mục': 'Thumb — mặt người', 'Giá trị': th.facePresence || '' },
+        { 'Mục': 'Thumb — tông màu', 'Giá trị': th.colorTone || '' },
+        { 'Mục': 'Thumb — mật độ chữ', 'Giá trị': th.textDensity || '' },
+        { 'Mục': 'Thumb — chốt', 'Giá trị': th.note || '' }
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pkgRows), 'packaging');
+    }
     XLSX.writeFile(wb, 'phan-tich-doi-thu.xlsx');
-    setStatus11('✓ Đã xuất XLSX (sheet "topics").', 'ok');
+    setStatus11('✓ Đã xuất XLSX.', 'ok');
   } catch (e) { setStatus11('Lỗi xuất XLSX: ' + e.message, 'error'); }
 }
 
@@ -10599,9 +10715,175 @@ function t11CopyTitle(el){
   setStatus11('✓ Đã sao chép tiêu đề: ' + txt, 'ok');
 }
 
+/* ---- ② ĐỌC VỊ PACKAGING ĐỐI THỦ (title pattern + thumbnail vision) ---- */
+async function _t11TitlePatterns(vids){
+  const lines = vids.map((v, i) => `${i + 1}. [${v.views} views] ${v.title}`).join('\n');
+  const prompt = `Phân tích PATTERN tiêu đề của các video YouTube THẮNG (nhiều view) dưới đây. Trả về CHỈ 1 JSON object:
+{"structures":["cấu trúc tiêu đề lặp lại"],"powerWords":["từ mạnh hay dùng"],"avgWordLength":<số từ trung bình>,"usesNumbers":<true|false>,"hooks":["kiểu hook mở đầu"],"note":"1 câu chốt công thức đang thắng"}
+TIÊU ĐỀ:\n${lines}`;
+  try {
+    return await callLLMJson(prompt, { maxTokens: 1200, validate: o => o && typeof o === 'object' && (Array.isArray(o.structures) || Array.isArray(o.powerWords)) });
+  } catch (e) { return { structures: [], powerWords: [], note: '(không bóc được pattern tiêu đề)' }; }
+}
+async function _t11ThumbPatterns(vids, ck){
+  const imgs = vids.filter(v => v.thumb).slice(0, 8);
+  if (!imgs.length) return { note: '(không có thumbnail)' };
+  const content = imgs.map(v => ({ type: 'image', source: { type: 'url', url: v.thumb } }));
+  content.push({ type: 'text', text: `Đây là ${imgs.length} thumbnail của các video YouTube nhiều view nhất 1 kênh. Bóc PATTERN HÌNH chung. Trả về CHỈ 1 JSON object:
+{"facePresence":"có/không mặt người + tỉ lệ","colorTone":"tông màu chủ đạo","textDensity":"ít/vừa/nhiều chữ + cỡ chữ","expression":"biểu cảm mặt nếu có","commonElements":["yếu tố lặp lại"],"note":"1 câu chốt style thumbnail đang thắng"}` });
+  try {
+    return await callLLMJson('', { maxTokens: 1000, messages: [{ role: 'user', content }], _override: _t11ClaudeOv(ck), validate: o => o && typeof o === 'object' && (o.facePresence || o.colorTone || o.note) });
+  } catch (e) { console.warn('thumb vision lỗi:', e.message); return { note: '(không đọc được thumbnail: ' + String(e.message).slice(0, 80) + ')' }; }
+}
+function t11RenderPackaging(){
+  const p = document.getElementById('t11PkgPanel'), b = document.getElementById('t11PkgBody');
+  if (!b) return;
+  if (!_t11Packaging) { if (p) p.style.display = 'none'; return; }
+  p.style.display = '';
+  const tp = _t11Packaging.titlePatterns || {}, th = _t11Packaging.thumbPatterns || {};
+  b.innerHTML = `<b>📝 Tiêu đề đối thủ:</b> ${escapeHtml(tp.note || '')}<br>
+    • Cấu trúc: ${escapeHtml((tp.structures || []).join(' · '))}<br>
+    • Power words: ${escapeHtml((tp.powerWords || []).join(', '))}<br>
+    • Dùng số: ${tp.usesNumbers ? 'có' : 'ít'} · ~${tp.avgWordLength || '?'} từ<br>
+    <b style="display:block;margin-top:8px">🖼 Thumbnail đối thủ:</b> ${escapeHtml(th.note || '')}<br>
+    • Mặt người: ${escapeHtml(th.facePresence || '?')} · Tông màu: ${escapeHtml(th.colorTone || '?')} · Mật độ chữ: ${escapeHtml(th.textDensity || '?')} · Biểu cảm: ${escapeHtml(th.expression || '?')}<br>
+    • Yếu tố chung: ${escapeHtml((th.commonElements || []).join(', '))}`;
+}
+async function t11Packaging(){
+  const ytKey = _t11Yt(), ck = _t11Claude();
+  if (!ytKey) return setStatus11('Cần YouTube key.', 'error');
+  if (!ck) return setStatus11('Cần Claude key (đọc vị thumbnail cần vision).', 'error');
+  const src = _t11ParseUrl(document.getElementById('t11Url')?.value);
+  if (!src) return setStatus11('Dán URL video/channel trước.', 'error');
+  clearCancel(); const stop = () => state.cancelRequested;
+  try {
+    setStatus11('Đang lấy top video đối thủ...', 'working');
+    const cid = (_t11Meta && _t11Meta.channelId) || await _t11ChannelId(src, ytKey);
+    if (!cid) throw new Error('Không xác định được channel để đọc vị.');
+    const topVids = await _t11TopVideos(_uploadsOf(cid), 15, ytKey, stop);
+    if (!topVids.length) throw new Error('Không lấy được video.');
+    if (stop()) throw 'STOP';
+    setStatus11('Bóc pattern tiêu đề (model bulk)...', 'working');
+    const titlePatterns = await _t11TitlePatterns(topVids);
+    if (stop()) throw 'STOP';
+    setStatus11('Đọc vị thumbnail (Claude vision)...', 'working');
+    const thumbPatterns = await _t11ThumbPatterns(topVids, ck);
+    _t11Packaging = { titlePatterns, thumbPatterns, sampleTitles: topVids.slice(0, 10).map(v => ({ title: v.title, views: v.views })) };
+    t11RenderPackaging();
+    setStatus11('✓ Đã đọc vị packaging. Giờ bấm ③ Đẻ tiêu đề để bám pattern này.', 'ok');
+  } catch (e) { if (e === 'STOP') setStatus11('⏸ Đã dừng.', 'info'); else { console.error(e); setStatus11('Lỗi đọc vị: ' + (e.message || e), 'error'); } }
+  finally { clearCancel(); }
+}
+
+/* ---- ③ ĐẺ TIÊU ĐỀ (nhiều biến thể, đúng ngôn ngữ, bám packaging) ---- */
+async function t11GenTitles(){
+  const ck = _t11Claude();
+  if (!_t11Topics.length) return setStatus11('Chưa có chủ đề — chạy ① Phân tích trước.', 'error');
+  if (!ck) return setStatus11('Cần Claude key để đẻ tiêu đề.', 'error');
+  const lang = _t11Lang();
+  const pkg = _t11Packaging ? JSON.stringify({ title: _t11Packaging.titlePatterns, thumb: _t11Packaging.thumbPatterns }).slice(0, 2500) : '(chưa đọc vị packaging — dùng công thức tiêu đề chung)';
+  clearCancel(); const stop = () => state.cancelRequested;
+  try {
+    const batchN = 10, batches = [];
+    for (let i = 0; i < _t11Topics.length; i += batchN) batches.push(_t11Topics.slice(i, i + batchN));
+    let done = 0;
+    for (const batch of batches) {
+      if (stop()) break;
+      const list = batch.map((t, i) => `${i + 1}. ${t.topic}`).join('\n');
+      const prompt = `Bạn là chuyên gia đặt tiêu đề YouTube. Với MỖI chủ đề dưới, viết 4-5 tiêu đề theo các GÓC KHÁC nhau: câu hỏi tò mò (question); con số/listicle (number); tuyên bố sốc (shock); ngôi thứ hai "If You..." (second_person); thiên kiến sợ hãi/tiêu cực (fear).
+RÀNG BUỘC BẮT BUỘC:
+- Viết tiêu đề bằng ${lang} — BẤT KỂ ngôn ngữ comment nguồn là gì.
+- Mỗi tiêu đề ≤ 65 ký tự, DỒN HOOK lên ĐẦU (YouTube cắt đuôi).
+- Bám PATTERN đang THẮNG của đối thủ (cấu trúc, power words, độ dài): ${pkg}
+Trả về CHỈ 1 JSON array, mỗi phần tử ứng 1 chủ đề THEO ĐÚNG THỨ TỰ:
+[{"i":1,"titles":[{"angle":"question","text":"..."},{"angle":"number","text":"..."},{"angle":"shock","text":"..."},{"angle":"second_person","text":"..."}]}]
+CHỦ ĐỀ:\n${list}`;
+      try {
+        const arr = await callLLMJson(prompt, { maxTokens: 3500, _override: _t11ClaudeOv(ck), validate: a => Array.isArray(a) && a[0] && Array.isArray(a[0].titles) });
+        arr.forEach(o => {
+          const idx = (parseInt(o.i) || 0) - 1;
+          if (batch[idx]) batch[idx].titles = (o.titles || []).map(x => ({ angle: String(x.angle || ''), text: String(x.text || '').trim() })).filter(x => x.text);
+        });
+      } catch (e) { console.warn('Đẻ tiêu đề lô lỗi:', e.message); }
+      done += batch.length;
+      setStatus11(`Đẻ tiêu đề: ${Math.min(done, _t11Topics.length)}/${_t11Topics.length}...`, 'working');
+      t11RenderResults();
+    }
+    setStatus11(`✓ Đã đẻ tiêu đề (${lang}). Bấm ▾ trong cột Tiêu đề để xem biến thể.`, 'ok');
+  } catch (e) { console.error(e); setStatus11('Lỗi: ' + (e.message || e), 'error'); }
+  finally { clearCancel(); }
+}
+
+/* ---- ④ DEMAND vs SUPPLY (search.list — chạy theo yêu cầu, tốn quota) ---- */
+async function t11Supply(){
+  const ytKey = _t11Yt();
+  if (!_t11Topics.length) return setStatus11('Chưa có chủ đề.', 'error');
+  if (!ytKey) return setStatus11('Cần YouTube key.', 'error');
+  if (!confirm(`Tính Supply gọi search.list cho ${_t11Topics.length} topic = ~${_t11Topics.length * 100} unit quota YouTube (trần 10.000/ngày). Tiếp tục?`)) return;
+  clearCancel(); const stop = () => state.cancelRequested;
+  try {
+    for (let i = 0; i < _t11Topics.length; i++) {
+      if (stop()) break;
+      const t = _t11Topics[i];
+      setStatus11(`Tính Supply: ${i + 1}/${_t11Topics.length} — "${t.topic.slice(0, 40)}"...`, 'working');
+      try {
+        const s = await _ytFetch('search', { part: 'snippet', q: t.topic, type: 'video', maxResults: 5, order: 'viewCount' }, ytKey);
+        const count = s.pageInfo?.totalResults || 0;
+        const ids = (s.items || []).map(x => x.id?.videoId).filter(Boolean);
+        let topViews = 0;
+        if (ids.length) { const v = await _ytFetch('videos', { part: 'statistics', id: ids.join(',') }, ytKey); topViews = Math.max(0, ...(v.items || []).map(x => parseInt(x.statistics?.viewCount || '0'))); }
+        t.supply = { count, topViews };
+        t.opportunity = +(t.score / Math.log10(Math.max(10, count))).toFixed(2);   // demand cao + supply thấp → cơ hội cao
+      } catch (e) { console.warn('supply lỗi', e.message); t.supply = { count: -1, topViews: 0 }; }
+      t11RenderResults();
+    }
+    _t11Topics.sort((a, b) => (b.opportunity || b.score) - (a.opportunity || a.score));
+    t11RenderResults();
+    setStatus11('✓ Đã tính Supply & xếp theo cơ hội (demand cao + supply thấp lên đầu).', 'ok');
+  } catch (e) { console.error(e); setStatus11('Lỗi: ' + (e.message || e), 'error'); }
+  finally { clearCancel(); }
+}
+
+/* ---- ⑤ LỌC "ĐÃ LÀM" (so khớp ngữ nghĩa với video đã đăng của bạn) ---- */
+async function t11FlagDone(){
+  const ytKey = _t11Yt(), ck = _t11Claude();
+  if (!_t11Topics.length) return setStatus11('Chưa có chủ đề.', 'error');
+  if (!ytKey) return setStatus11('Cần YouTube key.', 'error');
+  const myRaw = (document.getElementById('t11MyChannel')?.value || '').trim();
+  if (!myRaw) return setStatus11('Nhập "Channel của TÔI" trước.', 'error');
+  if (!ck) return setStatus11('Cần Claude key để so khớp ngữ nghĩa.', 'error');
+  localStorage.setItem('t11_my_channel', myRaw);
+  clearCancel(); const stop = () => state.cancelRequested;
+  try {
+    setStatus11('Đang lấy tiêu đề video đã đăng trên channel của bạn...', 'working');
+    const mySrc = _t11ParseUrl(myRaw) || { type: 'channel', handle: myRaw.replace(/^@/, '') };
+    const cid = await _t11ChannelId(mySrc, ytKey);
+    if (!cid) throw new Error('Không xác định được channel của bạn.');
+    const titles = []; let pt = '';
+    while (titles.length < 300) {
+      if (stop()) break;
+      const d = await _ytFetch('playlistItems', { part: 'snippet', playlistId: _uploadsOf(cid), maxResults: 50, pageToken: pt }, ytKey);
+      (d.items || []).forEach(it => { const tt = it.snippet?.title; if (tt) titles.push(tt); });
+      pt = d.nextPageToken || ''; if (!pt) break;
+    }
+    if (!titles.length) throw new Error('Channel của bạn chưa có video nào.');
+    setStatus11(`So khớp ${_t11Topics.length} chủ đề với ${titles.length} video đã đăng...`, 'working');
+    const prompt = `Tôi có DANH SÁCH VIDEO ĐÃ ĐĂNG và DANH SÁCH CHỦ ĐỀ đang cân nhắc. Chủ đề nào ĐÃ ĐƯỢC LÀM (trùng ngữ nghĩa với ít nhất 1 video đã đăng)? Trả về CHỈ 1 JSON array các SỐ THỨ TỰ chủ đề đã làm, vd [2,5,9]. Không có thì [].
+VIDEO ĐÃ ĐĂNG:\n${titles.slice(0, 200).map((t, i) => (i + 1) + '. ' + t).join('\n')}
+CHỦ ĐỀ:\n${_t11Topics.map((t, i) => (i + 1) + '. ' + t.topic).join('\n')}`;
+    const arr = await callLLMJson(prompt, { maxTokens: 800, _override: _t11ClaudeOv(ck), validate: a => Array.isArray(a) });
+    const doneSet = new Set(arr.map(n => parseInt(n) - 1));
+    _t11Topics.forEach((t, i) => { t.done = doneSet.has(i); });
+    t11RenderResults();
+    setStatus11(`✓ Đã gắn cờ ${doneSet.size} chủ đề "đã làm" (so với ${titles.length} video của bạn).`, 'ok');
+  } catch (e) { console.error(e); setStatus11('Lỗi: ' + (e.message || e), 'error'); }
+  finally { clearCancel(); }
+}
+
 function t11Reset(){
-  _t11Topics = [];
-  const p = document.getElementById('t11ResultPanel'); if (p) p.style.display = 'none';
+  _t11Topics = []; _t11Meta = null; _t11Packaging = null;
+  ['t11ResultPanel', 't11PkgPanel'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = 'none'; });
+  const m = document.getElementById('t11Meta'); if (m) m.innerHTML = '';
   setStatus11('Đã xoá kết quả.', 'info');
 }
 
