@@ -5524,6 +5524,7 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO)
 - VO nói về NGƯỜI (hành động, lời người dẫn, cảm xúc, đối thoại) → cảnh CÓ nhân vật.
 - VO tả ĐỒ VẬT / NƠI CHỐN / QUÁ TRÌNH / CẬN CẢNH chi tiết / hiện tượng cụ thể (vd "ants on a leaf", "the vegetable bed", "a jar of baking soda", "roots in the soil", "rain falling") → làm cảnh B-ROLL / INSERT / CẬN CẢNH chỉ có đồ vật + bối cảnh, KHÔNG có người, KHÔNG có người dẫn nhìn camera.
 - Mục tiêu: XEN KẼ cảnh có người và cảnh b-roll cho video tự nhiên — KHÔNG ép người dẫn vào mọi khung hình.
+- ⚠️ QUAN TRỌNG: cảnh có thể đã được GÁN SẴN 1 nhân vật ("nhân vật:" ở dòng cảnh), NHƯNG nếu VO của cảnh đó là TẢ ĐỒ VẬT / KHÁI NIỆM / ẨN DỤ / câu trừu tượng (không phải hành động cụ thể của chính nhân vật đó) → ĐƯỢC PHÉP bỏ người, làm cảnh B-ROLL/INSERT đồ vật, KHÔNG bắt buộc chèn tag [nhân-vật] đã gán. Tag nhân vật chỉ là gợi ý, không phải lệnh cứng khi b-roll.
 - Cảnh b-roll vẫn giữ đúng style/tông màu/ánh sáng của kênh; mô tả rõ chủ thể, góc máy (close-up/macro/wide), bố cục.
 ` : '');
   // ---- Mode-aware: Tag / Inline / Inline+bible ----
@@ -5847,6 +5848,7 @@ async function genBatchPromptB(batch, p){
 
 Mỗi Prompt B phải:
 - Cùng nhân vật, bối cảnh, style với Prompt A của cảnh đó
+- GIỮ NGUYÊN các tag tham chiếu [tên-nhân-vật] và [tên-bối-cảnh] Y HỆT Prompt A: nếu Prompt A có [dealer-male] [perfumed-room] thì Prompt B PHẢI dùng lại đúng [dealer-male] [perfumed-room] (kèm dấu ngoặc vuông) — TUYỆT ĐỐI KHÔNG đổi thành "dealer-male", "the man", "the child"... (để G-Labs giữ nhân vật/bối cảnh nhất quán với reference sheet)
 - Thể hiện khoảnh khắc/hành động TIẾP THEO trong cùng cảnh
 - Cùng độ dài & format với Prompt A (~60-100 từ)
 - Tiếng Anh, bắt đầu ngay bằng mô tả visual
@@ -5907,6 +5909,7 @@ async function genSingleScenePromptB(id){
     const sysPrompt = `Bạn là prompt engineer G-Labs. Dựa trên Prompt A của cảnh, tạo Prompt B cho NỬA SAU của cảnh đó.
 Prompt B phải:
 - Cùng nhân vật, bối cảnh, style với Prompt A
+- GIỮ NGUYÊN các tag tham chiếu [tên-nhân-vật] và [tên-bối-cảnh] Y HỆT Prompt A: nếu Prompt A có [dealer-male] [perfumed-room] thì Prompt B PHẢI dùng lại đúng [dealer-male] [perfumed-room] (kèm dấu ngoặc vuông) — TUYỆT ĐỐI KHÔNG đổi thành "dealer-male", "the man", "the child"... (để G-Labs giữ nhân vật/bối cảnh nhất quán với reference sheet)
 - Thể hiện HÀNH ĐỘNG / TRẠNG THÁI tiếp theo (sau khi Prompt A kết thúc)
 - Cùng độ dài và format với Prompt A (~60-100 từ)
 - Tiếng Anh, bắt đầu ngay bằng mô tả visual
