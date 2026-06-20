@@ -2459,8 +2459,24 @@ const MODELS = {
 // DeepSeek KHÔNG hỗ trợ ảnh (vision). Các tác vụ phân tích ảnh sẽ tự fallback.
 const VISION_PROVIDERS = ['anthropic', 'openai'];
 
+// 🔑 Key lưu RIÊNG theo từng nhà cung cấp → đổi provider tự nạp đúng key của provider đó
+const _provKeyName = p => 'api_key_' + (p || 'anthropic');
+let _keyFieldsProvider = null;   // provider mà các ô key đang hiển thị thuộc về
+function _saveCurrentKeyFields(){
+  if (!_keyFieldsProvider) return;
+  localStorage.setItem(_provKeyName(_keyFieldsProvider), collectKeys().join('\n'));
+}
+function _loadKeyFieldsFor(provider){
+  const raw = localStorage.getItem(_provKeyName(provider)) || '';
+  renderKeyFields(raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean));
+  _keyFieldsProvider = provider;
+}
+
 function onProviderChange(){
   const provider = document.getElementById('apiProvider').value;
+  // Lưu key của provider CŨ rồi nạp key đã lưu của provider MỚI
+  if (_keyFieldsProvider && _keyFieldsProvider !== provider) _saveCurrentKeyFields();
+  if (_keyFieldsProvider !== provider) _loadKeyFieldsFor(provider);
   const sel = document.getElementById('apiModel');
   sel.innerHTML = (MODELS[provider] || []).map(m =>
     `<option value="${m.id}">${m.name}</option>`
@@ -2610,11 +2626,13 @@ function toggleTheme(){
 function loadApiSettings(){
   const provider = localStorage.getItem('api_provider') || 'anthropic';
   const model = localStorage.getItem('api_model') || '';
-  const key = localStorage.getItem('api_key') || '';
+  // Migrate key cũ (lưu chung ở 'api_key') → kho riêng của provider hiện tại (1 lần)
+  const legacy = localStorage.getItem('api_key');
+  if (legacy && localStorage.getItem(_provKeyName(provider)) == null) localStorage.setItem(_provKeyName(provider), legacy);
+  _keyFieldsProvider = null;                       // để onProviderChange nạp đúng key provider này
   document.getElementById('apiProvider').value = provider;
-  onProviderChange();
+  onProviderChange();                              // tự nạp key của provider vào các ô
   if (model) document.getElementById('apiModel').value = model;
-  renderKeyFields((key || '').split(/[\n,]+/).map(s => s.trim()).filter(Boolean));
   updateGetKeyLink();
   const thinkEl = document.getElementById('apiThinking');
   if (thinkEl) thinkEl.checked = localStorage.getItem('api_thinking') === '1';
@@ -2635,7 +2653,9 @@ function saveApiSettings(){
   const baseUrl = document.getElementById('apiBaseUrl').value.trim().replace(/\/+$/, '');
   localStorage.setItem('api_provider', provider);
   localStorage.setItem('api_model', model);
-  localStorage.setItem('api_key', keys.join('\n'));
+  localStorage.setItem(_provKeyName(provider), keys.join('\n'));   // lưu key RIÊNG theo provider
+  localStorage.setItem('api_key', keys.join('\n'));               // mirror provider hiện tại (cho code cũ: _apiKeyPool, Tool10 mượn key)
+  _keyFieldsProvider = provider;
   localStorage.setItem('api_thinking', document.getElementById('apiThinking')?.checked ? '1' : '');
   const conc = parseInt(document.getElementById('apiConcurrency')?.value);
   localStorage.setItem('api_concurrency', (conc >= 1) ? String(conc) : '');
@@ -2696,8 +2716,10 @@ async function testApi(){
 // Pool nhiều API key (mỗi dòng/ dấu phẩy 1 key) → xoay vòng để chạy song song nhiều luồng
 let _apiKeyIdx = 0;
 function _apiKeyPool(){
-  return (localStorage.getItem('api_key') || '')
-    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  // Key của ĐÚNG provider đang dùng (api_key_<provider>); fallback kho cũ 'api_key' nếu chưa migrate
+  const provider = localStorage.getItem('api_provider') || 'anthropic';
+  const raw = localStorage.getItem(_provKeyName(provider)) || localStorage.getItem('api_key') || '';
+  return raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
 }
 function _nextApiKey(){
   const pool = _apiKeyPool();
