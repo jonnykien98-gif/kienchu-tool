@@ -3009,6 +3009,18 @@ function _ensureSceneTags(promptText, scene){
   return t;
 }
 
+// 🔒 Ảnh B = nửa sau CÙNG cảnh với A → PHẢI có ĐÚNG các [tag] mà Prompt A có (cùng nhân vật + bối cảnh).
+// Soi thẳng tag của A rồi ép B chứa đủ → không phụ thuộc heuristic, B luôn khớp A.
+function _mirrorTagsFromA(promptB, promptA){
+  let t = String(promptB || '').trim();
+  if (!t) return t;
+  const aTags = String(promptA || '').match(/\[[^\[\]]+\]/g) || [];
+  const missing = [];
+  for (const tag of aTags) if (!t.includes(tag) && !missing.includes(tag)) missing.push(tag);
+  if (missing.length) t += (t.endsWith('.') ? ' ' : '. ') + 'Consistent reference: ' + missing.join(', ') + '.';
+  return t;
+}
+
 /* ============================================================
    INLINE PROMPT EDIT — Tool 2/3/6
 ============================================================ */
@@ -5902,7 +5914,9 @@ CHỈ trả JSON, không giải thích, không suy luận.`;
   for (const s of batch) {
     const b = norm[s.id];
     if (b && typeof b === 'string' && b.trim()) {
-      state.scenePrompts2[s.id] = _ensureSceneTags(cleanPrompt(b.trim()), s);
+      // B phải có ĐÚNG tag của A; nếu A thiếu thì backstop theo scene
+      const aPrompt = state.scenePrompts[s.id] || '';
+      state.scenePrompts2[s.id] = _ensureSceneTags(_mirrorTagsFromA(cleanPrompt(b.trim()), aPrompt), s);
     }
   }
 }
@@ -5944,7 +5958,8 @@ Trả về CHỈ 1 JSON object: {"prompt":"<prompt B tiếng Anh, bắt đầu n
     const clean = cleanPrompt(String(got.prompt).trim());
     if (clean) {
       if (!state.scenePrompts2) state.scenePrompts2 = {};
-      state.scenePrompts2[id] = _ensureSceneTags(clean, scene);
+      // B phải có ĐÚNG tag của A (cùng nhân vật + bối cảnh); backstop theo scene nếu A thiếu
+      state.scenePrompts2[id] = _ensureSceneTags(_mirrorTagsFromA(clean, promptA), scene);
       renderPromptsV();
       setStatus2(`✓ Đã tạo Prompt B cảnh [${id}].`, 'ok');
       saveState(true);
