@@ -10430,10 +10430,11 @@ ${batchComments.map((c, i) => (i + 1) + '. ' + c).join('\n')}`;
 async function _t11Reduce(mapResults, claudeKey){
   const merged = { topicRequests: [], openQuestions: [], strongReactions: [], painPoints: [] };
   mapResults.forEach(r => ['topicRequests', 'openQuestions', 'strongReactions', 'painPoints'].forEach(k => { if (Array.isArray(r[k])) merged[k].push(...r[k]); }));
-  const prompt = `Dưới đây là dữ liệu trích xuất từ HÀNG NGHÌN bình luận khán giả (đã gộp theo lô). CLUSTER các ý trùng thành CHỦ ĐỀ, đếm tần suất, xếp hạng theo nhu cầu khán giả.
+  const prompt = `Dưới đây là dữ liệu trích xuất từ HÀNG NGHÌN bình luận khán giả (đã gộp theo lô). CLUSTER các ý trùng thành CHỦ ĐỀ, đếm tần suất, xếp hạng theo nhu cầu khán giả, và ĐẶT LUÔN tiêu đề video.
 Trả về CHỈ 1 JSON array (không markdown), mỗi phần tử:
-{"topic":"<tên chủ đề ngắn>","mentionCount":<số lần nhắc ước tính>,"signalType":"direct_request|question|gap","exampleComments":["<2-3 ý ví dụ ngắn>"]}
+{"topic":"<tên chủ đề ngắn>","title":"<tiêu đề video HẤP DẪN chuẩn CTR, 8-14 từ, khơi tò mò, dựa trên chủ đề + đúng nhu cầu khán giả>","mentionCount":<số lần nhắc ước tính>,"signalType":"direct_request|question|gap","exampleComments":["<2-3 ý ví dụ ngắn>"]}
 - signalType: direct_request = yêu cầu trực tiếp; question = câu hỏi cần giải đáp; gap = khoảng trống nội dung chưa ai làm.
+- title: viết bằng tiếng Việt, giật tít tự nhiên (không clickbait lố), bám đúng điều khán giả muốn biết.
 - Gộp mạnh chủ đề trùng. Tối đa 30 chủ đề, xếp mentionCount giảm dần.
 
 DỮ LIỆU:
@@ -10448,6 +10449,7 @@ DỮ LIỆU:
   });
   return arr.map(t => ({
     topic: String(t.topic || '').trim(),
+    title: String(t.title || '').trim(),
     mentionCount: parseInt(t.mentionCount) || 0,
     signalType: ['direct_request', 'question', 'gap'].includes(t.signalType) ? t.signalType : 'gap',
     exampleComments: Array.isArray(t.exampleComments) ? t.exampleComments.slice(0, 3).map(x => String(x)) : []
@@ -10544,10 +10546,11 @@ function t11RenderResults(){
   panel.style.display = '';
   box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
-      <th style="padding:8px 10px">Chủ đề</th><th style="padding:8px 10px;white-space:nowrap">Số lần nhắc</th><th style="padding:8px 10px">Loại tín hiệu</th><th style="padding:8px 10px">Comment ví dụ</th>
+      <th style="padding:8px 10px">Chủ đề</th><th style="padding:8px 10px">🎬 Tiêu đề gợi ý</th><th style="padding:8px 10px;white-space:nowrap">Số lần nhắc</th><th style="padding:8px 10px">Loại tín hiệu</th><th style="padding:8px 10px">Comment ví dụ</th>
     </tr></thead><tbody>
     ${_t11Topics.map(t => `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:8px 10px;font-weight:600">${escapeHtml(t.topic)}</td>
+      <td style="padding:8px 10px;color:var(--accent);font-weight:500;cursor:pointer" title="Bấm để sao chép tiêu đề" onclick="t11CopyTitle(this)" data-title="${escapeHtml(t.title || '')}">${escapeHtml(t.title || '')}</td>
       <td style="padding:8px 10px;text-align:center">${t.mentionCount}</td>
       <td style="padding:8px 10px;white-space:nowrap">${_T11_SIGNAL[t.signalType] || escapeHtml(t.signalType)}</td>
       <td style="padding:8px 10px;color:var(--text-muted)">${escapeHtml(t.exampleComments.join(' · '))}</td>
@@ -10570,6 +10573,7 @@ async function t11ExportXLSX(){
     }
     const rows = _t11Topics.map(t => ({
       'Chủ đề': t.topic,
+      'Tiêu đề gợi ý': t.title || '',
       'Số lần nhắc': t.mentionCount,
       'Loại tín hiệu': _T11_SIGNAL[t.signalType] || t.signalType,
       'Comment ví dụ': t.exampleComments.join(' | ')
@@ -10580,6 +10584,13 @@ async function t11ExportXLSX(){
     XLSX.writeFile(wb, 'phan-tich-doi-thu.xlsx');
     setStatus11('✓ Đã xuất XLSX (sheet "topics").', 'ok');
   } catch (e) { setStatus11('Lỗi xuất XLSX: ' + e.message, 'error'); }
+}
+
+function t11CopyTitle(el){
+  const txt = el.getAttribute('data-title') || el.textContent || '';
+  if (!txt) return;
+  navigator.clipboard?.writeText(txt);
+  setStatus11('✓ Đã sao chép tiêu đề: ' + txt, 'ok');
 }
 
 function t11Reset(){
