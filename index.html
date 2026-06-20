@@ -5289,9 +5289,11 @@ Trả về CHỈ JSON:
     renderStats2();
     setStatus2(`✓ Tìm thấy ${state.charactersV.length} nhân vật + ${state.backgroundsV.length} bối cảnh.` + (bibleMode ? ' Đã tạo hồ sơ mô tả.' : ''), 'ok');
     saveState();
+    return state.charactersV.length + state.backgroundsV.length;   // >0 = quét được, để Auto biết
   } catch (e) {
     console.error(e);
-    setStatus2('Lỗi: ' + e.message, 'error');
+    setStatus2('Lỗi quét nhân vật/bối cảnh: ' + e.message, 'error');
+    return 0;   // lỗi → trả 0 để Auto retry / không âm thầm bỏ Gán
   }
 }
 
@@ -5317,8 +5319,15 @@ async function doAssign(only){
   if (state.charactersV.length === 0 && state.backgroundsV.length === 0)
     return setStatus2('Cần Quét Trước nhân vật/bối cảnh trước.', 'error');
 
-  // only = danh sách cảnh CẦN gán lại (vd cảnh trống sau lần Gán đầu); mặc định gán tất cả
-  const pool = (Array.isArray(only) && only.length) ? only : state.scenes;
+  // only = danh sách cảnh CẦN gán lại (vd cảnh trống sau lần Gán đầu).
+  // DeepSeek trả KHÁC NHAU mỗi lần → TÍCH LUỸ: chỉ gán cảnh CHƯA có gì, GIỮ NGUYÊN cảnh đã gán
+  // (tránh bấm lại bị nhảy kết quả / xoá mất cảnh đã đúng). Provider khác (Claude/OpenAI) ổn định → gán tất như cũ.
+  const provider = localStorage.getItem('api_provider') || 'anthropic';
+  const isDeepSeek = provider === 'deepseek';
+  const needsAssign = s => !s.character && !s.background;
+  const isFullCall = !(Array.isArray(only) && only.length);
+  const pool = !isFullCall ? only : (isDeepSeek ? state.scenes.filter(needsAssign) : state.scenes);
+  if (!pool.length) { setStatus2('✓ Mọi cảnh đã có nhân vật/bối cảnh — không cần gán lại.', 'ok'); return; }
   const bs = parseInt(document.getElementById('batchSize').value) || 5;
   setStatus2('AI đang gán nhân vật + bối cảnh...', 'working');
   clearCancel();
@@ -5360,11 +5369,12 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
     return o;
   };
 
-  try {
+  // 1 lượt gán cho 1 danh sách cảnh (tách ra để gọi lại ở pass 2)
+  const runAssign = async (poolScenes) => {
     const lanes = _concurrency();
     const batches = [];
-    for (let i = 0; i < pool.length; i += bs) batches.push(pool.slice(i, i + bs));
-    let done = 0, assigned = 0;
+    for (let i = 0; i < poolScenes.length; i += bs) batches.push(poolScenes.slice(i, i + bs));
+    let done = 0;
     await runConcurrent(batches, async (batch) => {
       if (state.cancelRequested) return;
       const batchIds = new Set(batch.map(s => s.id));
@@ -5382,22 +5392,39 @@ ${batch.map(s => `[${s.id}] "${s.text}"`).join('\n')}`;
           if (!batchIds.has(id)) continue;            // chỉ ghi cho cảnh thuộc batch này
           const sc = state.scenes.find(s => s.id === id);
           if (!sc) continue;
-          sc.character = matchInList(x.character, state.charactersV);   // chỉ nhận tên có thật
-          sc.background = matchInList(x.background, state.backgroundsV);
+          const mc = matchInList(x.character, state.charactersV);   // chỉ nhận tên có thật
+          const mb = matchInList(x.background, state.backgroundsV);
+          // DeepSeek: KHÔNG ghi đè '' lên giá trị đã có (tránh xoá nhầm cảnh đúng); provider khác gán bình thường
+          if (mc || !isDeepSeek) sc.character = mc;
+          if (mb || !isDeepSeek) sc.background = mb;
           sc.camera = CAM.includes(x.camera) ? x.camera : (sc.camera || 'medium');
           sc.level = /^L[1-4]$/.test(x.level) ? x.level : (sc.level || 'L1');
-          assigned++;
         }
       }
       done += batch.length;
       renderAllT2();
-      setStatus2(`Gán... ${Math.min(done, pool.length)}/${pool.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
+      setStatus2(`Gán... ${Math.min(done, poolScenes.length)}/${poolScenes.length}${lanes > 1 ? ` (⚡ ${lanes} luồng)` : ''}`, 'working');
     }, lanes, () => state.cancelRequested);
+  };
+
+  try {
+    await runAssign(pool);
     if (state.cancelRequested) {
       clearCancel();
       setStatus2('⏸ Đã dừng. Kết quả gán được giữ lại.', 'info');
       saveState();
       return;
+    }
+    // 🔁 PASS 2 (chỉ DeepSeek, lần gán đầy đủ): cảnh VẪN trống → kiểm lại 1 lần nữa
+    // (DeepSeek flaky: cảnh trống có thể do batch lỗi, không phải vì thật sự không có nhân vật/bối cảnh)
+    if (isDeepSeek && isFullCall) {
+      const still = state.scenes.filter(needsAssign);
+      if (still.length && still.length < state.scenes.length) {
+        setStatus2(`🔁 Kiểm lần 2: ${still.length} cảnh còn trống...`, 'working');
+        clearCancel();
+        await runAssign(still);
+        if (state.cancelRequested) { clearCancel(); setStatus2('⏸ Đã dừng (sau kiểm lần 2). Kết quả được giữ lại.', 'info'); saveState(); return; }
+      }
     }
     // Cảnh báo nếu gán được quá ít (dấu hiệu model trả rác) → khuyên đổi provider
     const withRes = state.scenes.filter(s => s.character || s.background).length;
@@ -6214,9 +6241,16 @@ async function runAutoTool2(){
     // BƯỚC 5 — Quét trước nhân vật/bối cảnh (bỏ qua nếu đã quét, hoặc video không nhân vật)
     if (!_noChar && !(state.charactersV.length || state.backgroundsV.length)){
       _autoSetStep(5, 'active');
-      clearCancel();
-      await doPrescan();
-      _autoSetStep(5, 'done');
+      // Quét có thể fail do AI trả JSON không hợp lệ → thử lại tối đa 2 lần, đừng âm thầm bỏ Gán
+      let scanned = 0;
+      for (let attempt = 1; attempt <= 2 && !scanned && !stopped(); attempt++){
+        clearCancel();
+        if (attempt > 1) setStatus2(`🔁 Quét lại nhân vật/bối cảnh (lần ${attempt})...`, 'working');
+        scanned = await doPrescan();
+      }
+      _autoSetStep(5, scanned ? 'done' : 'fail');
+      if (!scanned && !stopped())
+        setStatus2('⚠️ Chưa quét được nhân vật/bối cảnh (AI trả không hợp lệ) → BỎ QUA bước Gán. Bấm "⚡ Quét Trước" tay rồi "Gán", hoặc đổi provider sang Claude/OpenAI cho bước này.', 'info');
     } else {
       _autoSetStep(5, 'skip');
     }
