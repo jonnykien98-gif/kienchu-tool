@@ -3137,6 +3137,19 @@ function _mirrorTagsFromA(promptB, promptA){
   return t;
 }
 
+// 🚫 Prompt LƯỜI/RÁC do AI (DeepSeek hay viết "...full prompt..." / "same as above" cho cảnh sau).
+// Trả true nếu prompt là placeholder/quá ngắn → KHÔNG lưu, để trống cho "Tạo nốt cảnh thiếu".
+function _isLazyPrompt(text){
+  let s = String(text || '').trim();
+  // bỏ phần đuôi do app tự chèn để xét đúng phần AI viết
+  s = s.replace(/\bConsistent reference:.*$/i, '').replace(/--ar\s*\d+:\d+\s*$/i, '').trim();
+  if (s.length < 40) return true;                                  // quá ngắn = không phải prompt thật
+  if (/^[.\s…]+$/.test(s)) return true;                            // toàn dấu chấm
+  if (/\.{2,}\s*full prompt|full prompt\s*\.{2,}|\[full prompt\]|<full prompt>|^\s*\.{3}/i.test(s)) return true;
+  if (/\b(same as (above|previous|before)|như (trên|cảnh trước|trước)|tương tự (cảnh )?trên|see above)\b/i.test(s)) return true;
+  return false;
+}
+
 /* ============================================================
    INLINE PROMPT EDIT — Tool 2/3/6
 ============================================================ */
@@ -5602,15 +5615,20 @@ const VISUAL_METAPHOR_RULE = `
 async function genVideoLogline(force){
   const script = (state.script || '').trim();
   if (!script) return state.videoLogline || '';
-  // Chữ ký kịch bản → đổi kịch bản thì logline cũ coi như hết hạn, tự sinh lại
+  // Chữ ký kịch bản → đổi kịch bản thì logline cũ coi như hết hạn, tự sinh lại.
+  // Logline cũ còn dấu < > = rác (AI chép lại đề bài) → cũng coi là hết hạn để sinh lại.
   const sig = script.length + '|' + script.slice(0, 60);
-  const fresh = state.videoLogline && state.videoLogline.trim() && state.videoLoglineSig === sig;
+  const looksReal = state.videoLogline && state.videoLogline.trim() && !/[<>]/.test(state.videoLogline);
+  const fresh = looksReal && state.videoLoglineSig === sig;
   if (!force && fresh) return state.videoLogline;
   const p = getProfile();
   const ngach = p && p.ngach ? p.ngach : '';
-  const prompt = `Đọc kịch bản video dưới đây và viết LOGLINE tóm tắt TOÀN VIDEO để mọi cảnh bám đúng chủ đề khi tạo ảnh.
-${ngach ? 'Ngách kênh: ' + ngach + '\n' : ''}Trả về CHỈ 1 JSON object:
-{"logline":"<2-4 câu tiếng Việt: nội dung/câu chuyện chính + nhân vật xuyên suốt + bối cảnh & thời đại chính + tông cảm xúc. Cụ thể, gọn. KHÔNG liệt kê từng cảnh, KHÔNG kể tuần tự.>"}
+  const prompt = `Đọc kịch bản video dưới đây và VIẾT LOGLINE tóm tắt TOÀN VIDEO (để mọi cảnh bám đúng chủ đề khi tạo ảnh).
+${ngach ? 'Ngách kênh: ' + ngach + '\n' : ''}Yêu cầu: 2-4 câu tiếng Việt — nội dung/câu chuyện chính + nhân vật xuyên suốt + bối cảnh & thời đại + tông cảm xúc. Cụ thể, gọn. KHÔNG liệt kê từng cảnh, KHÔNG kể tuần tự.
+⚠️ VIẾT LOGLINE THẬT từ kịch bản — TUYỆT ĐỐI KHÔNG chép lại câu yêu cầu trên, KHÔNG để dấu < >.
+VD đúng: {"logline":"Hành trình một cậu bé Hy Lạp cổ đại bị bán làm nô lệ sau chiến tranh, từ làng quê tới khu chợ buôn người ở thế giới cổ đại. Tông bi tráng, hoài niệm."}
+
+Trả về CHỈ 1 JSON object: {"logline":"..."}
 
 KỊCH BẢN:
 """
@@ -5619,7 +5637,13 @@ ${script.slice(0, 6000)}
   try {
     const o = await callLLMJson(prompt, {
       maxTokens: 400,
-      validate: o => o && typeof o.logline === 'string' && o.logline.trim().length > 10
+      // Chặn AI chép lại đề bài: phải đủ dài, không có dấu < >, không chứa cụm meta của yêu cầu
+      validate: o => {
+        if (!o || typeof o.logline !== 'string') return false;
+        const s = o.logline.trim();
+        return s.length >= 25 && !/[<>]/.test(s)
+          && !/KHÔNG\s+liệt kê|nội dung\/câu chuyện|2-4 câu tiếng Việt|câu tiếng Việt:/i.test(s);
+      }
     });
     state.videoLogline = o.logline.trim();
     state.videoLoglineSig = sig;
@@ -5835,8 +5859,12 @@ ${highDetail ? `
 - Vẫn giữ mô tả style chung cho MÔI TRƯỜNG (flat 2D, màu sắc, outline) nhưng KHÔNG áp lên nhân vật
 ` : ''}
 
-Trả về CHỈ JSON array:
-[{"id":"001","prompt":"..."}, ...]
+⚠️ VIẾT ĐẦY ĐỦ prompt RIÊNG cho TỪNG cảnh trong danh sách — KHÔNG được lười:
+- KHÔNG dùng "...", "...full prompt...", "[full prompt]", "same as above", "như cảnh trước", "tương tự".
+- KHÔNG bỏ trống, KHÔNG viết tắt. Mỗi cảnh PHẢI có 1 prompt hoàn chỉnh độc lập, đủ chữ.
+
+Trả về CHỈ JSON array (mỗi cảnh 1 phần tử ĐẦY ĐỦ):
+[{"id":"001","prompt":"<prompt hoàn chỉnh>"}, ...]
 
 CÁC CẢNH:
 ${batch.map(s => `[${s.id}] VO: "${s.text}" | nhân vật: ${s.character || '-'} | bối cảnh: ${s.background || '-'} | camera: ${s.camera} | ${s.duration}s`).join('\n')}`;
@@ -5877,13 +5905,14 @@ async function genSingleScenePrompt(id){
     }
     // Lấy prompt đầu tiên trả về (chỉ có 1 cảnh) — không phụ thuộc ID AI trả
     const got = parsed.find(x => x && x.prompt);
-    if (got && got.prompt) {
-      state.scenePrompts[id] = _ensureSceneTags(cleanPrompt(got.prompt), scene);
+    const raw = got ? cleanPrompt(got.prompt) : '';
+    if (raw && !_isLazyPrompt(raw)) {
+      state.scenePrompts[id] = _ensureSceneTags(raw, scene);
       renderPromptsV();
       setStatus2(`✓ Đã tạo lại prompt cảnh [${id}].`, 'ok');
       saveState();
     } else {
-      setStatus2(`⚠️ Cảnh [${id}] tạo lỗi, thử lại lần nữa.`, 'error');
+      setStatus2(`⚠️ Cảnh [${id}] AI trả prompt lười/lỗi — bấm 🔧 Tạo lại lần nữa (hoặc đổi Claude).`, 'error');
     }
   } catch (e) {
     console.error(e);
@@ -6149,7 +6178,9 @@ async function doGenerateScenePrompts(){
       if (!batchIdSet.has(id)) id = batchIds[idx];   // AI trả ID sai → khớp theo vị trí
       if (id && batchIdSet.has(id) && x.prompt) {
         const sc = state.scenes.find(s => s.id === id);
-        state.scenePrompts[id] = _ensureSceneTags(cleanPrompt(x.prompt), sc);
+        const raw = cleanPrompt(x.prompt);
+        if (_isLazyPrompt(raw)) return;   // prompt lười/placeholder → BỎ, để trống cho "Tạo nốt cảnh thiếu"
+        state.scenePrompts[id] = _ensureSceneTags(raw, sc);
       }
     });
     renderPromptsV();
@@ -6347,10 +6378,14 @@ async function runAutoTool2(){
       _autoSetStep(1, 'active');
       await doSplit();
       if (!state.scenes.length){ _autoSetStep(1, 'fail'); throw new Error('Chia cảnh không ra cảnh nào — kiểm tra lại kịch bản.'); }
-      // Gộp câu vụn (local, tức thì) + Gộp theo Ý (AI) — chỉ NỐI, không cắt → mỗi cảnh 1 ý trọn vẹn, không ra từ lẻ
+      // Gộp câu vụn (local, tức thì) — luôn chạy, không tốn AI
       mergeFragmentScenes();
-      setStatus2('AI đang gộp cảnh theo ý...', 'working');
-      await mergeScenesByMeaningAI(true);
+      // Gộp theo Ý (AI): CHỈ chạy cho Chia nhanh (regex không hiểu "ý").
+      // Chia thông minh (AI) đã gộp câu theo ý hình ảnh rồi → bỏ qua để khỏi lặp 1 lượt AI + tránh gộp quá tay.
+      if (state.splitMode !== 'smart') {
+        setStatus2('AI đang gộp cảnh theo ý...', 'working');
+        await mergeScenesByMeaningAI(true);
+      }
       _autoSetStep(1, 'done');
       if (stopped()) throw 'STOP';
 
