@@ -10442,11 +10442,14 @@ DỮ LIỆU:
 - Câu hỏi: ${JSON.stringify(merged.openQuestions).slice(0, 6000)}
 - Phản ứng mạnh: ${JSON.stringify(merged.strongReactions).slice(0, 4000)}
 - Pain points: ${JSON.stringify(merged.painPoints).slice(0, 4000)}`;
-  const arr = await callLLMJson(prompt, {
-    maxTokens: 4000,
+  // Lấy mảng dù Sonnet trả array thuần hay bọc trong {topics:[...]}/{results:[...]}
+  const _toArr = x => Array.isArray(x) ? x : (x && Array.isArray(x.topics) ? x.topics : (x && Array.isArray(x.results) ? x.results : null));
+  const raw = await callLLMJson(prompt, {
+    maxTokens: 8000,   // đủ chỗ cho 30 chủ đề × (title + 3 ví dụ) → tránh JSON bị cắt → tránh retry chậm
     _override: { provider: 'anthropic', model: MODELS.anthropic[0].id, key: claudeKey },   // Sonnet 4.6 = anthropic[0], không hardcode chuỗi
-    validate: a => Array.isArray(a) && a.length > 0 && a[0] && a[0].topic
+    validate: x => { const a = _toArr(x); return a && a.length > 0 && a[0] && a[0].topic; }
   });
+  const arr = _toArr(raw) || [];
   return arr.map(t => ({
     topic: String(t.topic || '').trim(),
     title: String(t.title || '').trim(),
@@ -10521,9 +10524,12 @@ async function t11Analyze(){
     if (stop()) throw 'STOP';
     const validMaps = (mapResults || []).filter(r => r && !r.__error);
 
-    // 5. REDUCE (Claude Sonnet)
+    // 5. REDUCE (Claude Sonnet) — 1 call tuần tự, hiện đồng hồ để khỏi tưởng treo
+    let _rsec = 0;
     setStatus11('Đang tổng hợp & xếp hạng chủ đề (Claude Sonnet)...', 'working');
-    _t11Topics = await _t11Reduce(validMaps, claudeKey);
+    const _rtimer = setInterval(() => { _rsec++; setStatus11(`Đang tổng hợp & xếp hạng chủ đề (Claude Sonnet)... ${_rsec}s`, 'working'); }, 1000);
+    try { _t11Topics = await _t11Reduce(validMaps, claudeKey); }
+    finally { clearInterval(_rtimer); }
 
     t11RenderResults();
     setStatus11(`✓ Xong: ${_t11Topics.length} chủ đề từ ${clean.length} comment (${videos.length} video).`, 'ok');
