@@ -1212,6 +1212,9 @@ textarea{resize:vertical;line-height:1.6;font-family:inherit}
           <label class="t2-opt" title="Video HƯỚNG DẪN không người dẫn: ÉP MỌI cảnh chỉ là cảnh vật/đồ vật/quá trình, TUYỆT ĐỐI không có người. Bật cái này thì bỏ qua Quét Trước & Gán.">
             <input type="checkbox" id="noCharMode" style="width:auto;margin:0"> 🚫 Không nhân vật
           </label>
+          <label class="t2-opt" title="Style lai: cảnh KỂ CHUYỆN = người que + bối cảnh đầy đủ; cảnh GIẢI THÍCH (khái niệm/quy trình/so sánh) = icon line-art tối giản trên NỀN TRẮNG TRƠN, không người, không bối cảnh.">
+            <input type="checkbox" id="hybridIconMode" style="width:auto;margin:0"> 🧩 Tách kiểu: kể=người · giải thích=icon nền trắng
+          </label>
         </div>
 
         <!-- ④ XUẤT -->
@@ -3114,6 +3117,8 @@ function _ensureSceneTags(promptText, scene){
   if ((state.descMode || 'tag') !== 'tag' || !scene) return promptText;   // chỉ chế độ Tag mới cần [tag]
   let t = String(promptText || '').trim();
   if (!t) return t;
+  // Cảnh GIẢI THÍCH kiểu icon nền trắng (style lai) → KHÔNG chèn tag bối cảnh/nhân vật (icon trên nền trắng, không reference)
+  if (/plain\s+(solid\s+)?white background|line-art (pictogram|icon)|pictogram icons?|no scenery/i.test(t)) return t;
   const need = [];
   // Bối cảnh: luôn nên có (kể cả cảnh b-roll vẫn có địa điểm)
   if (scene.background && !t.includes('[' + scene.background + ']')) need.push('[' + scene.background + ']');
@@ -5673,6 +5678,15 @@ function buildSceneGenPrompt(batch, prevSceneCtx, p, profileContext, neighborVO)
   const shortMode = document.getElementById('shortPromptMode')?.checked;
   const noCharMode = document.getElementById('noCharMode')?.checked;
   const brollMode = document.getElementById('brollMode')?.checked || noCharMode;
+  // 🧩 Style lai: cảnh kể = người que + bối cảnh, cảnh giải thích = icon nền trắng
+  const hybridIconMode = document.getElementById('hybridIconMode')?.checked && !noCharMode;
+  const hybridRule = hybridIconMode ? `
+🧩 STYLE LAI — TÁCH 2 KIỂU CẢNH (LUẬT BẮT BUỘC, quyết theo nội dung VO):
+1) Cảnh KỂ CHUYỆN (VO là hành động/cảm xúc/lời kể của NGƯỜI) → vẽ NHÂN VẬT (người que của kênh) trong BỐI CẢNH đầy đủ theo Scene Style.
+2) Cảnh GIẢI THÍCH (VO giải thích khái niệm / quy trình / so sánh / số liệu / nguyên nhân-kết quả, KHÔNG phải hành động của nhân vật) → vẽ ICON / PICTOGRAM line-art ĐƠN GIẢN, nét đen đậm, kiểu biểu tượng, trên NỀN TRẮNG TRƠN (plain solid white background). KHÔNG nhân vật người que, KHÔNG bối cảnh phòng/cảnh vật. Mỗi cảnh 1–4 icon, tối giản, nhiều khoảng trắng.
+   - Prompt loại này PHẢI ghi rõ: "minimalist black line-art pictogram icons on a plain solid white background, no scenery, no characters, lots of negative space".
+- Tự quyết mỗi cảnh thuộc loại nào theo VO. Đa số câu kể → kiểu 1; câu giải thích/khái niệm → kiểu 2.
+` : '';
   // 🏺 Khoá thời đại cho prompt cảnh: ưu tiên giá trị đã đặt ở Tool 3 (state.t3Era), nếu trống → trích kịch bản
   const eraHintT2 = (state.t3Era && state.t3Era.trim())
     ? state.t3Era.trim()
@@ -5773,7 +5787,7 @@ ${bgHeader}
 ${bgCtx || '(không có)'}
 
 Với mỗi cảnh, TRƯỚC TIÊN xác định LOẠI CẢNH từ nội dung VO, sau đó viết prompt phù hợp:
-${brollRule}${VISUAL_METAPHOR_RULE}
+${hybridRule}${brollRule}${VISUAL_METAPHOR_RULE}
 🔹 LOẠI 1 — NHÂN VẬT TRONG BỐI CẢNH (VO nói về hành động của người):
 ${mode1Rule}
 
