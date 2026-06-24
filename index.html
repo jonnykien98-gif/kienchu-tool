@@ -4540,7 +4540,7 @@ function splitIntoSentences(text){
   const paras = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
   const sents = [];
   for (const para of paras) {
-    const re = /[^.!?…]+[.!?…]+(?:["')]*)/g;
+    const re = /[^.!?…。．！？]+[.!?…。．！？]+(?:["')\]]*)/g;   // + dấu câu CJK (Hàn/Trung/Nhật)
     let last = 0, m;
     const local = [];
     while ((m = re.exec(para)) !== null) { local.push(m[0].trim()); last = re.lastIndex; }
@@ -4557,7 +4557,9 @@ function splitLong(s, max){
   let parts = [], buf = '';
   for (let i = 0; i < s.length; i++) {
     buf += s[i];
-    if (/[,;:—–]/.test(s[i]) && s[i + 1] === ' ') { parts.push(buf.trim()); buf = ''; i++; }
+    const asciiBreak = /[,;:—–]/.test(s[i]) && s[i + 1] === ' ';
+    const cjkBreak = /[，、；：]/.test(s[i]);                       // dấu phẩy CJK (không cần khoảng trắng sau)
+    if (asciiBreak || cjkBreak) { parts.push(buf.trim()); buf = ''; if (asciiBreak) i++; }
   }
   if (buf.trim()) parts.push(buf.trim());
   const f = [];
@@ -4566,7 +4568,9 @@ function splitLong(s, max){
     else {
       const w = p.split(' ');
       let ch = '';
-      for (const x of w) {
+      for (let x of w) {
+        // từ/cụm quá dài (CJK không khoảng trắng) → cắt cứng theo ký tự
+        while (x.length > max) { if (ch) { f.push(ch); ch = ''; } f.push(x.slice(0, max)); x = x.slice(max); }
         const t = ch ? ch + ' ' + x : x;
         if (t.length > max && ch) { f.push(ch); ch = x; }
         else ch = t;
