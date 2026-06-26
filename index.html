@@ -9888,7 +9888,7 @@ function t8UpdateInfo(){
 // rồi tính duration kiểu LẤP KHOẢNG LẶNG: mỗi cảnh kéo từ lúc câu của nó bắt đầu → tới khi câu sau bắt đầu;
 // cảnh cuối kéo tới hết timeline. Nhờ vậy tổng khớp đúng audio, không lệch dồn.
 function t8AlignScenesToWords(scenes, words){
-  const norm = w => String(w || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const norm = w => String(w || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
   const N = words.length;
   const timelineEnd = N ? words[N - 1].end : 0;
 
