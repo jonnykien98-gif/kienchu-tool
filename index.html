@@ -899,6 +899,23 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
 .t2-toolschev{ font-size:11px;color:var(--text-dim);transition:transform .2s; }
 #t2Actions.tools-collapsed .t2-toolschev{ transform:rotate(-90deg); }
 #t2Actions.tools-collapsed .t2-group{ display:none; }
+
+/* ===== Tool 6 — Veo Shot Forge ===== */
+.veo-mode-btn.active{ background:var(--accent-soft);border-color:#fed7aa;color:var(--accent);font-weight:600; }
+.veo-shot{ display:flex;flex-direction:column;gap:7px;background:var(--surface);
+  border:1px solid var(--border);border-radius:10px;padding:10px 12px; }
+.veo-shot-head{ display:flex;align-items:center;gap:9px;flex-wrap:wrap; }
+.veo-shot-idx{ font-family:monospace;font-weight:700;font-size:12px;color:var(--text-dim);min-width:26px; }
+.veo-badge{ display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:6px;
+  font-size:10.5px;font-weight:600;white-space:nowrap; }
+.veo-tc{ font-family:monospace;font-size:11px;color:var(--text-dim); }
+.veo-dur{ font-family:monospace;font-size:11px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums; }
+.veo-narr{ font-size:11.5px;color:var(--text-muted);font-style:italic;line-height:1.5; }
+.veo-prompt{ font-size:12px;color:var(--text);line-height:1.6;white-space:pre-wrap;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:8px 10px; }
+.veo-copy{ margin-left:auto;background:transparent;border:1px solid var(--border);border-radius:6px;
+  cursor:pointer;color:var(--text-muted);font-size:12px;padding:3px 9px; }
+.veo-copy:hover{ border-color:var(--accent);color:var(--accent); }
 </style>
 </head>
 <body>
@@ -1958,72 +1975,61 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
       </div>
 
       <div class="info-box">
-        <span class="lbl">💡 Quy trình:</span> Tool 6 lấy data từ Tool 02 (cảnh, nhân vật, bối cảnh, VO) + Profile (style) → AI sinh prompt Veo 3 chi tiết cho mỗi cảnh. <strong>Bạn paste prompt vào Veo 3 thủ công</strong> — không gọi API trực tiếp để control budget.
+        <span class="lbl">💡 Quy trình:</span> Dán kịch bản (hỗ trợ <code>===SCENE===</code>) hoặc <strong>SRT</strong> (WhisperX/OmniVoice) → app cắt thành shot ≤10s, đan góc máy theo tư duy dựng phim → AI sinh prompt Veo 3 cho từng shot. Xuất CSV khớp cột XLSX scene-list.
       </div>
 
-      <div class="grid-3 mb-24">
-        <div>
-          <label class="label">THỜI LƯỢNG MỖI CẢNH</label>
-          <select id="v6Duration">
-            <option value="auto" selected>Tự động (theo VO)</option>
-            <option value="4">4 giây</option>
-            <option value="6">6 giây</option>
-            <option value="8">8 giây (max Veo 3)</option>
-          </select>
+      <div class="grid-2 mb-16" style="grid-template-columns:1fr 360px;gap:12px;align-items:start">
+        <div class="panel">
+          <div class="panel-head">
+            <span><span class="led"></span>NGUỒN</span>
+            <span style="display:flex;gap:5px">
+              <button class="btn ghost sm veo-mode-btn active" data-mode="script" onclick="veoSetMode('script')">📝 Kịch bản</button>
+              <button class="btn ghost sm veo-mode-btn" data-mode="srt" onclick="veoSetMode('srt')">⏱ SRT (timing thật)</button>
+            </span>
+          </div>
+          <div class="panel-body">
+            <textarea id="veoRaw" oninput="veoPreview()" spellcheck="false" placeholder="Dán kịch bản (TTS) ở đây — hỗ trợ ===SCENE=== để mỗi cảnh mở bằng toàn cảnh.&#10;Hoặc chuyển sang tab SRT rồi dán nội dung .srt." style="min-height:260px;font-size:12.5px;line-height:1.7;font-family:'Be Vietnam Pro',sans-serif"></textarea>
+          </div>
         </div>
-        <div>
-          <label class="label">TỶ LỆ KHUNG HÌNH</label>
-          <select id="v6AspectRatio">
-            <option value="16:9" selected>16:9 (landscape)</option>
-            <option value="9:16">9:16 (portrait/reels)</option>
-            <option value="1:1">1:1 (square)</option>
-          </select>
-        </div>
-        <div>
-          <label class="label">AUDIO TRONG VIDEO</label>
-          <select id="v6AudioMode">
-            <option value="none" selected>Không (chỉ video)</option>
-            <option value="ambient">Ambient music + SFX</option>
-            <option value="dialog">Music + SFX + Lời thoại VO</option>
-          </select>
+        <div class="panel">
+          <div class="panel-head"><span><span class="led"></span>CẤU HÌNH</span></div>
+          <div class="panel-body" style="display:flex;flex-direction:column;gap:13px">
+            <div id="veoWpmRow">
+              <label class="label">Tốc độ đọc — WPM <span style="font-weight:400;opacity:.6;font-size:10px">(sleep ~135 · doc ~150)</span></label>
+              <input type="number" id="veoWpm" value="145" min="80" max="220" onchange="veoPreview()">
+            </div>
+            <div>
+              <label class="label">Độ dài clip Veo — <span id="veoClipVal">8</span>s <span style="font-weight:400;opacity:.6;font-size:10px">(render đẹp 8–10s)</span></label>
+              <input type="range" id="veoClip" min="5" max="10" step="1" value="8" style="width:100%;accent-color:var(--accent)" oninput="document.getElementById('veoClipVal').textContent=this.value;veoPreview()">
+            </div>
+            <div>
+              <label class="label">Style preset</label>
+              <select id="veoStyle" onchange="veoPreview()"></select>
+            </div>
+            <div>
+              <label class="label">Chủ đề / bối cảnh <span style="font-weight:400;opacity:.6;font-size:10px">(cho AI hiểu subject)</span></label>
+              <input type="text" id="veoSubject" placeholder="vd: Boötes Void cosmic documentary">
+            </div>
+            <div id="veoPreviewInfo" style="font-size:12px;color:var(--text-muted);padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;line-height:1.5">Dán nội dung để xem cấu trúc shot.</div>
+          </div>
         </div>
       </div>
 
       <div class="actions">
-        <button class="btn teal" onclick="loadDataForVeo()">📥 Load từ Tool 02</button>
-        <button class="btn primary" onclick="genVeoPrompts()">✨ Sinh Prompt Veo 3</button>
-        <button class="btn ghost" id="v6FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="genVeoPrompts()" title="Chỉ tạo các cảnh chưa có prompt Veo">🔧 Tạo nốt cảnh thiếu <span id="v6MissingCount"></span></button>
-        <button class="btn" onclick="copyAllVeoPrompts()">📋 Sao chép tất cả</button>
-        <button class="btn ghost" onclick="exportVeoPrompts()">↓ Xuất JSON</button>
-        <button class="btn ghost" style="color:var(--red);border-color:var(--red);margin-left:auto" onclick="clearAllT6()" title="Xoá toàn bộ prompt Veo 3">🗑 Xoá hết</button>
-        <div class="batch-control"><span>Batch:</span><input type="number" id="v6BatchSize" value="5" min="1" max="20"></div>
+        <button class="btn primary" id="veoGenBtn" onclick="veoGenerate()">✨ Sinh prompt Veo 3</button>
+        <button class="btn ghost" id="veoStopBtn" style="display:none;color:var(--red);border-color:var(--red)" onclick="veoStop()">⏸ Dừng</button>
+        <span style="flex:1"></span>
+        <button class="btn ghost" onclick="veoCopyAll()">📋 Copy tất cả</button>
+        <button class="btn ghost" onclick="veoExportCSV()">↓ CSV (cho XLSX)</button>
+        <button class="btn ghost" onclick="veoExportJSON()">↓ JSON</button>
       </div>
 
-      <div class="status-bar" id="status6">Sẵn sàng. Load cảnh từ Tool 02 rồi bấm Sinh Prompt.</div>
-
-      <div class="stats">
-        <div class="stat"><div class="k">Cảnh</div><div class="v" id="v6StatScenes">0</div></div>
-        <div class="stat"><div class="k">Prompt đã sinh</div><div class="v dim" id="v6StatPrompts">0</div></div>
-        <div class="stat"><div class="k">Tổng giây video</div><div class="v" id="v6StatDur">0s</div></div>
-      </div>
+      <div class="status-bar" id="status6">Sẵn sàng. Dán kịch bản hoặc SRT để bắt đầu.</div>
 
       <div class="panel">
-        <div class="panel-head">
-          <span><span class="led"></span>PROMPT VEO 3 CHO TỪNG CẢNH</span>
-          <span class="count" id="v6PromptCount">0 / 0</span>
-        </div>
-        <div id="v6PromptsList" class="prompts-list" style="max-height:none">
-          <div class="empty-state">Chưa có prompt. Bấm Sinh Prompt Veo 3 ở trên.</div>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-top:16px">
-        <div class="panel-head">
-          <span>📦 Tất cả prompt Veo 3 (gộp — chọn All rồi Copy)</span>
-          <button class="btn ghost sm" onclick="copyAllVeoPrompts()">📋 Sao chép</button>
-        </div>
-        <div class="panel-body">
-          <textarea id="allVeoPromptsBox" readonly placeholder="Chưa có prompt. Bấm Sinh Prompt Veo 3 trước." style="min-height:260px;background:var(--surface-2);font-size:12px;line-height:1.6"></textarea>
+        <div class="panel-head"><span><span class="led"></span>SHOT LIST</span><span class="count" id="veoShotCount">0 shot</span></div>
+        <div id="veoShotList" class="panel-body" style="display:flex;flex-direction:column;gap:9px">
+          <div class="empty-state">Chưa có shot. Dán nội dung bên trên rồi bấm Sinh prompt.</div>
         </div>
       </div>
     </div>
@@ -11492,6 +11498,271 @@ function toggleT2Tools(){
 (function(){ try{ if(localStorage.getItem('ck_t2tools_collapsed')==='1'){
   var a=document.getElementById('t2Actions'); if(a) a.classList.add('tools-collapsed');
 } }catch(e){} })();
+</script>
+
+<script>
+/* ============================================================================
+   TOOL 6 — VEO SHOT FORGE  (port từ VeoShotForge.jsx · CORE ENGINE giữ y logic,
+   chỉ đổi callModel → callLLM của app. Mọi tên prefix "veo" để không đụng app.)
+   ========================================================================== */
+const VEO_SHOT_TYPES = {
+  ESTABLISHING:{ key:"ESTABLISHING", label:"Establishing", vi:"Toàn cảnh",
+    camera:"Sweeping aerial / flycam wide establishing shot, slow drift, vast scale", color:"#5B8DEF" },
+  ACTION:{ key:"ACTION", label:"Action", vi:"Hành động",
+    camera:"Slow cinematic tracking shot following the subject, low angle emphasizing grand scale, smooth pan", color:"#E8A33D" },
+  CLOSEUP:{ key:"CLOSEUP", label:"Close-up", vi:"Cận cảnh",
+    camera:"Extreme close-up, slow dolly-in on eyes / texture detail, shallow depth of field, 35mm anamorphic", color:"#A878E8" },
+  CUTAWAY:{ key:"CUTAWAY", label:"Cutaway / B-roll", vi:"Cảnh phụ",
+    camera:"Atmospheric b-roll insert of the environment (drifting fog, swaying foliage, flowing water, sky), slow pan, no main subject", color:"#4FB286" },
+};
+const VEO_ROTATION = ["ACTION","CLOSEUP","CUTAWAY","ACTION","CLOSEUP"];
+const VEO_STYLE_PRESETS = {
+  paleorealism:{
+    label:"Paleorealism (Ice Age / wildlife)",
+    aesthetic:"Cinematic ultra-realism, photorealistic paleorealism, National Geographic documentary style, BBC Earth aesthetic, scientific reconstruction",
+    lighting:"Volumetric fog, soft diffused arctic light, dramatic sunbeams cutting through clouds, cinematic moody lighting, subtle airborne dust particles",
+    tech:"8k resolution, hyper-detailed fur and skin textures, fine wrinkled-skin detail, slow motion, weighty footsteps, movie quality",
+    motionGuard:"slow, deliberate, weighty motion — never modern-animal speed" },
+  cosmic:{
+    label:"Cosmic / space documentary",
+    aesthetic:"Cinematic ultra-realism, hard-science astrophotography realism, NASA visualization aesthetic, scientific reconstruction, deep-space documentary",
+    lighting:"Faint starlight, volumetric nebula glow, hard rim light from a distant sun, deep shadow, lens flares, cinematic moody darkness",
+    tech:"8k resolution, photoreal cosmic scale, hyper-detailed surfaces, slow drift, movie quality, no text or UI overlays",
+    motionGuard:"near-still cosmic drift, immense scale, slow parallax — never fast or jittery" },
+  cinematicDoc:{
+    label:"Generic cinematic documentary",
+    aesthetic:"Cinematic ultra-realism, premium documentary style, scientific reconstruction, historical documentary footage",
+    lighting:"Soft diffused key light over a cool desaturated base, dramatic light pools, gentle volumetric haze, subtle vignette",
+    tech:"8k resolution, hyper-detailed textures, shallow depth of field, slow cinematic motion, movie quality",
+    motionGuard:"smooth, slow, deliberate camera and subject motion" },
+};
+
+function veoSrtTimeToSec(t){
+  const m = String(t).trim().match(/(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})/);
+  if (!m) return null;
+  return (+m[1])*3600 + (+m[2])*60 + (+m[3]) + (+m[4])/1000;
+}
+function veoSecToTimecode(s){
+  const hh=Math.floor(s/3600), mm=Math.floor((s%3600)/60), ss=Math.floor(s%60), ms=Math.round((s-Math.floor(s))*1000);
+  const p=(n,w=2)=>String(n).padStart(w,"0");
+  return `${p(hh)}:${p(mm)}:${p(ss)},${p(ms,3)}`;
+}
+function veoParseSRT(raw){
+  const blocks = String(raw).replace(/\r/g,"").trim().split(/\n\s*\n/);
+  const segs=[];
+  for (const b of blocks){
+    const lines=b.split("\n").filter(Boolean);
+    const tl=lines.find(l=>l.includes("-->"));
+    if(!tl) continue;
+    const [a,c]=tl.split("-->");
+    const start=veoSrtTimeToSec(a), end=veoSrtTimeToSec(c);
+    if(start==null||end==null) continue;
+    const text=lines.slice(lines.indexOf(tl)+1).join(" ").trim();
+    if(text) segs.push({start,end,text});
+  }
+  return segs;
+}
+function veoEstimateSegments(raw, wpm){
+  const out=[]; let t=0;
+  const scenes=String(raw).split(/^===SCENE===$/m);
+  scenes.forEach((sceneText,si)=>{
+    const sentences = sceneText.replace(/\s+/g," ").match(/[^.!?…]+[.!?…]+|\S[^.!?…]*$/g) || [];
+    sentences.forEach((s,i)=>{
+      const text=s.trim(); if(!text) return;
+      const words=text.split(/\s+/).length;
+      const dur=Math.max(1.2,(words/(wpm||145))*60);
+      out.push({ start:t, end:t+dur, text, sceneBreak: si>0 && i===0 });
+      t+=dur;
+    });
+  });
+  return out;
+}
+function veoBuildShots(segments, opts){
+  const clipSec=(opts&&opts.clipSec)||8, hardMax=(opts&&opts.hardMax)||10;
+  const raw=[]; let cur=null;
+  const flush=()=>{ if(cur){ raw.push(cur); cur=null; } };
+  for(const seg of segments){
+    if(seg.sceneBreak) flush();
+    if(!cur){ cur={start:seg.start,end:seg.end,text:seg.text,sceneStart:!!seg.sceneBreak}; continue; }
+    const wouldBe=seg.end-cur.start, curLen=cur.end-cur.start;
+    const endsSentence=/[.!?…]"?$/.test(cur.text.trim());
+    if(wouldBe>hardMax || (curLen>=clipSec && endsSentence)){
+      flush(); cur={start:seg.start,end:seg.end,text:seg.text,sceneStart:!!seg.sceneBreak};
+    } else { cur.end=seg.end; cur.text+=" "+seg.text; }
+  }
+  flush();
+  if(raw.length) raw[0].sceneStart=true;
+  const split=[];
+  for(const r of raw){
+    const dur=r.end-r.start;
+    if(dur<=hardMax+0.4){ split.push(r); continue; }
+    const n=Math.ceil(dur/clipSec), words=r.text.trim().split(/\s+/), per=dur/n;
+    for(let i=0;i<n;i++){
+      const a=Math.round((i/n)*words.length), b=Math.round(((i+1)/n)*words.length);
+      split.push({ start:r.start+i*per, end:r.start+(i+1)*per, text:words.slice(a,b).join(" ")||r.text.trim(), sceneStart:r.sceneStart&&i===0 });
+    }
+  }
+  let rot=0;
+  return split.map((s,i)=>{
+    let type;
+    if(s.sceneStart||i===0){ type="ESTABLISHING"; rot=0; }
+    else { type=VEO_ROTATION[rot%VEO_ROTATION.length]; rot++; }
+    return { index:i+1, start:s.start, end:s.end, dur:+(s.end-s.start).toFixed(2), type, narration:s.text.trim(), prompt:null };
+  });
+}
+function veoBuildBatchMessages(shots, cfg){
+  const sp = VEO_STYLE_PRESETS[cfg.stylePreset] || VEO_STYLE_PRESETS.cinematicDoc;
+  const system = [
+    "You are a senior AI-video prompt engineer for Veo 3 documentary footage.",
+    "For each shot, write ONE English Veo 3 prompt that follows this exact 5-part formula, in order:",
+    "[Camera & Motion] + [Subject & Action, highly specific] + [Environment / Setting] + [Lighting & Atmosphere] + [Style & Technical specs].",
+    "",
+    "Hard rules:",
+    "- Each prompt is ONE continuous 8-10s Veo 3 clip: a single uninterrupted motion or camera move, no cuts, no scene change inside the clip.",
+    "- Write a single flowing paragraph per shot (no bullet labels, no markdown).",
+    "- Describe the subject concretely (size, material, texture, proportion) — never just a noun.",
+    `- Motion must read as: ${sp.motionGuard}.`,
+    "- The camera framing MUST match the shot type you are given.",
+    "- A CUTAWAY shot contains NO main subject: it is pure environment b-roll.",
+    `- Aesthetic anchor: ${sp.aesthetic}.`,
+    `- Lighting & atmosphere vocabulary: ${sp.lighting}.`,
+    `- Technical tail: ${sp.tech}.`,
+    "- Avoid generic words like 'beautiful' or 'high quality'. Use cinematography terms.",
+    "- The prompt must visualize the meaning of the narration line, not transcribe it.",
+    "",
+    "Return ONLY a JSON array, no preamble, no code fences:",
+    '[{"index": <number>, "prompt": "<veo3 prompt>"}]',
+  ].join("\n");
+  const shotLines = shots.map(s=>{
+    const st=VEO_SHOT_TYPES[s.type];
+    return [`--- SHOT ${s.index} (${st.label}, ~${s.dur}s) ---`,
+            `Required camera framing: ${st.camera}`,
+            `Narration this shot illustrates: "${s.narration}"`].join("\n");
+  }).join("\n\n");
+  const user = [
+    cfg.subject ? `Documentary subject / context: ${cfg.subject}.` : "",
+    "Generate one Veo 3 prompt for each shot below.","", shotLines,
+  ].filter(Boolean).join("\n");
+  return { system, user };
+}
+function veoParseModelJSON(text){
+  const clean=String(text).replace(/```json|```/g,"").trim();
+  const a=clean.indexOf("["), b=clean.lastIndexOf("]");
+  const slice = a>=0 && b>a ? clean.slice(a,b+1) : clean;
+  return JSON.parse(slice);
+}
+
+/* ---- UI ---- */
+const veoUI = { mode:"script", shots:[], busy:false, stop:false };
+function veoStatus(msg,type){
+  if(typeof setStatus6==="function"){ setStatus6(msg,type); return; }
+  var el=document.getElementById("status6"); if(el){ el.textContent=msg; el.className="status-bar"+(type?" "+type:""); }
+}
+function veoSetMode(m){
+  veoUI.mode=m;
+  document.querySelectorAll(".veo-mode-btn").forEach(b=>b.classList.toggle("active", b.dataset.mode===m));
+  var w=document.getElementById("veoWpmRow"); if(w) w.style.display = m==="srt" ? "none" : "";
+  veoPreview();
+}
+function veoSegments(){
+  var raw=(document.getElementById("veoRaw")||{}).value||"";
+  try{ return veoUI.mode==="srt" ? veoParseSRT(raw) : veoEstimateSegments(raw, +(document.getElementById("veoWpm")||{}).value||145); }
+  catch(e){ return []; }
+}
+function veoCurrentShots(){
+  return veoBuildShots(veoSegments(), { clipSec:+(document.getElementById("veoClip")||{}).value||8, hardMax:10 });
+}
+function veoPreview(){
+  var shots=veoCurrentShots();
+  var tot=shots.reduce((a,s)=>a+s.dur,0);
+  var info=document.getElementById("veoPreviewInfo");
+  if(info) info.innerHTML = shots.length
+    ? (veoSegments().length+" câu/cue → <strong>"+shots.length+" shot</strong> · ~"+Math.round(tot)+"s ("+(tot/60).toFixed(1)+" phút)")
+    : "Dán nội dung để xem cấu trúc shot.";
+  var hasGen=veoUI.shots.some(s=>s.prompt);
+  if(!veoUI.busy && !hasGen){ veoUI.shots=shots.map(s=>({...s,prompt:null})); veoRenderShots(); }
+  var c=document.getElementById("veoShotCount"); if(c) c.textContent=(veoUI.shots.length||shots.length)+" shot";
+}
+function veoRenderShots(){
+  var box=document.getElementById("veoShotList"); if(!box) return;
+  if(!veoUI.shots.length){ box.innerHTML='<div class="empty-state">Chưa có shot. Dán nội dung bên trên rồi bấm Sinh prompt.</div>'; return; }
+  box.innerHTML = veoUI.shots.map(function(s){
+    var st=VEO_SHOT_TYPES[s.type]||VEO_SHOT_TYPES.ACTION;
+    var tc=veoSecToTimecode(s.start).slice(3,8)+"–"+veoSecToTimecode(s.end).slice(3,8);
+    var badge='<span class="veo-badge" style="background:'+st.color+'22;color:'+st.color+';border:1px solid '+st.color+'55">'+st.label+'</span>';
+    var body = s.prompt
+      ? '<div class="veo-prompt">'+escapeHtml(s.prompt)+'</div>'
+      : (veoUI.busy ? '<div style="font-size:11px;color:var(--text-dim)"><span class="spinner"></span> chờ model…</div>'
+                    : '<div style="font-size:11px;color:var(--text-dim)">— prompt sẽ xuất hiện sau khi sinh —</div>');
+    var copyBtn = s.prompt ? '<button class="veo-copy" onclick="veoCopyOne('+s.index+')">📋 Copy</button>' : '';
+    return '<div class="veo-shot"><div class="veo-shot-head">'
+      +'<span class="veo-shot-idx">#'+String(s.index).padStart(2,"0")+'</span>'
+      +badge+'<span class="veo-tc">🕐 '+tc+'</span><span class="veo-dur">'+s.dur+'s</span>'+copyBtn
+      +'</div><div class="veo-narr">"'+escapeHtml(s.narration)+'"</div>'+body+'</div>';
+  }).join("");
+}
+function veoCopyOne(idx){
+  var s=veoUI.shots.find(x=>x.index===idx);
+  if(s&&s.prompt){ (navigator.clipboard&&navigator.clipboard.writeText(s.prompt)); veoStatus("✓ Đã copy prompt shot #"+idx,"ok"); }
+}
+async function veoGenerate(){
+  var base=veoCurrentShots();
+  if(!base.length){ veoStatus("Chưa có nội dung để cắt shot.","error"); return; }
+  veoUI.shots=base.map(s=>({...s,prompt:null}));
+  veoUI.busy=true; veoUI.stop=false;
+  var gb=document.getElementById("veoGenBtn"), sb=document.getElementById("veoStopBtn");
+  if(gb)gb.style.display="none"; if(sb)sb.style.display="inline-flex";
+  veoRenderShots();
+  var stylePreset=(document.getElementById("veoStyle")||{}).value||"cinematicDoc";
+  var subject=((document.getElementById("veoSubject")||{}).value||"").trim();
+  var BATCH=4, batches=[];
+  for(var i=0;i<base.length;i+=BATCH) batches.push(base.slice(i,i+BATCH));
+  var done=0;
+  try{
+    await runConcurrent(batches, async function(slice){
+      if(veoUI.stop) return;
+      var m=veoBuildBatchMessages(slice,{stylePreset:stylePreset,subject:subject});
+      var text;
+      try{ text=await callLLM(m.system+"\n\n"+m.user, {maxTokens:1200, json:true}); }
+      catch(e){ slice.forEach(function(s){ var t=veoUI.shots.find(x=>x.index===s.index); if(t) t.prompt="[lỗi model: "+(e.message||e)+"]"; }); veoRenderShots(); return; }
+      var parsed; try{ parsed=veoParseModelJSON(text); }catch(e){ parsed=slice.map(s=>({index:s.index,prompt:"[parse lỗi — sinh lại batch này]"})); }
+      parsed.forEach(function(p){ var t=veoUI.shots.find(x=>x.index===p.index); if(t) t.prompt=p.prompt; });
+      done+=slice.length;
+      veoStatus("Đang sinh prompt… "+Math.min(done,base.length)+"/"+base.length,"working");
+      veoRenderShots();
+    }, _concurrency(), function(){ return veoUI.stop; });
+  }catch(e){ veoStatus("Lỗi: "+(e.message||e),"error"); }
+  veoUI.busy=false;
+  if(gb)gb.style.display="inline-flex"; if(sb)sb.style.display="none";
+  var ok=veoUI.shots.filter(s=>s.prompt && s.prompt[0]!=="[").length;
+  veoStatus("✓ Xong "+ok+"/"+base.length+" prompt Veo 3.","ok");
+  veoRenderShots();
+}
+function veoStop(){ veoUI.stop=true; veoStatus("Đang dừng sau batch hiện tại…","working"); }
+function veoAllText(){
+  return veoUI.shots.filter(s=>s.prompt).map(function(s){
+    return "# SHOT "+s.index+" · "+((VEO_SHOT_TYPES[s.type]||{}).label||"")+" · "+veoSecToTimecode(s.start)+" → "+veoSecToTimecode(s.end)+" ("+s.dur+"s)\n"+s.prompt;
+  }).join("\n\n");
+}
+function veoCopyAll(){ var t=veoAllText(); if(!t){ veoStatus("Chưa có prompt để copy.","error"); return; } (navigator.clipboard&&navigator.clipboard.writeText(t)); veoStatus("✓ Đã copy tất cả prompt.","ok"); }
+function veoCsvCell(s){ return '"'+String(s==null?"":s).replace(/"/g,'""')+'"'; }
+function veoDownload(blob,name){ var u=URL.createObjectURL(blob); var a=document.createElement("a"); a.href=u; a.download=name; a.click(); URL.revokeObjectURL(u); }
+function veoExportJSON(){ if(!veoUI.shots.length){ veoStatus("Chưa có shot.","error"); return; } veoDownload(new Blob([JSON.stringify(veoUI.shots,null,2)],{type:"application/json"}),"veo3-shotlist.json"); veoStatus("✓ Đã xuất JSON.","ok"); }
+function veoExportCSV(){
+  if(!veoUI.shots.length){ veoStatus("Chưa có shot.","error"); return; }
+  var head=["scene_index","start","end","duration_sec","shot_type","narration","veo3_prompt"];
+  var rows=veoUI.shots.map(function(s){
+    return [s.index, veoSecToTimecode(s.start), veoSecToTimecode(s.end), s.dur, (VEO_SHOT_TYPES[s.type]||{}).label||"", veoCsvCell(s.narration), veoCsvCell(s.prompt||"")].join(",");
+  });
+  veoDownload(new Blob([head.join(",")+"\n"+rows.join("\n")],{type:"text/csv"}),"veo3-shotlist.csv");
+  veoStatus("✓ Đã xuất CSV (cột khớp XLSX scene-list).","ok");
+}
+(function veoInit(){
+  var sel=document.getElementById("veoStyle");
+  if(sel && !sel.options.length){
+    Object.keys(VEO_STYLE_PRESETS).forEach(function(k){ var o=document.createElement("option"); o.value=k; o.textContent=VEO_STYLE_PRESETS[k].label; sel.appendChild(o); });
+  }
+})();
 </script>
 </body>
 </html>
