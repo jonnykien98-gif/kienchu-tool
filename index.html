@@ -1982,9 +1982,12 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <div class="panel">
           <div class="panel-head">
             <span><span class="led"></span>NGUỒN</span>
-            <span style="display:flex;gap:5px">
+            <span style="display:flex;gap:5px;flex-wrap:wrap">
               <button class="btn ghost sm veo-mode-btn active" data-mode="script" onclick="veoSetMode('script')">📝 Kịch bản</button>
-              <button class="btn ghost sm veo-mode-btn" data-mode="srt" onclick="veoSetMode('srt')">⏱ SRT (timing thật)</button>
+              <button class="btn ghost sm veo-mode-btn" data-mode="srt" onclick="veoSetMode('srt')">⏱ SRT</button>
+              <label class="btn ghost sm" style="cursor:pointer;border-color:#0d9488;color:#0d9488" title="Tải file giọng đọc → Whisper transcribe (key/model lấy ở Tool 8) → ra SRT timing thật, nạp vào ô bên dưới">🎤 Audio
+                <input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" style="display:none" onchange="veoTranscribeAudio(this.files[0]);this.value='';">
+              </label>
             </span>
           </div>
           <div class="panel-body">
@@ -2003,8 +2006,24 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
               <input type="range" id="veoClip" min="5" max="10" step="1" value="8" style="width:100%;accent-color:var(--accent)" oninput="document.getElementById('veoClipVal').textContent=this.value;veoPreview()">
             </div>
             <div>
+              <label class="label">Tối thiểu / shot — giây <span style="font-weight:400;opacity:.6;font-size:10px">(gộp cảnh ngắn hơn để bớt clip vụn · 0 = tắt)</span></label>
+              <input type="number" id="veoMinSec" value="5" min="0" max="10" step="0.5" onchange="veoPreview()">
+            </div>
+            <div>
+              <label class="label">Nhịp góc máy</label>
+              <select id="veoRotation" onchange="veoPreview()">
+                <option value="wideMedium" selected>Rộng &amp; trung nhiều (ít/không cận)</option>
+                <option value="balanced">Cân bằng (có cận cảnh)</option>
+                <option value="closeup">Nhiều cận cảnh</option>
+              </select>
+            </div>
+            <div>
               <label class="label">Style preset</label>
-              <select id="veoStyle" onchange="veoPreview()"></select>
+              <select id="veoStyle" onchange="veoOnStyleChange()"></select>
+            </div>
+            <div>
+              <label class="label">Global style — gắn ĐẦU mọi prompt <span style="font-weight:400;opacity:.6;font-size:10px">(thay vì lặp đuôi 8k/movie quality)</span></label>
+              <input type="text" id="veoBaseStyle" placeholder="In the style of a BBC Earth photorealistic documentary,">
             </div>
             <div>
               <label class="label">Chủ đề / bối cảnh <span style="font-weight:400;opacity:.6;font-size:10px">(cho AI hiểu subject)</span></label>
@@ -11507,33 +11526,36 @@ function toggleT2Tools(){
    ========================================================================== */
 const VEO_SHOT_TYPES = {
   ESTABLISHING:{ key:"ESTABLISHING", label:"Establishing", vi:"Toàn cảnh",
-    camera:"Sweeping aerial / flycam wide establishing shot, slow drift, vast scale", color:"#5B8DEF" },
+    camera:"Wide establishing shot with ONE slow camera move only (a gentle aerial push-in OR a slow drift — pick one), vast sense of scale", color:"#5B8DEF" },
+  WIDE:{ key:"WIDE", label:"Wide", vi:"Góc rộng",
+    camera:"Wide shot — the subject sits small within a large environment, ONE slow camera move only", color:"#46A0E0" },
+  MEDIUM:{ key:"MEDIUM", label:"Medium", vi:"Góc trung",
+    camera:"Medium shot — subject framed from roughly mid-body up, ONE slow camera move only", color:"#2FA88E" },
   ACTION:{ key:"ACTION", label:"Action", vi:"Hành động",
-    camera:"Slow cinematic tracking shot following the subject, low angle emphasizing grand scale, smooth pan", color:"#E8A33D" },
+    camera:"ONE slow tracking shot following the subject (single move, no extra pan or zoom), low angle for scale", color:"#E8A33D" },
   CLOSEUP:{ key:"CLOSEUP", label:"Close-up", vi:"Cận cảnh",
-    camera:"Extreme close-up, slow dolly-in on eyes / texture detail, shallow depth of field, 35mm anamorphic", color:"#A878E8" },
+    camera:"ONE slow dolly-in close-up, shallow depth of field (single move)", color:"#A878E8" },
   CUTAWAY:{ key:"CUTAWAY", label:"Cutaway / B-roll", vi:"Cảnh phụ",
-    camera:"Atmospheric b-roll insert of the environment (drifting fog, swaying foliage, flowing water, sky), slow pan, no main subject", color:"#4FB286" },
+    camera:"ONE slow pan across the environment, atmospheric b-roll, no main subject (single move)", color:"#4FB286" },
 };
-const VEO_ROTATION = ["ACTION","CLOSEUP","CUTAWAY","ACTION","CLOSEUP"];
+const VEO_ROTATIONS = {
+  wideMedium: ["WIDE","MEDIUM","ACTION","MEDIUM","CUTAWAY","WIDE","MEDIUM"],  // rộng/trung nhiều, KHÔNG cận
+  balanced:   ["ACTION","CLOSEUP","CUTAWAY","ACTION","CLOSEUP"],              // cân bằng (gốc)
+  closeup:    ["CLOSEUP","MEDIUM","CLOSEUP","ACTION","CUTAWAY"],              // nhiều cận cảnh
+};
+let VEO_ROTATION = VEO_ROTATIONS.wideMedium;   // mặc định: rộng & trung nhiều
 const VEO_STYLE_PRESETS = {
   paleorealism:{
     label:"Paleorealism (Ice Age / wildlife)",
-    aesthetic:"Cinematic ultra-realism, photorealistic paleorealism, National Geographic documentary style, BBC Earth aesthetic, scientific reconstruction",
-    lighting:"Volumetric fog, soft diffused arctic light, dramatic sunbeams cutting through clouds, cinematic moody lighting, subtle airborne dust particles",
-    tech:"8k resolution, hyper-detailed fur and skin textures, fine wrinkled-skin detail, slow motion, weighty footsteps, movie quality",
+    baseStyle:"In the style of a BBC Earth photorealistic wildlife documentary,",
     motionGuard:"slow, deliberate, weighty motion — never modern-animal speed" },
   cosmic:{
     label:"Cosmic / space documentary",
-    aesthetic:"Cinematic ultra-realism, hard-science astrophotography realism, NASA visualization aesthetic, scientific reconstruction, deep-space documentary",
-    lighting:"Faint starlight, volumetric nebula glow, hard rim light from a distant sun, deep shadow, lens flares, cinematic moody darkness",
-    tech:"8k resolution, photoreal cosmic scale, hyper-detailed surfaces, slow drift, movie quality, no text or UI overlays",
+    baseStyle:"In the style of a NASA-grade photorealistic deep-space documentary,",
     motionGuard:"near-still cosmic drift, immense scale, slow parallax — never fast or jittery" },
   cinematicDoc:{
     label:"Generic cinematic documentary",
-    aesthetic:"Cinematic ultra-realism, premium documentary style, scientific reconstruction, historical documentary footage",
-    lighting:"Soft diffused key light over a cool desaturated base, dramatic light pools, gentle volumetric haze, subtle vignette",
-    tech:"8k resolution, hyper-detailed textures, shallow depth of field, slow cinematic motion, movie quality",
+    baseStyle:"In the style of a premium photorealistic cinematic documentary,",
     motionGuard:"smooth, slow, deliberate camera and subject motion" },
 };
 
@@ -11592,8 +11614,22 @@ function veoBuildShots(segments, opts){
   }
   flush();
   if(raw.length) raw[0].sceneStart=true;
-  const split=[];
+
+  // GỘP shot ngắn: block < minSec → gộp LÙI vào block trước (nếu tổng ≤ hardMax),
+  // KHÔNG gộp qua ranh giới scene (giữ establishing). Giảm số clip vụn → shot dài hơn.
+  const minSec=(opts&&opts.minSec)||0;
+  const merged=[];
   for(const r of raw){
+    const prev=merged[merged.length-1];
+    const rLen=r.end-r.start;
+    if(prev && minSec>0 && !r.sceneStart && rLen<minSec && (r.end-prev.start)<=hardMax+0.4){
+      prev.end=r.end; prev.text+=" "+r.text; continue;
+    }
+    merged.push(Object.assign({},r));
+  }
+
+  const split=[];
+  for(const r of merged){
     const dur=r.end-r.start;
     if(dur<=hardMax+0.4){ split.push(r); continue; }
     const n=Math.ceil(dur/clipSec), words=r.text.trim().split(/\s+/), per=dur/n;
@@ -11602,33 +11638,31 @@ function veoBuildShots(segments, opts){
       split.push({ start:r.start+i*per, end:r.start+(i+1)*per, text:words.slice(a,b).join(" ")||r.text.trim(), sceneStart:r.sceneStart&&i===0 });
     }
   }
+  const rotArr = (opts && opts.rotation && VEO_ROTATIONS[opts.rotation]) || VEO_ROTATION;
   let rot=0;
   return split.map((s,i)=>{
     let type;
     if(s.sceneStart||i===0){ type="ESTABLISHING"; rot=0; }
-    else { type=VEO_ROTATION[rot%VEO_ROTATION.length]; rot++; }
+    else { type=rotArr[rot%rotArr.length]; rot++; }
     return { index:i+1, start:s.start, end:s.end, dur:+(s.end-s.start).toFixed(2), type, narration:s.text.trim(), prompt:null };
   });
 }
 function veoBuildBatchMessages(shots, cfg){
   const sp = VEO_STYLE_PRESETS[cfg.stylePreset] || VEO_STYLE_PRESETS.cinematicDoc;
+  const baseLead = ((cfg.baseStyle && cfg.baseStyle.trim()) || sp.baseStyle);
   const system = [
-    "You are a senior AI-video prompt engineer for Veo 3 documentary footage.",
-    "For each shot, write ONE English Veo 3 prompt that follows this exact 5-part formula, in order:",
-    "[Camera & Motion] + [Subject & Action, highly specific] + [Environment / Setting] + [Lighting & Atmosphere] + [Style & Technical specs].",
+    "You are a senior AI-video prompt engineer for Veo 3 (text-to-VIDEO, not still images).",
+    "Write ONE English Veo 3 prompt per shot. Order: [Camera — a single move] + [Subject + core action] + [Environment] + [Lighting & mood]. Keep it CONCISE: 2-3 sentences, about 40-70 words.",
     "",
     "Hard rules:",
-    "- Each prompt is ONE continuous 8-10s Veo 3 clip: a single uninterrupted motion or camera move, no cuts, no scene change inside the clip.",
-    "- Write a single flowing paragraph per shot (no bullet labels, no markdown).",
-    "- Describe the subject concretely (size, material, texture, proportion) — never just a noun.",
-    `- Motion must read as: ${sp.motionGuard}.`,
-    "- The camera framing MUST match the shot type you are given.",
-    "- A CUTAWAY shot contains NO main subject: it is pure environment b-roll.",
-    `- Aesthetic anchor: ${sp.aesthetic}.`,
-    `- Lighting & atmosphere vocabulary: ${sp.lighting}.`,
-    `- Technical tail: ${sp.tech}.`,
-    "- Avoid generic words like 'beautiful' or 'high quality'. Use cinematography terms.",
-    "- The prompt must visualize the meaning of the narration line, not transcribe it.",
+    `- Begin EVERY prompt with this exact style lead, then continue: "${baseLead}". Do NOT append long technical keyword tails (no '8k, ultra-realism, movie quality, slow motion, hyper-detailed' lists at the end) — the lead already sets the look; repeated tails only dilute the model.`,
+    "- ONE continuous 8-10s clip with a SINGLE camera movement only (e.g. ONLY a slow dolly-in, OR ONLY a slow pan-left — NEVER combine tracking + pan + zoom). No cut inside the clip.",
+    "- Do NOT enumerate micro-anatomy (no 'vertical slit pupil', 'polygonal scales', 'individual micro-wrinkles', 'every pore'). Keep surface detail at adjective level only — e.g. 'highly detailed scaly skin', 'thick weathered fur'. Over-detailing makes Veo morph/distort.",
+    "- Do NOT stack heavy environmental physics onto a moving camera (e.g. avoid adding volumetric dust, spray or swarms WHILE the camera tracks). Pick the camera move and keep the environment simple and stable.",
+    "- The camera framing MUST match the shot type given, and use only that one move.",
+    "- A CUTAWAY shot has NO main subject: it is pure environment b-roll.",
+    `- Motion feel: ${sp.motionGuard}.`,
+    "- Avoid generic words like 'beautiful' or 'high quality'. Use real cinematography terms. Visualize the MEANING of the narration line, do not transcribe it.",
     "",
     "Return ONLY a JSON array, no preamble, no code fences:",
     '[{"index": <number>, "prompt": "<veo3 prompt>"}]',
@@ -11636,12 +11670,12 @@ function veoBuildBatchMessages(shots, cfg){
   const shotLines = shots.map(s=>{
     const st=VEO_SHOT_TYPES[s.type];
     return [`--- SHOT ${s.index} (${st.label}, ~${s.dur}s) ---`,
-            `Required camera framing: ${st.camera}`,
+            `Required camera (ONE move only): ${st.camera}`,
             `Narration this shot illustrates: "${s.narration}"`].join("\n");
   }).join("\n\n");
   const user = [
     cfg.subject ? `Documentary subject / context: ${cfg.subject}.` : "",
-    "Generate one Veo 3 prompt for each shot below.","", shotLines,
+    "Generate one CONCISE Veo 3 prompt per shot below.","", shotLines,
   ].filter(Boolean).join("\n");
   return { system, user };
 }
@@ -11664,13 +11698,43 @@ function veoSetMode(m){
   var w=document.getElementById("veoWpmRow"); if(w) w.style.display = m==="srt" ? "none" : "";
   veoPreview();
 }
+function veoOnStyleChange(){
+  var sel=document.getElementById("veoStyle"), bs=document.getElementById("veoBaseStyle");
+  if(sel && bs){ var p=VEO_STYLE_PRESETS[sel.value]; if(p) bs.value=p.baseStyle; }
+  veoPreview();
+}
+async function veoTranscribeAudio(file){
+  if(!file) return;
+  if(typeof t8TranscribeAPI!=="function" || typeof t8GetProvider!=="function" || typeof groupWordsIntoLines!=="function"){ veoStatus("Thiếu module transcribe của Tool 8.","error"); return; }
+  var prov=t8GetProvider();
+  if(prov==="local"){ veoStatus("Transcribe local không dùng được ở đây — chọn Groq/OpenAI ở Tool 8 (mục cấu hình Whisper).","error"); return; }
+  veoStatus("🎤 Đang transcribe audio (Whisper · tự nén 16kHz + cắt đoạn cho file lớn)… file dài có thể mất vài phút.","working");
+  try{
+    // t8TranscribeAPI: nén mono 16k → cắt đoạn 10 phút → transcribe từng đoạn → cộng offset (bỏ giới hạn 25MB)
+    var words = await t8TranscribeAPI(prov, file);
+    if(!words || !words.length){ veoStatus("Không nhận được nội dung từ audio.","error"); return; }
+    var maxSec = Math.max(2, parseInt((document.getElementById("srtLineSec")||{}).value) || 4);
+    var segs = groupWordsIntoLines(words, maxSec);   // words → dòng có timing thật
+    if(!segs.length){ veoStatus("Không gom được dòng từ audio.","error"); return; }
+    var srt = segs.map(function(s,i){ return (i+1)+"\n"+veoSecToTimecode(s.start)+" --> "+veoSecToTimecode(s.end)+"\n"+(s.text||""); }).join("\n\n");
+    var ta=document.getElementById("veoRaw"); if(ta) ta.value=srt;
+    veoUI.shots=[];                 // reset để preview vẽ lại từ timing mới
+    veoSetMode("srt");              // chuyển sang chế độ SRT (đã có timing thật)
+    veoStatus("✓ Đã transcribe "+segs.length+" dòng từ audio → SRT timing thật (mọi kích thước). Bấm Sinh prompt Veo 3.","ok");
+  }catch(e){ veoStatus("Lỗi transcribe: "+(e.message||e),"error"); }
+}
 function veoSegments(){
   var raw=(document.getElementById("veoRaw")||{}).value||"";
   try{ return veoUI.mode==="srt" ? veoParseSRT(raw) : veoEstimateSegments(raw, +(document.getElementById("veoWpm")||{}).value||145); }
   catch(e){ return []; }
 }
 function veoCurrentShots(){
-  return veoBuildShots(veoSegments(), { clipSec:+(document.getElementById("veoClip")||{}).value||8, hardMax:10 });
+  return veoBuildShots(veoSegments(), {
+    clipSec:+(document.getElementById("veoClip")||{}).value||8,
+    hardMax:10,
+    minSec:+(document.getElementById("veoMinSec")||{}).value||0,
+    rotation:(document.getElementById("veoRotation")||{}).value||"wideMedium"
+  });
 }
 function veoPreview(){
   var shots=veoCurrentShots();
@@ -11715,13 +11779,14 @@ async function veoGenerate(){
   veoRenderShots();
   var stylePreset=(document.getElementById("veoStyle")||{}).value||"cinematicDoc";
   var subject=((document.getElementById("veoSubject")||{}).value||"").trim();
+  var baseStyle=((document.getElementById("veoBaseStyle")||{}).value||"").trim();
   var BATCH=4, batches=[];
   for(var i=0;i<base.length;i+=BATCH) batches.push(base.slice(i,i+BATCH));
   var done=0;
   try{
     await runConcurrent(batches, async function(slice){
       if(veoUI.stop) return;
-      var m=veoBuildBatchMessages(slice,{stylePreset:stylePreset,subject:subject});
+      var m=veoBuildBatchMessages(slice,{stylePreset:stylePreset,subject:subject,baseStyle:baseStyle});
       var text;
       try{ text=await callLLM(m.system+"\n\n"+m.user, {maxTokens:1200, json:true}); }
       catch(e){ slice.forEach(function(s){ var t=veoUI.shots.find(x=>x.index===s.index); if(t) t.prompt="[lỗi model: "+(e.message||e)+"]"; }); veoRenderShots(); return; }
@@ -11762,6 +11827,8 @@ function veoExportCSV(){
   if(sel && !sel.options.length){
     Object.keys(VEO_STYLE_PRESETS).forEach(function(k){ var o=document.createElement("option"); o.value=k; o.textContent=VEO_STYLE_PRESETS[k].label; sel.appendChild(o); });
   }
+  var bs=document.getElementById("veoBaseStyle");
+  if(sel && bs && !bs.value){ var p=VEO_STYLE_PRESETS[sel.value]; if(p) bs.value=p.baseStyle; }
 })();
 </script>
 </body>
