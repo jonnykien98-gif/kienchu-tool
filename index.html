@@ -11821,9 +11821,8 @@ async function veoGenerate(){
 }
 function veoStop(){ veoUI.stop=true; veoStatus("Đang dừng sau batch hiện tại…","working"); }
 function veoAllText(){
-  return veoUI.shots.filter(s=>s.prompt).map(function(s){
-    return "# SHOT "+s.index+" · "+((VEO_SHOT_TYPES[s.type]||{}).label||"")+" · "+veoSecToTimecode(s.start)+" → "+veoSecToTimecode(s.end)+" ("+s.dur+"s)\n"+s.prompt;
-  }).join("\n\n");
+  // Chỉ lấy nội dung prompt (bỏ dòng "# SHOT ..."), mỗi prompt cách 1 dòng trống
+  return veoUI.shots.filter(s=>s.prompt && s.prompt[0]!=="[").map(function(s){ return s.prompt; }).join("\n\n");
 }
 function veoCopyAll(){ var t=veoAllText(); if(!t){ veoStatus("Chưa có prompt để copy.","error"); return; } (navigator.clipboard&&navigator.clipboard.writeText(t)); veoStatus("✓ Đã copy tất cả prompt.","ok"); }
 function veoCsvCell(s){ return '"'+String(s==null?"":s).replace(/"/g,'""')+'"'; }
