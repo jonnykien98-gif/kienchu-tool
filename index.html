@@ -2012,7 +2012,8 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
             <div>
               <label class="label">Nhịp góc máy</label>
               <select id="veoRotation" onchange="veoPreview()">
-                <option value="wideMedium" selected>Rộng &amp; trung nhiều (ít/không cận)</option>
+                <option value="wideMedium" selected>Rộng &amp; trung + tĩnh (ít/không cận)</option>
+                <option value="staticDoc">Tĩnh nhiều (sắc nét &amp; ổn định nhất)</option>
                 <option value="balanced">Cân bằng (có cận cảnh)</option>
                 <option value="closeup">Nhiều cận cảnh</option>
               </select>
@@ -11526,24 +11527,27 @@ function toggleT2Tools(){
    ========================================================================== */
 const VEO_SHOT_TYPES = {
   ESTABLISHING:{ key:"ESTABLISHING", label:"Establishing", vi:"Toàn cảnh",
-    camera:"Wide establishing shot with ONE slow camera move only (a gentle aerial push-in OR a slow drift — pick one), vast sense of scale", color:"#5B8DEF" },
+    camera:"Epic wide establishing shot — either a STATIC locked-off frame OR ONE slow lateral drift; the subject is dwarfed by a vast environment to emphasize scale (never zoom, never pull back)", color:"#5B8DEF" },
+  STATIC:{ key:"STATIC", label:"Static", vi:"Tĩnh (tripod)",
+    camera:"STATIC locked-off tripod shot — camera perfectly still; only the subject and the environment move inside the frame (wind, dust, water). No camera movement at all", color:"#8A8F98" },
   WIDE:{ key:"WIDE", label:"Wide", vi:"Góc rộng",
-    camera:"Wide shot — the subject sits small within a large environment, ONE slow camera move only", color:"#46A0E0" },
+    camera:"Wide shot, subject small within a large environment to emphasize scale — STATIC locked-off, OR ONE slow lateral tracking / cinematic pan for parallax depth (never zoom, never pull back)", color:"#46A0E0" },
   MEDIUM:{ key:"MEDIUM", label:"Medium", vi:"Góc trung",
-    camera:"Medium shot — subject framed from roughly mid-body up, ONE slow camera move only", color:"#2FA88E" },
+    camera:"Medium shot from roughly mid-body up — STATIC, OR ONE slow gentle push-in (dolly-in). Never pull back", color:"#2FA88E" },
   ACTION:{ key:"ACTION", label:"Action", vi:"Hành động",
-    camera:"ONE slow tracking shot following the subject (single move, no extra pan or zoom), low angle for scale", color:"#E8A33D" },
+    camera:"ONE slow lateral tracking shot following the subject (single move, no pan or zoom), low angle for scale", color:"#E8A33D" },
   CLOSEUP:{ key:"CLOSEUP", label:"Close-up", vi:"Cận cảnh",
-    camera:"ONE slow dolly-in close-up, shallow depth of field (single move)", color:"#A878E8" },
+    camera:"ONE slow push-in / gentle dolly-in close-up, shallow depth of field (single move, never pull back)", color:"#A878E8" },
   CUTAWAY:{ key:"CUTAWAY", label:"Cutaway / B-roll", vi:"Cảnh phụ",
-    camera:"ONE slow pan across the environment, atmospheric b-roll, no main subject (single move)", color:"#4FB286" },
+    camera:"STATIC, OR ONE slow pan across the environment — atmospheric b-roll, no main subject; the environment itself is the star", color:"#4FB286" },
 };
 const VEO_ROTATIONS = {
-  wideMedium: ["WIDE","MEDIUM","ACTION","MEDIUM","CUTAWAY","WIDE","MEDIUM"],  // rộng/trung nhiều, KHÔNG cận
-  balanced:   ["ACTION","CLOSEUP","CUTAWAY","ACTION","CLOSEUP"],              // cân bằng (gốc)
+  wideMedium: ["WIDE","STATIC","MEDIUM","WIDE","CUTAWAY","MEDIUM","STATIC"],  // rộng/trung + tĩnh, KHÔNG cận
+  staticDoc:  ["STATIC","WIDE","STATIC","MEDIUM","CUTAWAY","STATIC","WIDE"],  // tĩnh nhiều (sắc nét nhất)
+  balanced:   ["ACTION","MEDIUM","CLOSEUP","CUTAWAY","STATIC"],               // cân bằng (có cận)
   closeup:    ["CLOSEUP","MEDIUM","CLOSEUP","ACTION","CUTAWAY"],              // nhiều cận cảnh
 };
-let VEO_ROTATION = VEO_ROTATIONS.wideMedium;   // mặc định: rộng & trung nhiều
+let VEO_ROTATION = VEO_ROTATIONS.wideMedium;   // mặc định: rộng & trung + tĩnh
 const VEO_STYLE_PRESETS = {
   paleorealism:{
     label:"Paleorealism (Ice Age / wildlife)",
@@ -11647,6 +11651,8 @@ function veoBuildShots(segments, opts){
     return { index:i+1, start:s.start, end:s.end, dur:+(s.end-s.start).toFixed(2), type, narration:s.text.trim(), prompt:null };
   });
 }
+// Câu "trừu tượng / không có hình": rất ngắn (≤4 từ) → cần mượn ngữ cảnh. Bảo thủ để KHÔNG đụng cảnh đủ ý.
+function veoIsVague(t){ return String(t||"").trim().split(/\s+/).filter(Boolean).length <= 4; }
 function veoBuildBatchMessages(shots, cfg){
   const sp = VEO_STYLE_PRESETS[cfg.stylePreset] || VEO_STYLE_PRESETS.cinematicDoc;
   const baseLead = ((cfg.baseStyle && cfg.baseStyle.trim()) || sp.baseStyle);
@@ -11657,6 +11663,11 @@ function veoBuildBatchMessages(shots, cfg){
     "Hard rules:",
     `- Begin EVERY prompt with this exact style lead, then continue: "${baseLead}". Do NOT append long technical keyword tails (no '8k, ultra-realism, movie quality, slow motion, hyper-detailed' lists at the end) — the lead already sets the look; repeated tails only dilute the model.`,
     "- ONE continuous 8-10s clip with a SINGLE camera movement only (e.g. ONLY a slow dolly-in, OR ONLY a slow pan-left — NEVER combine tracking + pan + zoom). No cut inside the clip.",
+    "- STRONGLY favor STATIC, locked-off tripod shots — keep the camera perfectly still and let the subject and environment move inside the frame (wind, dust, water). Static frames render the sharpest and most stable in Veo.",
+    "- Allowed camera moves ONLY: static / locked-off tripod; slow push-in (dolly-in); slow lateral tracking; slow cinematic pan left or right; slow pedestal up or down. NEVER use dolly-back, pull-back, zoom-out, crane-out, or 'the camera pulls back / zooms out to reveal' — those badly distort Veo output.",
+    "- For wide shots, emphasize SCALE: place the subject small within a vast environment so the wide angle dwarfs it (towering trees, cliffs, endless ocean/sky).",
+    "- Use specific era / biome-appropriate environment nouns when implied by the subject (e.g. 'Late Cretaceous redwood forest', 'Triassic arid badlands', 'frozen mammoth steppe') instead of generic 'jungle' or 'desert'.",
+    "- Some shots include a 'Context (...)' line because their narration is abstract or has no concrete image. For THOSE shots only: derive a concrete visual from that context plus the documentary subject (a relevant b-roll, environment, or subject moment) and keep continuity with the neighbouring shots — never render literal on-screen text, empty frames, or generic filler. Shots WITHOUT a Context line: visualize their own narration directly, unchanged.",
     "- Do NOT enumerate micro-anatomy (no 'vertical slit pupil', 'polygonal scales', 'individual micro-wrinkles', 'every pore'). Keep surface detail at adjective level only — e.g. 'highly detailed scaly skin', 'thick weathered fur'. Over-detailing makes Veo morph/distort.",
     "- Do NOT stack heavy environmental physics onto a moving camera (e.g. avoid adding volumetric dust, spray or swarms WHILE the camera tracks). Pick the camera move and keep the environment simple and stable.",
     "- The camera framing MUST match the shot type given, and use only that one move.",
@@ -11669,9 +11680,13 @@ function veoBuildBatchMessages(shots, cfg){
   ].join("\n");
   const shotLines = shots.map(s=>{
     const st=VEO_SHOT_TYPES[s.type];
-    return [`--- SHOT ${s.index} (${st.label}, ~${s.dur}s) ---`,
+    const lines=[`--- SHOT ${s.index} (${st.label}, ~${s.dur}s) ---`,
             `Required camera (ONE move only): ${st.camera}`,
-            `Narration this shot illustrates: "${s.narration}"`].join("\n");
+            `Narration this shot illustrates: "${s.narration}"`];
+    if(veoIsVague(s.narration) && (s._prev || s._next)){
+      lines.push(`Context (this narration is abstract / has no concrete image — derive a concrete visual from it) — previous line: "${s._prev||"—"}" | next line: "${s._next||"—"}"`);
+    }
+    return lines.join("\n");
   }).join("\n\n");
   const user = [
     cfg.subject ? `Documentary subject / context: ${cfg.subject}.` : "",
@@ -11772,6 +11787,7 @@ function veoCopyOne(idx){
 async function veoGenerate(){
   var base=veoCurrentShots();
   if(!base.length){ veoStatus("Chưa có nội dung để cắt shot.","error"); return; }
+  base.forEach(function(s,i){ s._prev = i>0?base[i-1].narration:""; s._next = i<base.length-1?base[i+1].narration:""; });
   veoUI.shots=base.map(s=>({...s,prompt:null}));
   veoUI.busy=true; veoUI.stop=false;
   var gb=document.getElementById("veoGenBtn"), sb=document.getElementById("veoStopBtn");
