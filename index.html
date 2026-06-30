@@ -5934,7 +5934,7 @@ Scene aesthetic: ${p.sceneStyle || 'consistent flat 2D style'} --ar 16:9
 
 📐 ĐẶC ĐIỂM NHÂN VẬT BẮT BUỘC — CHÈN NGUYÊN VĂN cụm sau vào MỖI prompt có nhân vật (COPY Y HỆT, KHÔNG rút gọn, KHÔNG diễn giải lại, KHÔNG thay bằng cụm chung chung):
 "${charStyleShort || 'giữ đúng style nhân vật của kênh'}"
-- Liệt kê CỤ THỂ TỪNG chi tiết ở trên (hình dạng đầu, MẮT/MŨI/MIỆNG, kiểu cổ–tay–chân, tỉ lệ cơ thể, nét vẽ). VD ĐÚNG: "pale-cream rounded head with small black dot eyes and a small mouth, slender black stick neck, black stick arms and gloved hands". VD SAI (TUYỆT ĐỐI TRÁNH): gộp thành "gentle facial features", "slender limbs" — vì làm rụng đặc điểm khoá.
+- Liệt kê CỤ THỂ TỪNG chi tiết ở trên (hình dạng đầu, MẮT/MŨI/MIỆNG, kiểu cổ–tay–chân, tỉ lệ cơ thể, nét vẽ). VD ĐÚNG (tả CỤ THỂ theo ĐÚNG style kênh — KHÔNG mặc định người que): "rounded pale head with small dark eyes and a soft small mouth, slim neck, slender arms with simple hands, [đúng nét vẽ của kênh]". VD SAI (TUYỆT ĐỐI TRÁNH): gộp thành "gentle facial features", "slender limbs" — vì làm rụng đặc điểm khoá.
 - TUYỆT ĐỐI giữ nhất quán với Character Style — KHÔNG tự ý vẽ khác kiểu (VD nếu kênh dùng người que thì giữ người que, KHÔNG đổi sang người thật; nếu kênh dùng chibi thì giữ chibi)
 ${dm === 'tag' ? `- Nhân vật chính: ghi tag [tên-nhân-vật] + kèm cụm đặc điểm nhận dạng chính ngay sau tag. Nhân vật phụ: tả tự do nhưng cùng style.` : '- Tả nhân vật kèm đầy đủ đặc điểm style của kênh ở trên.'}
 
@@ -5967,21 +5967,21 @@ ${hybridRule}${brollRule}${VISUAL_METAPHOR_RULE}
 ${mode1Rule}
 
 🔹 LOẠI 2 — INFOGRAPHIC / BIỂU ĐỒ ĐƠN GIẢN (VO nói về số liệu, so sánh, thống kê):
-- Vẽ ĐƠN GIẢN: 1-2 icon/biểu đồ đơn giản + nhân vật ${dm === 'tag' ? '[tên-nhân-vật]' : 'stick figure'} chỉ tay hoặc đứng cạnh
+- Vẽ ĐƠN GIẢN: 1-2 icon/biểu đồ đơn giản + nhân vật ${dm === 'tag' ? '[tên-nhân-vật]' : 'đơn giản ĐÚNG STYLE KÊNH (KHÔNG mặc định người que)'} chỉ tay hoặc đứng cạnh
 - Tuyệt đối KHÔNG vẽ infographic phức tạp nhiều panel, KHÔNG nhiều text label
 - KHÔNG vẽ nội tạng, ký hiệu y tế trừ khi VO yêu cầu rõ ràng
-- VD: "${dm === 'tag' ? '[narrator-male]' : 'A cartoon stick figure'} pointing at a simple bar chart with 3 bars (short, medium, tall), clean flat background, minimal style"
+- VD: "${dm === 'tag' ? '[narrator-male]' : 'A simple character in the channel art style'} pointing at a simple bar chart with 3 bars (short, medium, tall), clean flat background, minimal style"
 
 🔹 LOẠI 3 — QUY TRÌNH / BƯỚC (VO giải thích cách làm, từng bước):
 - Mô tả 2-3 bước từ trái sang phải với mũi tên đơn giản
-- ${dm === 'tag' ? 'Nếu có nhân vật: ghi [tên-nhân-vật] thực hiện hành động' : 'Stick figure thực hiện từng bước'}
+- ${dm === 'tag' ? 'Nếu có nhân vật: ghi [tên-nhân-vật] thực hiện hành động' : 'Nhân vật đơn giản (ĐÚNG STYLE KÊNH) thực hiện từng bước'}
 - VD: "Three steps left to right with arrows: step 1 seed icon, step 2 watering can icon, step 3 plant sprouting, warm muted palette, flat 2D style"
 
 🔹 LOẠI 4 — ICON / KHÁI NIỆM (VO giải thích khái niệm trừu tượng):
 - 1 icon trung tâm lớn + tối đa 4 icon phụ xung quanh, kiểu simple flat illustration
 - Dùng metaphor hình ảnh (não = suy nghĩ, tim = cảm xúc, ví tiền = tài chính)
 - KHÔNG vẽ nhân vật realistic, KHÔNG vẽ nội tạng người trừ khi VO nói về y tế cụ thể
-- ${dm === 'tag' ? 'Nếu có nhân vật phụ: ghi [tên-nhân-vật] đứng cạnh icon' : 'Nếu có người: dùng stick figure đơn giản'}
+- ${dm === 'tag' ? 'Nếu có nhân vật phụ: ghi [tên-nhân-vật] đứng cạnh icon' : 'Nếu có người: vẽ nhân vật đơn giản ĐÚNG STYLE KÊNH (KHÔNG mặc định người que)'}
 - VD: "Central large coin icon surrounded by 4 small flat icons: house, car, graduation cap, piggy bank, connected by dotted lines, warm yellow background, flat 2D style"
 
 🔹 LOẠI 5 — SỐ/TỪ KHOÁ ẤN TƯỢNG + MINH HOẠ (CHỈ khi VO có con số sốc, năm cụ thể, hoặc 1 từ khoá duy nhất):
@@ -6016,7 +6016,7 @@ ${neighborVO ? `\n🔗 NGỮ CẢNH LÂN CẬN (lời thoại cảnh trước & 
 - KHÔNG ghi "LOẠI 1", "LOẠI 2", "LOẠI 3", "LOẠI 4", "LOẠI 5" vào prompt output
 - KHÔNG ghi "Type 1", "Type 2", ... hay bất kỳ label phân loại nào
 - KHÔNG ghi "[001]", "[002]" hay chỉ số cảnh vào prompt
-${dm === 'tag' ? '- LUÔN dùng [tên-nhân-vật] và [tên-bối-cảnh] cho MỌI cảnh có nhân vật — KHÔNG tả inline\n- VD đúng: "[narrator-male] walks in [outdoor-nature-daytime]" | VD SAI: "a cartoon stick figure walks in a green field"\n' : '- KHÔNG dùng ngoặc vuông [] cho tên nhân vật/bối cảnh — TẢ THẲNG bằng chữ tiếng Anh\n'}- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
+${dm === 'tag' ? '- LUÔN dùng [tên-nhân-vật] và [tên-bối-cảnh] cho MỌI cảnh có nhân vật — KHÔNG tả inline\n- VD đúng: "[narrator-male] walks in [outdoor-nature-daytime]" | VD SAI: "a generic character walks in a green field"\n' : '- KHÔNG dùng ngoặc vuông [] cho tên nhân vật/bối cảnh — TẢ THẲNG bằng chữ tiếng Anh\n'}- Loại cảnh CHỈ DÙNG ĐỂ AI XÁC ĐỊNH STYLE INTERNAL, KHÔNG XUẤT HIỆN trong text prompt cuối cùng
 - Prompt trả về phải BẮT ĐẦU NGAY bằng mô tả visual (vd: "Medium shot of...", "Split layout showing...", "Wide angle of..."), KHÔNG có prefix nào khác
 
 🛡 AN TOÀN NỘI DUNG (BẮT BUỘC — để qua bộ lọc của tool tạo ảnh):
