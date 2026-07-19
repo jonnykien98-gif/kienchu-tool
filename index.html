@@ -1161,6 +1161,10 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <div class="nav-item" data-tool="tool11" onclick="switchTool('tool11')">
           <span class="num">11</span><span>Phân tích đối thủ</span>
         </div>
+        <div class="nav-group">🖼 Tạo ảnh (Flow)</div>
+        <div class="nav-item" data-tool="toolflow" onclick="switchTool('toolflow')">
+          <span class="num">✨</span><span>Tạo Ảnh Flow</span>
+        </div>
       </div>
       <div style="margin-top:14px;padding:0 4px">
         <button class="btn ghost" onclick="openAssetLibrary()" style="width:100%;display:flex;align-items:center;gap:8px;font-size:13px;justify-content:flex-start;padding:9px 12px" title="Thư viện nhân vật & bối cảnh dùng chung">
@@ -2426,6 +2430,107 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
       </div>
     </div>
 
+    <!-- ============================================================
+         TOOL FLOW — TẠO ẢNH HÀNG LOẠT QUA GOOGLE FLOW (extension)
+    ============================================================ -->
+    <div class="tool" id="tool-toolflow">
+      <div class="tool-head">
+        <div class="tool-title">✨ Tạo Ảnh Flow</div>
+        <div class="tool-subtitle">Tự động render ảnh CẢNH (Tool 2) và ảnh NHÂN VẬT/BỐI CẢNH (Tool 3) bằng credit Google Flow — qua extension <strong>Flow Image Gen</strong>. Ảnh tạo xong tự gắn vào storyboard + Tool 4 (đổi tên) + Tool 7 (dựng clip).</div>
+      </div>
+
+      <div class="info-box">
+        <span class="lbl">⚙️ Cần chuẩn bị:</span> 1) Cài extension <strong>Flow Image Gen</strong> (Load unpacked). 2) Bấm <em>Mở tab Flow</em> → đăng nhập Google, GIỮ tab đó mở (cần để giải captcha). 3) Bấm <em>Quét lại</em> đến khi thấy <strong>đã kết nối</strong>.
+      </div>
+
+      <!-- KẾT NỐI -->
+      <div class="panel mb-16" style="border:1.5px solid var(--accent);border-radius:12px">
+        <div class="panel-head" style="background:linear-gradient(135deg,rgba(124,58,237,.06),rgba(194,65,12,.04))">
+          <span>🔌 Kết nối extension</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn ghost sm" onclick="tfScan()">↻ Quét lại</button>
+            <button class="btn ghost sm" onclick="tfOpenFlow()">🌐 Mở tab Flow</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="tfConn" style="font-size:13px;line-height:1.7">Đang kiểm tra extension…</div>
+        </div>
+      </div>
+
+      <!-- CẤU HÌNH -->
+      <div class="panel mb-16">
+        <div class="panel-head"><span>🎛 Cấu hình</span></div>
+        <div class="panel-body">
+          <div class="grid-2" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end">
+            <div>
+              <label class="label">MODEL</label>
+              <select id="tfModel">
+                <option value="GEM_PIX_2" selected>Nano Banana Pro</option>
+                <option value="NARWHAL">Nano Banana 2</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">TỶ LỆ</label>
+              <select id="tfAspect">
+                <option value="IMAGE_ASPECT_RATIO_LANDSCAPE" selected>16:9 (ngang)</option>
+                <option value="IMAGE_ASPECT_RATIO_PORTRAIT">9:16 (dọc)</option>
+                <option value="IMAGE_ASPECT_RATIO_SQUARE">1:1 (vuông)</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">CHẤT LƯỢNG</label>
+              <select id="tfQuality">
+                <option value="orig" selected>Gốc</option>
+                <option value="2048">2K</option>
+                <option value="3840">4K</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">LUỒNG SONG SONG</label>
+              <select id="tfConc">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-bar" id="statusflow" style="margin-bottom:14px">Sẵn sàng.</div>
+
+      <!-- ẢNH CẢNH -->
+      <div class="panel mb-16">
+        <div class="panel-head">
+          <span>🎬 Ảnh cảnh (từ prompt Tool 2)</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn primary sm" onclick="tfGenScenes(false)">▶ Tạo tất cả</button>
+            <button class="btn ghost sm" onclick="tfGenScenes(true)">➕ Chỉ cảnh thiếu ảnh</button>
+            <button class="btn ghost sm" onclick="tfStop()">■ Dừng</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="tfSceneInfo" style="font-size:12px;color:var(--text-muted);margin-bottom:10px"></div>
+          <div id="tfSceneGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px"></div>
+        </div>
+      </div>
+
+      <!-- ẢNH NHÂN VẬT / BỐI CẢNH -->
+      <div class="panel mb-16">
+        <div class="panel-head">
+          <span>🎭 Ảnh nhân vật &amp; bối cảnh (từ prompt Tool 3)</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn primary sm" onclick="tfGenAssets('char')">👤 Tạo ảnh nhân vật</button>
+            <button class="btn primary sm" onclick="tfGenAssets('bg')">🏞 Tạo ảnh bối cảnh</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="tfAssetInfo" style="font-size:12px;color:var(--text-muted);margin-bottom:10px"></div>
+          <div id="tfAssetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px"></div>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -3251,6 +3356,7 @@ function switchTool(name){
   if (name === 'tool9' && typeof t9Init === 'function') t9Init();
   if (name === 'tool10' && typeof t10Init === 'function') t10Init();
   if (name === 'tool11' && typeof t11Init === 'function') t11Init();
+  if (name === 'toolflow' && typeof tfInit === 'function') tfInit();
 }
 
 /* ============================================================
@@ -4636,6 +4742,244 @@ function requestCancel(){
 }
 function clearCancel(){
   state.cancelRequested = false;
+}
+
+/* ============================================================
+   TOOL FLOW — Tạo ảnh hàng loạt qua extension "Flow Image Gen"
+   Trang web nói chuyện với extension qua window.postMessage (bridge.js).
+   Ảnh cảnh → state.sceneImages (full dataURL, khớp Tool 2/4/7).
+   Ảnh nhân vật → state.characterImages (base64 thô, khớp Tool 3).
+============================================================ */
+const setStatusF = (m, t) => setStatusBar('statusflow', m, t);
+
+const flowBridge = {
+  ready: false, version: null, _inited: false, _seq: 0,
+  _pending: {}, _waiters: [],
+  init(){
+    if (this._inited) return; this._inited = true;
+    window.addEventListener('message', (e) => {
+      if (e.source !== window) return;
+      const d = e.data;
+      if (!d || d.source !== 'FLOWGEN_EXT') return;
+      if (d.type === 'READY'){ this.ready = true; this.version = d.version; this._waiters.forEach(fn => fn()); this._waiters = []; return; }
+      if (d.id && this._pending[d.id]){
+        const p = this._pending[d.id]; delete this._pending[d.id];
+        p.resolve(d.ok ? d.result : { error: d.error || 'BRIDGE_ERROR' });
+      }
+    });
+    this.ping();
+  },
+  ping(){ window.postMessage({ source: 'FLOWGEN_PAGE', action: 'PING' }, window.location.origin); },
+  waitReady(ms = 1500){
+    return new Promise((res) => {
+      if (this.ready) return res(true);
+      const to = setTimeout(() => res(false), ms);
+      this._waiters.push(() => { clearTimeout(to); res(true); });
+      this.ping();
+    });
+  },
+  call(action, payload){
+    return new Promise((resolve) => {
+      const id = 'f' + (++this._seq) + '_' + Date.now();
+      this._pending[id] = { resolve };
+      window.postMessage({ source: 'FLOWGEN_PAGE', id, action, payload }, window.location.origin);
+      setTimeout(() => { if (this._pending[id]){ delete this._pending[id]; resolve({ error: 'TIMEOUT' }); } }, 180000);
+    });
+  }
+};
+
+const tfState = { running: false, stop: false, projectId: null };
+
+function tfInit(){
+  flowBridge.init();
+  tfRefreshConn();
+  tfRenderScenes();
+  tfRenderAssets();
+}
+
+function tfCfg(){
+  return {
+    model: document.getElementById('tfModel').value,
+    aspect: document.getElementById('tfAspect').value,
+    quality: document.getElementById('tfQuality').value,
+    conc: parseInt(document.getElementById('tfConc').value) || 2,
+  };
+}
+
+async function tfRefreshConn(){
+  const el = document.getElementById('tfConn');
+  if (!el) return;
+  const ok = await flowBridge.waitReady(1500);
+  if (!ok){ el.innerHTML = '<span style="color:var(--red)">✗ Chưa thấy extension Flow Image Gen.</span> Cài extension (Load unpacked) rồi tải lại trang.'; return; }
+  tfRenderConn(await flowBridge.call('GET_STATUS'));
+}
+
+function tfRenderConn(s){
+  const el = document.getElementById('tfConn');
+  if (!el) return;
+  if (!s || s.error){ el.innerHTML = '<span style="color:var(--red)">Lỗi trạng thái: ' + escapeHtml(s?.error || '') + '</span>'; return; }
+  const conn = s.hasToken ? '<span style="color:var(--green)">● đã kết nối</span>' : '<span style="color:var(--red)">○ chưa có token</span>';
+  const tier = s.paygateTier === 'PAYGATE_TIER_TWO' ? 'Ultra' : s.paygateTier === 'PAYGATE_TIER_ONE' ? 'Pro' : '—';
+  el.innerHTML = `${conn} &nbsp;·&nbsp; Gói: <b>${tier}</b> &nbsp;·&nbsp; Credits: <b>${s.credits ?? '—'}</b> &nbsp;·&nbsp; ${escapeHtml(s.userEmail || '')}` +
+    (s.hasToken ? '' : '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Bấm "Mở tab Flow", đăng nhập Google rồi "Quét lại".</div>');
+}
+
+async function tfScan(){
+  const el = document.getElementById('tfConn');
+  const ok = await flowBridge.waitReady(1500);
+  if (!ok){ tfRefreshConn(); return; }
+  if (el) el.textContent = 'Đang quét…';
+  tfRenderConn(await flowBridge.call('SCAN'));
+}
+function tfOpenFlow(){ flowBridge.call('OPEN_FLOW_TAB'); }
+function tfStop(){ tfState.stop = true; setStatusF('Đang dừng sau khi xong task hiện tại…', 'info'); }
+
+async function tfPool(items, worker, limit){
+  let i = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (!tfState.stop && i < items.length){ const my = i++; await worker(items[my], my); }
+  });
+  await Promise.all(runners);
+}
+
+async function tfEnsureProject(){
+  if (tfState.projectId) return tfState.projectId;
+  const r = await flowBridge.call('CREATE_PROJECT', { title: 'ChuKienMedia ' + new Date().toLocaleString('vi-VN') });
+  if (r?.error || !r?.project_id) throw new Error('Không tạo được project: ' + (r?.error || '?'));
+  tfState.projectId = r.project_id;
+  return tfState.projectId;
+}
+
+function _tfImgSrc(img){
+  if (!img) return '';
+  return img.base64.startsWith('data:') ? img.base64 : ('data:' + (img.mediaType || 'image/png') + ';base64,' + img.base64);
+}
+function _slug(s){ return String(s).replace(/[^a-zA-Z0-9]/g, '_'); }
+
+// ── Ảnh cảnh ──────────────────────────────────────────────
+function tfScenesWithPrompt(){
+  if (!state.scenes) return [];
+  return state.scenes.filter(s => state.scenePrompts && state.scenePrompts[s.id] && String(state.scenePrompts[s.id]).trim());
+}
+function tfRenderScenes(){
+  const info = document.getElementById('tfSceneInfo');
+  const grid = document.getElementById('tfSceneGrid');
+  if (!info || !grid) return;
+  const withP = tfScenesWithPrompt();
+  const withImg = withP.filter(s => state.sceneImages && state.sceneImages[s.id]);
+  info.innerHTML = `Có prompt: <b>${withP.length}</b> cảnh · Đã có ảnh: <b>${withImg.length}</b>`;
+  grid.innerHTML = withP.map(s => {
+    const src = _tfImgSrc(state.sceneImages?.[s.id]);
+    return `<div class="tf-card" id="tf-scene-${s.id}" style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)">
+      <div class="tf-thumb" style="aspect-ratio:16/9;background:#0002 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted)">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : 'cảnh ' + escapeHtml(String(s.id))}</div>
+      <div style="padding:6px;font-size:11px;color:var(--text-muted)">Cảnh ${escapeHtml(String(s.id))}</div>
+    </div>`;
+  }).join('') || '<div style="color:var(--text-muted);font-size:12px">Chưa có prompt cảnh nào. Chạy Tool 2 tạo prompt trước.</div>';
+}
+
+async function tfGenScenes(onlyMissing){
+  if (tfState.running) return;
+  const cfg = tfCfg();
+  let scenes = tfScenesWithPrompt();
+  if (onlyMissing) scenes = scenes.filter(s => !(state.sceneImages && state.sceneImages[s.id]));
+  if (!scenes.length){ setStatusF('Không có cảnh nào để tạo.', 'error'); return; }
+  if (!(await flowBridge.waitReady(1500))){ setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return; }
+  const st = await flowBridge.call('GET_STATUS');
+  if (!st?.hasToken){ setStatusF('Chưa kết nối Flow. Mở tab Flow + đăng nhập rồi Quét lại.', 'error'); return; }
+
+  tfState.running = true; tfState.stop = false; tfState.projectId = null;
+  let done = 0, err = 0;
+  try {
+    const projectId = await tfEnsureProject();
+    if (!state.sceneImages) state.sceneImages = {};
+    setStatusF(`Đang tạo ${scenes.length} ảnh cảnh…`, 'working');
+    await tfPool(scenes, async (s) => {
+      const card = document.getElementById('tf-scene-' + s.id);
+      const thumb = card?.querySelector('.tf-thumb');
+      if (thumb) thumb.textContent = '⏳';
+      const prompt = cleanPrompt(state.scenePrompts[s.id] || '');
+      const r = await flowBridge.call('GEN_IMAGE', { prompt, projectId, aspect: cfg.aspect, modelName: cfg.model, tier: st.paygateTier, variantCount: 1, quality: cfg.quality, withData: true });
+      const e0 = (r?.media_entries || []).find(e => e.dataUrl);
+      if (r?.error || !e0){ err++; if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); }
+      else {
+        state.sceneImages[s.id] = { base64: e0.dataUrl, mediaType: e0.mime || 'image/png', fileName: `scene-${s.id}.png` };
+        done++;
+        if (thumb) thumb.innerHTML = `<img src="${e0.dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
+      }
+      setStatusF(`Cảnh: ${done} xong · ${err} lỗi · còn ${scenes.length - done - err}`, 'working');
+    }, cfg.conc);
+    saveState(true);
+    if (typeof renderTable === 'function') renderTable();
+    tfRenderScenes();
+    setStatusF(tfState.stop ? `Đã dừng. ${done} ảnh.` : `✓ Xong ${done} ảnh cảnh${err ? `, ${err} lỗi` : ''}.`, err ? 'error' : 'ok');
+    notifyDone('✓ Tạo ảnh cảnh xong', `${done} ảnh, ${err} lỗi.`);
+  } catch (e){ setStatusF('Lỗi: ' + e.message, 'error'); }
+  finally { tfState.running = false; }
+}
+
+// ── Ảnh nhân vật / bối cảnh ───────────────────────────────
+function tfAssetList(kind){
+  const arr = kind === 'char' ? (state.charactersV || []) : (state.backgroundsV || []);
+  const promptMap = kind === 'char' ? state.assetCharPrompts : state.assetBgPrompts;
+  return arr.map(c => (typeof c === 'string' ? c : c?.name)).filter(Boolean)
+    .map(n => ({ name: n, prompt: promptMap?.[n] }));
+}
+function tfRenderAssets(){
+  const info = document.getElementById('tfAssetInfo');
+  const grid = document.getElementById('tfAssetGrid');
+  if (!info || !grid) return;
+  const chars = tfAssetList('char'), bgs = tfAssetList('bg');
+  info.innerHTML = `Nhân vật: <b>${chars.filter(c => c.prompt).length}</b> có prompt · Bối cảnh: <b>${bgs.filter(c => c.prompt).length}</b> có prompt`;
+  const all = chars.map(c => ({ ...c, kind: 'char' })).concat(bgs.map(c => ({ ...c, kind: 'bg' })));
+  grid.innerHTML = all.map(a => {
+    const store = a.kind === 'char' ? state.characterImages : state.backgroundImages;
+    const src = _tfImgSrc(store?.[a.name]);
+    return `<div class="tf-card" id="tf-asset-${a.kind}-${_slug(a.name)}" style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)">
+      <div class="tf-thumb" style="aspect-ratio:1;background:#0002 center/cover;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted)">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : (a.prompt ? '' : 'thiếu prompt')}</div>
+      <div style="padding:6px;font-size:11px">${a.kind === 'char' ? '👤' : '🏞'} ${escapeHtml(a.name)}</div>
+    </div>`;
+  }).join('') || '<div style="color:var(--text-muted);font-size:12px">Chưa có nhân vật/bối cảnh. Chạy Tool 3 trước.</div>';
+}
+
+async function tfGenAssets(kind){
+  if (tfState.running) return;
+  const cfg = tfCfg();
+  const list = tfAssetList(kind).filter(a => a.prompt && String(a.prompt).trim());
+  if (!list.length){ setStatusF('Không có ' + (kind === 'char' ? 'nhân vật' : 'bối cảnh') + ' có prompt.', 'error'); return; }
+  if (!(await flowBridge.waitReady(1500))){ setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return; }
+  const st = await flowBridge.call('GET_STATUS');
+  if (!st?.hasToken){ setStatusF('Chưa kết nối Flow. Mở tab Flow + đăng nhập rồi Quét lại.', 'error'); return; }
+
+  tfState.running = true; tfState.stop = false; tfState.projectId = null;
+  let done = 0, err = 0;
+  try {
+    const projectId = await tfEnsureProject();
+    if (kind === 'char'){ if (!state.characterImages) state.characterImages = {}; }
+    else { if (!state.backgroundImages) state.backgroundImages = {}; }
+    setStatusF(`Đang tạo ${list.length} ảnh…`, 'working');
+    await tfPool(list, async (a) => {
+      const card = document.getElementById('tf-asset-' + kind + '-' + _slug(a.name));
+      const thumb = card?.querySelector('.tf-thumb');
+      if (thumb) thumb.textContent = '⏳';
+      const r = await flowBridge.call('GEN_IMAGE', { prompt: cleanPrompt(a.prompt), projectId, aspect: cfg.aspect, modelName: cfg.model, tier: st.paygateTier, variantCount: 1, quality: cfg.quality, withData: true });
+      const e0 = (r?.media_entries || []).find(e => e.b64);
+      if (r?.error || !e0){ err++; if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); }
+      else {
+        const store = kind === 'char' ? state.characterImages : state.backgroundImages;
+        store[a.name] = { base64: e0.b64, mediaType: e0.mime || 'image/png', fileName: a.name + '.png' };
+        done++;
+        if (thumb) thumb.innerHTML = `<img src="${e0.dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
+      }
+      setStatusF(`${done} xong · ${err} lỗi · còn ${list.length - done - err}`, 'working');
+    }, cfg.conc);
+    saveState(true);
+    if (kind === 'char' && typeof renderCharImageGallery === 'function') renderCharImageGallery();
+    if (kind === 'char' && typeof renderAssetCharPrompts === 'function' && state.charactersV) renderAssetCharPrompts(state.charactersV);
+    tfRenderAssets();
+    setStatusF(tfState.stop ? `Đã dừng. ${done} ảnh.` : `✓ Xong ${done} ảnh${err ? `, ${err} lỗi` : ''}.`, err ? 'error' : 'ok');
+    notifyDone('✓ Tạo ảnh asset xong', `${done} ảnh, ${err} lỗi.`);
+  } catch (e){ setStatusF('Lỗi: ' + e.message, 'error'); }
+  finally { tfState.running = false; }
 }
 const setStatus1 = (m, t) => setStatusBar('status1', m, t);
 const setStatus2 = (m, t) => setStatusBar('status2', m, t);
@@ -8352,10 +8696,16 @@ function renderSceneSearchList(){
   }
 }
 
-async function generateSearchKeywords(voText){
+async function generateSearchKeywords(voText, opts){
   // fallback: rút vài từ khoá từ chính VO nếu AI lỗi
   const fallback = () => (voText.replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length > 3).slice(0, 4).join(', ')) || voText.slice(0, 40);
-  const kwPrompt = `Sinh 2-4 từ khoá tiếng Anh NGẮN để tìm ảnh/video stock cho nội dung dưới.\nTrả về CHỈ 1 JSON array các từ khoá, KHÔNG giải thích, KHÔNG văn bản ngoài JSON.\nVD: ["old woman","eye contact","ashamed"]\n\nNội dung: "${voText}"`;
+  const broader = opts && opts.broader;
+  // Query rules (kho stock là keyword-based, không phải semantic search):
+  // 1) chủ thể đứng ĐẦU, 2-4 từ khoá — không câu văn/tính từ mơ hồ (beautiful, amazing...)
+  // 2) thêm 1 từ khoá GÓC MÁY/POV nếu hợp cảnh (drone/aerial, close-up, macro, top-down, timelapse, slow motion, handheld) — thường ra kết quả đúng hơn là đặc tả thêm chủ thể
+  const kwPrompt = broader
+    ? `Từ khoá tìm stock "${voText}" đang ra 0 kết quả. Sinh lại 2-3 từ khoá tiếng Anh RỘNG HƠN / đơn giản hơn, đổi sang từ đồng nghĩa phổ thông (bỏ chi tiết hiếm, giữ đúng ý chính).\nTrả về CHỈ 1 JSON array, KHÔNG giải thích.\nVD: ["office worker","typing laptop"]\n\nNội dung gốc: "${voText}"`
+    : `Sinh 2-4 từ khoá tiếng Anh NGẮN để tìm ảnh/video stock (kho ảnh tìm theo keyword, không phải semantic) cho nội dung dưới.\nQuy tắc: (1) từ khoá CHỦ THỂ đứng ĐẦU tiên; (2) là danh từ/cụm ngắn cụ thể, KHÔNG tính từ mơ hồ (beautiful, amazing, đẹp, ấn tượng...); (3) nếu cảnh hợp với 1 góc quay rõ (toàn cảnh/trên cao/cận/chuyển động chậm) thì thêm ĐÚNG 1 từ khoá POV: drone/aerial, close-up, macro, top-down, timelapse, slow motion, hoặc handheld — chỉ thêm khi thật sự hợp, không ép.\nTrả về CHỈ 1 JSON array các từ khoá, KHÔNG giải thích, KHÔNG văn bản ngoài JSON.\nVD: ["old woman","eye contact","close-up"]\n\nNội dung: "${voText}"`;
   try {
     // callLLMJson: lặp + ép JSON + chỉ nhận array không rỗng
     const arr = await callLLMJson(kwPrompt, { maxTokens: 200, validate: a => Array.isArray(a) && a.length > 0 });
@@ -8523,9 +8873,22 @@ async function searchForScene(sceneId){
     + '<div style="display:flex;flex-wrap:wrap;gap:8px">' + '<div class="skeleton sk-tile"></div>'.repeat(6) + '</div>';
 
   try {
-    const keywords = await generateSearchKeywords(scene.text);
+    let keywords = await generateSearchKeywords(scene.text);
     const type = document.getElementById('mediaType').value;
-    const results = await searchAllSources(keywords, type);
+    let results = await searchAllSources(keywords, type);
+    // Query rỗng kết quả → tự thử lại 1 lần với từ khoá rộng/đơn giản hơn (thay vì để trắng cảnh)
+    if (!(results.photos || []).length && !(results.videos || []).length) {
+      try {
+        const broaderKw = await generateSearchKeywords(scene.text, { broader: true });
+        if (broaderKw && broaderKw !== keywords) {
+          const retryResults = await searchAllSources(broaderKw, type);
+          if ((retryResults.photos || []).length || (retryResults.videos || []).length) {
+            keywords = broaderKw + ' (đã nới rộng)';
+            results = retryResults;
+          }
+        }
+      } catch (_) { /* giữ kết quả rỗng ban đầu nếu retry cũng lỗi */ }
+    }
     _t5Results[sceneId] = { keywords, photos: results.photos || [], videos: results.videos || [] };
     renderSceneResults(sceneId, keywords, results);
   } catch (e) {
@@ -11664,6 +12027,7 @@ function veoBuildBatchMessages(shots, cfg){
     `- Begin EVERY prompt with this exact style lead, then continue: "${baseLead}". Do NOT append long technical keyword tails (no '8k, ultra-realism, movie quality, slow motion, hyper-detailed' lists at the end) — the lead already sets the look; repeated tails only dilute the model.`,
     "- ONE continuous 8-10s clip with a SINGLE camera movement only (e.g. ONLY a slow dolly-in, OR ONLY a slow pan-left — NEVER combine tracking + pan + zoom). No cut inside the clip.",
     "- STRONGLY favor STATIC, locked-off tripod shots — keep the camera perfectly still and let the subject and environment move inside the frame (wind, dust, water). Static frames render the sharpest and most stable in Veo.",
+    "- 'Static' is STRICT: if you write a static/locked-off shot it must have ZERO camera movement, ZERO zoom, ZERO focus change. Never write a static shot that also zooms or racks focus — that is a contradiction and confuses the model.",
     "- Allowed camera moves ONLY: static / locked-off tripod; slow push-in (dolly-in); slow lateral tracking; slow cinematic pan left or right; slow pedestal up or down. NEVER use dolly-back, pull-back, zoom-out, crane-out, or 'the camera pulls back / zooms out to reveal' — those badly distort Veo output.",
     "- For wide shots, emphasize SCALE: place the subject small within a vast environment so the wide angle dwarfs it (towering trees, cliffs, endless ocean/sky).",
     "- Use specific era / biome-appropriate environment nouns when implied by the subject (e.g. 'Late Cretaceous redwood forest', 'Triassic arid badlands', 'frozen mammoth steppe') instead of generic 'jungle' or 'desert'.",
@@ -11672,8 +12036,10 @@ function veoBuildBatchMessages(shots, cfg){
     "- Do NOT stack heavy environmental physics onto a moving camera (e.g. avoid adding volumetric dust, spray or swarms WHILE the camera tracks). Pick the camera move and keep the environment simple and stable.",
     "- The camera framing MUST match the shot type given, and use only that one move.",
     "- A CUTAWAY shot has NO main subject: it is pure environment b-roll.",
+    "- Audio: this footage will be paired with the channel's OWN separately-recorded voiceover. Every prompt must end with a short audio note requesting NO spoken dialogue and NO music — natural ambient sound only (wind, footsteps, water, room tone) that matches the scene, so it doesn't clash with the narration track.",
     `- Motion feel: ${sp.motionGuard}.`,
     "- Avoid generic words like 'beautiful' or 'high quality'. Use real cinematography terms. Visualize the MEANING of the narration line, do not transcribe it.",
+    "- Replace emotion/mood adjectives with their visual cause: 'sad' → 'head bowed, shoulders slumped'; 'tense' → 'frozen mid-step, eyes fixed on one point'; 'epic' → 'small silhouette against a vast lit horizon'. Adjectives like 'epic'/'moody'/'powerful' do not constrain pixels — describe what a camera would actually see.",
     "",
     "Return ONLY a JSON array, no preamble, no code fences:",
     '[{"index": <number>, "prompt": "<veo3 prompt>"}]',
