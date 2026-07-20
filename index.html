@@ -22,7 +22,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, browserLocalPersistence, setPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc }
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs }
   from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -82,6 +82,13 @@ window.firebaseSignIn = async () => {
 window.firebaseSignOut = () => signOut(auth);
 window.firebaseSaveDoc = (uid, data) => setDoc(doc(db, 'users', uid), data, { merge: true });
 window.firebaseLoadDoc = async (uid) => { const s = await getDoc(doc(db, 'users', uid)); return s.exists() ? s.data() : null; };
+// Admin: liệt kê toàn bộ user (cần Firestore Rules cho phép admin đọc collection 'users').
+window.firebaseListUsers = async () => {
+  const snap = await getDocs(collection(db, 'users'));
+  const out = [];
+  snap.forEach((d) => out.push({ uid: d.id, ...d.data() }));
+  return out;
+};
 onAuthStateChanged(auth, (user) => {
   window.currentUser = user;
   if (typeof window.onAuthChange === 'function') window.onAuthChange(user);
@@ -1164,6 +1171,10 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <div class="nav-group">🖼 Tạo ảnh (Flow)</div>
         <div class="nav-item" data-tool="toolflow" onclick="switchTool('toolflow')">
           <span class="num">✨</span><span>Tạo Ảnh Flow</span>
+        </div>
+        <div class="nav-group" id="navAdminGroup" style="display:none">👑 Admin</div>
+        <div class="nav-item" id="navAdmin" data-tool="tooladmin" onclick="switchTool('tooladmin')" style="display:none">
+          <span class="num">👑</span><span>Quản lý gói</span>
         </div>
       </div>
       <div style="margin-top:14px;padding:0 4px">
@@ -2526,6 +2537,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
             <button class="btn ghost sm" onclick="tfReload()">🔄 Nạp lại prompt</button>
             <button class="btn primary sm" onclick="tfGenScenes(false)">▶ Tạo tất cả</button>
             <button class="btn ghost sm" onclick="tfGenScenes(true)">➕ Chỉ cảnh thiếu ảnh</button>
+            <button class="btn ghost sm" onclick="tfDownloadAllScenes()">⤓ Tải tất cả (001…)</button>
             <button class="btn ghost sm" onclick="tfStop()">■ Dừng</button>
           </div>
         </div>
@@ -2548,6 +2560,55 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <div class="panel-body">
           <div id="tfAssetInfo" style="font-size:12px;color:var(--text-muted);margin-bottom:10px"></div>
           <div id="tfAssetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         TOOL ADMIN — QUẢN LÝ GÓI PRO (chỉ hiện với tài khoản admin)
+    ============================================================ -->
+    <div class="tool" id="tool-tooladmin">
+      <div class="tool-head">
+        <div class="tool-title">👑 Quản lý gói Pro</div>
+        <div class="tool-subtitle">Cấp / gia hạn / thu hồi gói Pro cho user theo UID. Chỉ admin thấy tab này.</div>
+      </div>
+
+      <div class="info-box">
+        <span class="lbl">💳 Cách cấp:</span> Khách CK xong gửi <strong>UID</strong> → dán UID vào ô dưới, chọn thời hạn → <strong>Cấp Pro</strong>. Hết hạn tự về Free. ⚠️ Cần cấu hình <strong>Firestore Rules</strong> cho admin (xem hướng dẫn tôi gửi).
+      </div>
+
+      <div class="panel mb-16" style="border:1.5px solid var(--accent);border-radius:12px">
+        <div class="panel-head"><span>➕ Cấp / gia hạn Pro</span></div>
+        <div class="panel-body">
+          <div class="grid-2" style="grid-template-columns:1fr 180px auto auto;gap:12px;align-items:end">
+            <div>
+              <label class="label">UID NGƯỜI DÙNG</label>
+              <input type="text" id="admUid" placeholder="Dán UID khách gửi" autocomplete="off">
+            </div>
+            <div>
+              <label class="label">THỜI HẠN</label>
+              <select id="admMonths">
+                <option value="1">1 tháng</option>
+                <option value="3">3 tháng</option>
+                <option value="6">6 tháng</option>
+                <option value="12">12 tháng</option>
+                <option value="0">Vĩnh viễn</option>
+              </select>
+            </div>
+            <button class="btn primary" onclick="admGrant()">✓ Cấp Pro</button>
+            <button class="btn" style="color:var(--red);border-color:var(--red)" onclick="admRevoke()">✗ Thu hồi</button>
+          </div>
+          <div class="status-bar" id="statusadm" style="margin-top:12px">Sẵn sàng.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span>👥 Danh sách người dùng</span>
+          <button class="btn ghost sm" onclick="admListUsers()">🔄 Tải danh sách</button>
+        </div>
+        <div class="panel-body">
+          <div id="admUserTable" style="overflow-x:auto"><div style="color:var(--text-muted);font-size:12px">Bấm "Tải danh sách" để xem.</div></div>
         </div>
       </div>
     </div>
@@ -2880,6 +2941,7 @@ function renderTierBadge(){
   // Lock icons on nav
   document.querySelectorAll('.nav-item').forEach(item => {
     const tool = item.getAttribute('data-tool');
+    if (tool === 'tooladmin') return;   // tab admin không gắn khoá
     const lock = item.querySelector('.nav-lock');
     if (!isToolAllowed(tool)) {
       item.classList.add('locked');
@@ -2895,6 +2957,84 @@ function renderTierBadge(){
       if (lock) lock.remove();
     }
   });
+}
+
+/* ============================================================
+   ADMIN — Quản lý gói Pro (chỉ admin)
+   ⚠️ SỬA ADMIN_EMAILS thành (các) email Google admin của bạn.
+============================================================ */
+const ADMIN_EMAILS = ['jonnykien98@gmail.com'];
+function isAdmin(){ return !!window.currentUser && ADMIN_EMAILS.includes(window.currentUser.email); }
+
+function initAdminUI(){
+  const show = isAdmin() ? 'flex' : 'none';
+  const nav = document.getElementById('navAdmin');
+  const grp = document.getElementById('navAdminGroup');
+  if (nav) nav.style.display = show;
+  if (grp) grp.style.display = isAdmin() ? 'block' : 'none';
+}
+
+const setStatusAdm = (m, t) => setStatusBar('statusadm', m, t);
+
+function admFmtDate(ts){ if (!ts) return 'Vĩnh viễn'; try { return new Date(ts).toLocaleDateString('vi-VN'); } catch { return String(ts); } }
+function admTierText(u){
+  if (u.tier !== 'pro') return '<span style="color:var(--text-muted)">Free</span>';
+  if (u.proUntil && Date.now() > u.proUntil) return '<span style="color:var(--red)">Pro (hết hạn ' + admFmtDate(u.proUntil) + ')</span>';
+  return '<span style="color:var(--green)">Pro' + (u.proUntil ? ' → ' + admFmtDate(u.proUntil) : ' (vĩnh viễn)') + '</span>';
+}
+
+async function admGrant(uidArg){
+  if (!isAdmin()) return setStatusAdm('Chỉ admin.', 'error');
+  const uid = String(uidArg || document.getElementById('admUid').value || '').trim();
+  if (!uid) return setStatusAdm('Nhập UID đã.', 'error');
+  const months = parseInt(document.getElementById('admMonths').value);
+  const proUntil = months > 0 ? Date.now() + months * 30 * 24 * 3600 * 1000 : null;
+  setStatusAdm('Đang cấp Pro cho ' + uid + '…', 'working');
+  try {
+    await window.firebaseSaveDoc(uid, { tier: 'pro', proUntil });
+    setStatusAdm(`✓ Đã cấp Pro cho ${uid}${proUntil ? ' đến ' + admFmtDate(proUntil) : ' (vĩnh viễn)'}.`, 'ok');
+    admListUsers();
+  } catch (e){ setStatusAdm('Lỗi: ' + (e.message || e) + ' — kiểm tra Firestore Rules cho admin.', 'error'); }
+}
+function admGrantFor(uid){ document.getElementById('admUid').value = uid; admGrant(uid); }
+
+async function admRevoke(uidArg){
+  if (!isAdmin()) return setStatusAdm('Chỉ admin.', 'error');
+  const uid = String(uidArg || document.getElementById('admUid').value || '').trim();
+  if (!uid) return setStatusAdm('Nhập UID đã.', 'error');
+  if (!confirm('Thu hồi Pro (về Free) của ' + uid + '?')) return;
+  try {
+    await window.firebaseSaveDoc(uid, { tier: 'free', proUntil: null });
+    setStatusAdm('✓ Đã thu hồi Pro của ' + uid + '.', 'ok');
+    admListUsers();
+  } catch (e){ setStatusAdm('Lỗi: ' + (e.message || e), 'error'); }
+}
+
+async function admListUsers(){
+  if (!isAdmin()) return;
+  if (!window.firebaseListUsers) return setStatusAdm('Thiếu firebaseListUsers.', 'error');
+  setStatusAdm('Đang tải danh sách…', 'working');
+  try {
+    const users = await window.firebaseListUsers();
+    users.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const rows = users.map(u => {
+      const email = u.email || u.state?.userEmail || '';
+      return `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px 8px;font-family:monospace;font-size:11px">${escapeHtml(u.uid)}</td>
+        <td style="padding:6px 8px">${escapeHtml(email)}</td>
+        <td style="padding:6px 8px">${admTierText(u)}</td>
+        <td style="padding:6px 8px;white-space:nowrap">
+          <button class="btn ghost sm" onclick="admGrantFor('${u.uid}')" title="Cấp/gia hạn theo thời hạn đang chọn">➕ Pro</button>
+          <button class="btn ghost sm" style="color:var(--red)" onclick="admRevoke('${u.uid}')">Thu hồi</button>
+        </td></tr>`;
+    }).join('');
+    document.getElementById('admUserTable').innerHTML =
+      `<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="text-align:left;color:var(--text-muted)"><th style="padding:6px 8px">UID</th><th style="padding:6px 8px">Email</th><th style="padding:6px 8px">Gói</th><th style="padding:6px 8px"></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" style="padding:8px;color:var(--text-muted)">Không có user.</td></tr>'}</tbody>
+      </table>`;
+    setStatusAdm(`✓ ${users.length} user.`, 'ok');
+  } catch (e){ setStatusAdm('Lỗi tải: ' + (e.message || e) + ' — Firestore Rules cần cho admin đọc collection users.', 'error'); }
 }
 
 /* ============================================================
@@ -3361,7 +3501,9 @@ function safeParseJSON(text, validate){
    TOOL NAV
 ============================================================ */
 function switchTool(name){
-  if (!isToolAllowed(name)) {
+  if (name === 'tooladmin') {
+    if (!isAdmin()) return;   // tab admin: chỉ admin
+  } else if (!isToolAllowed(name)) {
     return showUpgradeModal('Tool này chỉ có ở gói Pro. Nâng cấp để mở khoá toàn bộ tính năng.');
   }
   state.tool = name;
@@ -3378,6 +3520,7 @@ function switchTool(name){
   if (name === 'tool10' && typeof t10Init === 'function') t10Init();
   if (name === 'tool11' && typeof t11Init === 'function') t11Init();
   if (name === 'toolflow' && typeof tfInit === 'function') tfInit();
+  if (name === 'tooladmin' && typeof admListUsers === 'function') admListUsers();
 }
 
 /* ============================================================
@@ -3905,8 +4048,13 @@ async function loadCloudState(){
       Object.assign(state, data.state);
       console.log('✓ Loaded state from Firestore');
     }
-    // 1b. Load tier
+    // 1b. Load tier + hạn dùng (proUntil). Hết hạn → tự về free.
     state.userTier = (data && data.tier) || 'free';
+    state.proUntil = (data && data.proUntil) || null;
+    if (state.userTier === 'pro' && state.proUntil && Date.now() > state.proUntil) {
+      state.userTier = 'free';
+      console.log('⏰ Pro đã hết hạn → về Free.');
+    }
     console.log('✓ User tier:', state.userTier);
     // 1c. Migration: ensure all profiles have profileId + workData; migrate global state nếu cần
     if (typeof migrateProfiles === 'function' && state.profiles?.length) {
@@ -3930,6 +4078,7 @@ async function loadCloudState(){
     }
     // 3. Render tier-dependent UI
     renderTierBadge();
+    if (typeof initAdminUI === 'function') initAdminUI();
   } catch (e) {
     console.warn('Cloud load failed:', e);
   }
@@ -3955,6 +4104,7 @@ async function saveCloudState(immediate = false){
       // Lưu state nhẹ lên Firestore — workData nằm trong profiles[i].workData
       await window.firebaseSaveDoc(uid, {
         state: lightState,
+        email: window.currentUser?.email || null,   // để trang admin hiện email
         updatedAt: Date.now()
       });
       // Lưu ảnh xuống IndexedDB theo profileId
@@ -4938,11 +5088,98 @@ function tfRenderScenes(){
   info.innerHTML = `Có prompt: <b>${withP.length}</b> cảnh · Đã có ảnh: <b>${withImg.length}</b>`;
   grid.innerHTML = withP.map(s => {
     const src = _tfImgSrc(state.sceneImages?.[s.id]);
+    const sid = escapeHtml(String(s.id));
     return `<div class="tf-card" id="tf-scene-${s.id}" style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)">
-      <div class="tf-thumb" style="aspect-ratio:16/9;background:#0002 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted)">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : 'cảnh ' + escapeHtml(String(s.id))}</div>
-      <div style="padding:6px;font-size:11px;color:var(--text-muted)">Cảnh ${escapeHtml(String(s.id))}</div>
+      <div class="tf-thumb" ${src ? `onclick="tfEnlargeScene('${sid}')" ` : ''}style="aspect-ratio:16/9;background:#0002 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);cursor:${src ? 'zoom-in' : 'default'}">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : 'cảnh ' + sid}</div>
+      <div style="padding:6px;display:flex;gap:6px;align-items:center">
+        <span style="flex:1;font-size:11px;color:var(--text-muted)">Cảnh ${sid}</span>
+        <button class="btn ghost sm" style="padding:2px 7px;font-size:13px" onclick="tfEnlargeScene('${sid}')" title="Xem lớn">🔍</button>
+        <button class="btn ghost sm" style="padding:2px 7px;font-size:13px" onclick="tfRegenScene('${sid}')" title="Tạo lại cảnh này">🔄</button>
+      </div>
     </div>`;
   }).join('') || '<div style="color:var(--text-muted);font-size:12px">Chưa có prompt cảnh nào. Chạy Tool 2 tạo prompt trước.</div>';
+}
+
+// Xem ảnh lớn (overlay, bấm/ESC để đóng).
+function tfEnlarge(src){
+  if (!src) return;
+  const m = document.createElement('div');
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:24px';
+  m.innerHTML = `<img src="${src}" style="max-width:96vw;max-height:92vh;border-radius:10px;box-shadow:0 12px 48px rgba(0,0,0,.6)">`;
+  const close = () => { m.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  m.onclick = close;
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(m);
+}
+function tfEnlargeScene(id){
+  const src = _tfImgSrc(state.sceneImages?.[id]);
+  if (!src) return setStatusF('Cảnh ' + id + ' chưa có ảnh.', 'info');
+  tfEnlarge(src);
+}
+
+// Tải tất cả ảnh cảnh thành ZIP, tự đánh số theo scene id (001.png, 002.png…).
+async function tfDownloadAllScenes(){
+  const ids = (state.scenes || []).map(s => s.id).filter(id => state.sceneImages?.[id]);
+  if (!ids.length) return setStatusF('Chưa có ảnh cảnh để tải.', 'error');
+  if (typeof JSZip === 'undefined') return setStatusF('Thư viện JSZip chưa tải.', 'error');
+  setStatusF(`Đang nén ${ids.length} ảnh…`, 'working');
+  try {
+    const zip = new JSZip();
+    for (const id of ids){
+      const img = state.sceneImages[id];
+      const b64 = img.base64.startsWith('data:') ? img.base64.split(',')[1] : img.base64;
+      const ext = ((img.mediaType || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
+      const name = /^\d+$/.test(String(id)) ? String(id).padStart(3, '0') : _slug(String(id));
+      zip.file(name + '.' + ext, b64, { base64: true });
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'anh-canh-' + Date.now() + '.zip';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    setStatusF(`✓ Đã tải ${ids.length} ảnh (đánh số 001…).`, 'ok');
+  } catch (e){ setStatusF('Lỗi nén ZIP: ' + (e.message || e), 'error'); }
+}
+
+// Tạo lại ảnh của 1 cảnh (dùng đúng cấu hình + tham chiếu hiện tại).
+async function tfRegenScene(id){
+  if (tfState.running) { setStatusF('Đang chạy mẻ khác — đợi xong rồi tạo lại.', 'error'); return; }
+  const prompt = state.scenePrompts?.[id];
+  if (!prompt || !String(prompt).trim()) { setStatusF('Cảnh ' + id + ' chưa có prompt.', 'error'); return; }
+  if (!(await flowBridge.waitReady(1500))) { setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return; }
+  const st = await flowBridge.call('GET_STATUS');
+  if (!st?.hasToken) { setStatusF('Chưa kết nối Flow.', 'error'); return; }
+
+  const cfg = tfCfg();
+  const useRefs = !!document.getElementById('tfUseRefs')?.checked;
+  const imgMap = tfAssetImageMap();
+  const multi = !!document.getElementById('tfMultiAcc')?.checked && (st.accountCount || 0) > 1;
+  const card = document.getElementById('tf-scene-' + id);
+  const thumb = card?.querySelector('.tf-thumb');
+
+  tfState.running = true; tfState.stop = false; tfState.projectId = null; tfState.uploaded = {};
+  try {
+    let projectId = null;
+    if (multi) await flowBridge.call('POOL_RESET');
+    else projectId = await tfEnsureProject();
+    if (thumb) { thumb.classList.remove('tf-fail'); thumb.textContent = '⏳'; }
+    setStatusF('🔄 Đang tạo lại cảnh ' + id + '…', 'working');
+    const refNames = useRefs ? tfExtractRefNames(prompt, imgMap) : [];
+    const r = await tfDispatchGen(cleanPrompt(prompt), refNames, { multi, cfg, imgMap, projectId, tier: st.paygateTier });
+    const e0 = (r?.media_entries || []).find(e => e.dataUrl);
+    if (r?.error || !e0) { if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); setStatusF('Tạo lại cảnh ' + id + ' lỗi: ' + (r?.error || 'trống'), 'error'); }
+    else {
+      if (!state.sceneImages) state.sceneImages = {};
+      state.sceneImages[id] = { base64: e0.dataUrl, mediaType: e0.mime || 'image/png', fileName: `scene-${id}.png` };
+      saveState(true);
+      if (typeof renderTable === 'function') renderTable();
+      tfRenderScenes();
+      setStatusF('✓ Đã tạo lại cảnh ' + id, 'ok');
+    }
+  } catch (e){ setStatusF('Lỗi tạo lại: ' + (e.message || e), 'error'); }
+  finally { tfState.running = false; }
 }
 
 // Sinh 1 ảnh cho 1 item — tự chọn POOL (đa tài khoản) hoặc GEN_IMAGE (đơn).
