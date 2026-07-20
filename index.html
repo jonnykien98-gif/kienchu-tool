@@ -1306,6 +1306,9 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
             <label class="t2-opt" style="border:1px solid var(--border);border-radius:8px;padding:5px 10px;background:var(--surface)" title="Cuối Auto: tự rà chất lượng prompt (cảnh đã gán nhân vật/bối cảnh nhưng prompt không có, prompt trống/lẫn rác, sai chế độ không-nhân-vật...) và TẠO LẠI những cảnh lỗi 1 lượt.">
               <input type="checkbox" id="autoVerifyMode" style="width:auto;margin:0"> 🔍 Kiểm tra + tạo lại cảnh lỗi cuối Auto
             </label>
+            <label class="t2-opt" style="border:1px solid #7c5cff;border-radius:8px;padding:5px 10px;background:var(--surface);color:#7c5cff" title="Cuối Auto: tự tạo prompt nhân vật/bối cảnh (Tool 3) → tạo ảnh nhân vật/bối cảnh → tạo ảnh tất cả cảnh bằng Google Flow (cần cài extension Flow Image Gen + đăng nhập). Ảnh nhân vật/bối cảnh tự dùng làm tham chiếu cho cảnh.">
+              <input type="checkbox" id="autoFlowImages" style="width:auto;margin:0"> 🖼 Trọn gói ảnh Flow cuối Auto (asset + cảnh)
+            </label>
             <span class="auto-hint">Một nút: Lọc → Chia cảnh (+ <strong>Gộp theo ý AI</strong>) → Căn timing → Tách → Căn lại → Quét → Gán → Prompt → Ảnh B.<br>Đính <strong>MP3</strong> → transcribe (Whisper, key Tool 8) + căn độ dài thật. Dừng giữa chừng vẫn giữ tiến độ.<br><span id="autoSrtInfo" style="color:#0d9488;font-weight:600"></span></span>
           </div>
           <div id="autoBar"></div>
@@ -2494,6 +2497,22 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
               </select>
             </div>
           </div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="tfUseRefs" checked>
+            🔗 Tự động dùng ảnh nhân vật/bối cảnh đã tạo làm tham chiếu (giữ nhân vật nhất quán giữa các cảnh)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="tfMultiAcc" checked>
+            ⚡ Chạy nhiều tài khoản song song (đăng nhập nhiều account vào nhiều tab Flow → tự chia việc round-robin)
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;flex-wrap:wrap">
+            🖥 Chia việc nhiều máy/profile: máy số
+            <input type="number" id="tfShardK" value="1" min="1" style="width:56px;padding:4px 6px">
+            / tổng
+            <input type="number" id="tfShardN" value="1" min="1" style="width:56px;padding:4px 6px">
+            máy
+            <span style="color:var(--text-muted)">(mỗi profile Chrome 1 account → N = số profile, K = thứ tự máy NÀY; chỉ áp cho ảnh cảnh)</span>
+          </div>
         </div>
       </div>
 
@@ -2504,6 +2523,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <div class="panel-head">
           <span>🎬 Ảnh cảnh (từ prompt Tool 2)</span>
           <div style="display:flex;gap:6px">
+            <button class="btn ghost sm" onclick="tfReload()">🔄 Nạp lại prompt</button>
             <button class="btn primary sm" onclick="tfGenScenes(false)">▶ Tạo tất cả</button>
             <button class="btn ghost sm" onclick="tfGenScenes(true)">➕ Chỉ cảnh thiếu ảnh</button>
             <button class="btn ghost sm" onclick="tfStop()">■ Dừng</button>
@@ -2520,6 +2540,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <div class="panel-head">
           <span>🎭 Ảnh nhân vật &amp; bối cảnh (từ prompt Tool 3)</span>
           <div style="display:flex;gap:6px">
+            <button class="btn ghost sm" onclick="tfReload()">🔄 Nạp lại prompt</button>
             <button class="btn primary sm" onclick="tfGenAssets('char')">👤 Tạo ảnh nhân vật</button>
             <button class="btn primary sm" onclick="tfGenAssets('bg')">🏞 Tạo ảnh bối cảnh</button>
           </div>
@@ -4788,13 +4809,53 @@ const flowBridge = {
   }
 };
 
-const tfState = { running: false, stop: false, projectId: null };
+const tfState = { running: false, stop: false, projectId: null, uploaded: {} };
 
 function tfInit(){
   flowBridge.init();
   tfRefreshConn();
   tfRenderScenes();
   tfRenderAssets();
+}
+
+function tfReload(){
+  tfRefreshConn();
+  tfRenderScenes();
+  tfRenderAssets();
+  setStatusF('Đã nạp lại prompt từ Tool 2 & Tool 3.', 'ok');
+}
+
+// map tên asset → ảnh đã tạo (nhân vật + bối cảnh)
+function tfAssetImageMap(){
+  const map = {};
+  const ci = state.characterImages || {};
+  const bi = state.backgroundImages || {};
+  for (const n in ci) if (ci[n]?.base64) map[n] = ci[n];
+  for (const n in bi) if (bi[n]?.base64) map[n] = bi[n];
+  return map;
+}
+
+// tên [tag] trong prompt mà asset đó ĐÃ có ảnh
+function tfExtractRefNames(promptText, imgMap){
+  const tags = String(promptText || '').match(/\[([^\[\]]+)\]/g) || [];
+  const out = [];
+  for (const raw of tags){
+    const name = raw.slice(1, -1).trim();
+    if (imgMap[name] && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+// upload 1 ảnh tham chiếu vào project (cache theo tên trong phiên chạy)
+async function tfEnsureRefUploaded(name, projectId, imgMap){
+  if (tfState.uploaded[name]) return tfState.uploaded[name];
+  const img = imgMap[name];
+  if (!img) return null;
+  const raw = img.base64.startsWith('data:') ? img.base64.split(',')[1] : img.base64;
+  const r = await flowBridge.call('UPLOAD_IMAGE', { projectId, base64: raw, mime: img.mediaType || 'image/png', fileName: _slug(name) + '.png' });
+  if (r?.error || !r?.media_id) return null;
+  tfState.uploaded[name] = r.media_id;
+  return r.media_id;
 }
 
 function tfCfg(){
@@ -4820,7 +4881,14 @@ function tfRenderConn(s){
   if (!s || s.error){ el.innerHTML = '<span style="color:var(--red)">Lỗi trạng thái: ' + escapeHtml(s?.error || '') + '</span>'; return; }
   const conn = s.hasToken ? '<span style="color:var(--green)">● đã kết nối</span>' : '<span style="color:var(--red)">○ chưa có token</span>';
   const tier = s.paygateTier === 'PAYGATE_TIER_TWO' ? 'Ultra' : s.paygateTier === 'PAYGATE_TIER_ONE' ? 'Pro' : '—';
-  el.innerHTML = `${conn} &nbsp;·&nbsp; Gói: <b>${tier}</b> &nbsp;·&nbsp; Credits: <b>${s.credits ?? '—'}</b> &nbsp;·&nbsp; ${escapeHtml(s.userEmail || '')}` +
+  const nAcc = s.accountCount || (s.hasToken ? 1 : 0);
+  let accLine = '';
+  if (nAcc > 1 && Array.isArray(s.accounts)) {
+    const items = s.accounts.map(a => `${escapeHtml(a.email)} <span style="color:var(--text-muted)">(${a.credits ?? '—'}cr)</span>`).join(' · ');
+    accLine = `<div style="font-size:12px;margin-top:6px">⚡ <b>${nAcc} tài khoản</b>: ${items}</div>`;
+  }
+  el.innerHTML = `${conn} &nbsp;·&nbsp; Gói: <b>${tier}</b> &nbsp;·&nbsp; Credits: <b>${s.credits ?? '—'}</b> &nbsp;·&nbsp; ${escapeHtml(s.userEmail || '')}${nAcc > 1 ? ` &nbsp;·&nbsp; ⚡ <b>${nAcc} account</b>` : ''}` +
+    accLine +
     (s.hasToken ? '' : '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Bấm "Mở tab Flow", đăng nhập Google rồi "Quét lại".</div>');
 }
 
@@ -4877,28 +4945,52 @@ function tfRenderScenes(){
   }).join('') || '<div style="color:var(--text-muted);font-size:12px">Chưa có prompt cảnh nào. Chạy Tool 2 tạo prompt trước.</div>';
 }
 
-async function tfGenScenes(onlyMissing){
-  if (tfState.running) return;
-  const cfg = tfCfg();
-  let scenes = tfScenesWithPrompt();
-  if (onlyMissing) scenes = scenes.filter(s => !(state.sceneImages && state.sceneImages[s.id]));
-  if (!scenes.length){ setStatusF('Không có cảnh nào để tạo.', 'error'); return; }
-  if (!(await flowBridge.waitReady(1500))){ setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return; }
-  const st = await flowBridge.call('GET_STATUS');
-  if (!st?.hasToken){ setStatusF('Chưa kết nối Flow. Mở tab Flow + đăng nhập rồi Quét lại.', 'error'); return; }
+// Sinh 1 ảnh cho 1 item — tự chọn POOL (đa tài khoản) hoặc GEN_IMAGE (đơn).
+async function tfDispatchGen(prompt, refNames, o){
+  if (o.multi){
+    const refs = (refNames || []).map(n => {
+      const img = o.imgMap[n]; if (!img) return null;
+      const raw = img.base64.startsWith('data:') ? img.base64.split(',')[1] : img.base64;
+      return { name: n, base64: raw, mime: img.mediaType || 'image/png' };
+    }).filter(Boolean);
+    return flowBridge.call('POOL_GEN', { prompt, aspect: o.cfg.aspect, modelName: o.cfg.model, quality: o.cfg.quality, variantCount: 1, withData: true, refs });
+  }
+  let refMediaIds = [];
+  for (const n of (refNames || [])){ const mid = await tfEnsureRefUploaded(n, o.projectId, o.imgMap); if (mid) refMediaIds.push(mid); }
+  return flowBridge.call('GEN_IMAGE', { prompt, projectId: o.projectId, aspect: o.cfg.aspect, modelName: o.cfg.model, tier: o.tier, variantCount: 1, quality: o.cfg.quality, withData: true, refMediaIds });
+}
 
-  tfState.running = true; tfState.stop = false; tfState.projectId = null;
+async function tfGenScenes(onlyMissing){
+  if (tfState.running) return { skipped: true, reason: 'đang chạy' };
+  const cfg = tfCfg();
+  const shardN = Math.max(1, parseInt(document.getElementById('tfShardN')?.value) || 1);
+  const shardK = Math.min(shardN, Math.max(1, parseInt(document.getElementById('tfShardK')?.value) || 1));
+  let scenes = tfScenesWithPrompt().filter((s, i) => shardN <= 1 || (i % shardN) === (shardK - 1));
+  if (onlyMissing) scenes = scenes.filter(s => !(state.sceneImages && state.sceneImages[s.id]));
+  if (!scenes.length){ setStatusF('Không có cảnh nào để tạo' + (shardN > 1 ? ` (máy ${shardK}/${shardN})` : '') + '.', 'error'); return { skipped: true, reason: 'không có cảnh' }; }
+  if (!(await flowBridge.waitReady(1500))){ setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return { skipped: true, reason: 'chưa cài extension' }; }
+  const st = await flowBridge.call('GET_STATUS');
+  if (!st?.hasToken){ setStatusF('Chưa kết nối Flow. Mở tab Flow + đăng nhập rồi Quét lại.', 'error'); return { skipped: true, reason: 'chưa đăng nhập Flow' }; }
+  const multi = !!document.getElementById('tfMultiAcc')?.checked && (st.accountCount || 0) > 1;
+
+  tfState.running = true; tfState.stop = false; tfState.projectId = null; tfState.uploaded = {};
+  const useRefs = !!document.getElementById('tfUseRefs')?.checked;
+  const imgMap = tfAssetImageMap();
   let done = 0, err = 0;
   try {
-    const projectId = await tfEnsureProject();
+    let projectId = null;
+    if (multi) await flowBridge.call('POOL_RESET');
+    else projectId = await tfEnsureProject();
+    const conc = multi ? Math.max(cfg.conc, st.accountCount) : cfg.conc;
     if (!state.sceneImages) state.sceneImages = {};
-    setStatusF(`Đang tạo ${scenes.length} ảnh cảnh…`, 'working');
+    const nRef = Object.keys(imgMap).length;
+    setStatusF(`Đang tạo ${scenes.length} ảnh cảnh…${shardN > 1 ? ` [máy ${shardK}/${shardN}]` : ''}${multi ? ` (⚡ ${st.accountCount} tài khoản)` : ''}${useRefs && nRef ? ` +tham chiếu` : ''}`, 'working');
     await tfPool(scenes, async (s) => {
       const card = document.getElementById('tf-scene-' + s.id);
       const thumb = card?.querySelector('.tf-thumb');
       if (thumb) thumb.textContent = '⏳';
-      const prompt = cleanPrompt(state.scenePrompts[s.id] || '');
-      const r = await flowBridge.call('GEN_IMAGE', { prompt, projectId, aspect: cfg.aspect, modelName: cfg.model, tier: st.paygateTier, variantCount: 1, quality: cfg.quality, withData: true });
+      const refNames = useRefs ? tfExtractRefNames(state.scenePrompts[s.id], imgMap) : [];
+      const r = await tfDispatchGen(cleanPrompt(state.scenePrompts[s.id] || ''), refNames, { multi, cfg, imgMap, projectId, tier: st.paygateTier });
       const e0 = (r?.media_entries || []).find(e => e.dataUrl);
       if (r?.error || !e0){ err++; if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); }
       else {
@@ -4907,13 +4999,14 @@ async function tfGenScenes(onlyMissing){
         if (thumb) thumb.innerHTML = `<img src="${e0.dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
       }
       setStatusF(`Cảnh: ${done} xong · ${err} lỗi · còn ${scenes.length - done - err}`, 'working');
-    }, cfg.conc);
+    }, conc);
     saveState(true);
     if (typeof renderTable === 'function') renderTable();
     tfRenderScenes();
     setStatusF(tfState.stop ? `Đã dừng. ${done} ảnh.` : `✓ Xong ${done} ảnh cảnh${err ? `, ${err} lỗi` : ''}.`, err ? 'error' : 'ok');
     notifyDone('✓ Tạo ảnh cảnh xong', `${done} ảnh, ${err} lỗi.`);
-  } catch (e){ setStatusF('Lỗi: ' + e.message, 'error'); }
+    return { done, err };
+  } catch (e){ setStatusF('Lỗi: ' + e.message, 'error'); return { done, err, error: e.message }; }
   finally { tfState.running = false; }
 }
 
@@ -4942,26 +5035,30 @@ function tfRenderAssets(){
 }
 
 async function tfGenAssets(kind){
-  if (tfState.running) return;
+  if (tfState.running) return { skipped: true, reason: 'đang chạy' };
   const cfg = tfCfg();
   const list = tfAssetList(kind).filter(a => a.prompt && String(a.prompt).trim());
-  if (!list.length){ setStatusF('Không có ' + (kind === 'char' ? 'nhân vật' : 'bối cảnh') + ' có prompt.', 'error'); return; }
-  if (!(await flowBridge.waitReady(1500))){ setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return; }
+  if (!list.length){ setStatusF('Không có ' + (kind === 'char' ? 'nhân vật' : 'bối cảnh') + ' có prompt.', 'error'); return { skipped: true, reason: 'không có prompt' }; }
+  if (!(await flowBridge.waitReady(1500))){ setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return { skipped: true, reason: 'chưa cài extension' }; }
   const st = await flowBridge.call('GET_STATUS');
-  if (!st?.hasToken){ setStatusF('Chưa kết nối Flow. Mở tab Flow + đăng nhập rồi Quét lại.', 'error'); return; }
+  if (!st?.hasToken){ setStatusF('Chưa kết nối Flow. Mở tab Flow + đăng nhập rồi Quét lại.', 'error'); return { skipped: true, reason: 'chưa đăng nhập Flow' }; }
 
+  const multi = !!document.getElementById('tfMultiAcc')?.checked && (st.accountCount || 0) > 1;
   tfState.running = true; tfState.stop = false; tfState.projectId = null;
   let done = 0, err = 0;
   try {
-    const projectId = await tfEnsureProject();
+    let projectId = null;
+    if (multi) await flowBridge.call('POOL_RESET');
+    else projectId = await tfEnsureProject();
+    const conc = multi ? Math.max(cfg.conc, st.accountCount) : cfg.conc;
     if (kind === 'char'){ if (!state.characterImages) state.characterImages = {}; }
     else { if (!state.backgroundImages) state.backgroundImages = {}; }
-    setStatusF(`Đang tạo ${list.length} ảnh…`, 'working');
+    setStatusF(`Đang tạo ${list.length} ảnh…${multi ? ` (⚡ ${st.accountCount} tài khoản)` : ''}`, 'working');
     await tfPool(list, async (a) => {
       const card = document.getElementById('tf-asset-' + kind + '-' + _slug(a.name));
       const thumb = card?.querySelector('.tf-thumb');
       if (thumb) thumb.textContent = '⏳';
-      const r = await flowBridge.call('GEN_IMAGE', { prompt: cleanPrompt(a.prompt), projectId, aspect: cfg.aspect, modelName: cfg.model, tier: st.paygateTier, variantCount: 1, quality: cfg.quality, withData: true });
+      const r = await tfDispatchGen(cleanPrompt(a.prompt), [], { multi, cfg, projectId, tier: st.paygateTier });
       const e0 = (r?.media_entries || []).find(e => e.b64);
       if (r?.error || !e0){ err++; if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); }
       else {
@@ -4971,14 +5068,15 @@ async function tfGenAssets(kind){
         if (thumb) thumb.innerHTML = `<img src="${e0.dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
       }
       setStatusF(`${done} xong · ${err} lỗi · còn ${list.length - done - err}`, 'working');
-    }, cfg.conc);
+    }, conc);
     saveState(true);
     if (kind === 'char' && typeof renderCharImageGallery === 'function') renderCharImageGallery();
     if (kind === 'char' && typeof renderAssetCharPrompts === 'function' && state.charactersV) renderAssetCharPrompts(state.charactersV);
     tfRenderAssets();
     setStatusF(tfState.stop ? `Đã dừng. ${done} ảnh.` : `✓ Xong ${done} ảnh${err ? `, ${err} lỗi` : ''}.`, err ? 'error' : 'ok');
     notifyDone('✓ Tạo ảnh asset xong', `${done} ảnh, ${err} lỗi.`);
-  } catch (e){ setStatusF('Lỗi: ' + e.message, 'error'); }
+    return { done, err };
+  } catch (e){ setStatusF('Lỗi: ' + e.message, 'error'); return { done, err, error: e.message }; }
   finally { tfState.running = false; }
 }
 const setStatus1 = (m, t) => setStatusBar('status1', m, t);
@@ -6851,11 +6949,26 @@ const AUTO_STEPS = [
   { label: 'Prompt G-Labs' },
   { label: 'Ảnh B (cảnh dài)' }
 ];
+// Các bước Flow (chỉ hiện khi tick "Trọn gói ảnh Flow"). Index nối tiếp AUTO_STEPS.
+const FLOW_STEPS = [
+  { label: '🎭 Prompt asset' },
+  { label: '🖼 Ảnh asset' },
+  { label: '🖼 Ảnh cảnh' }
+];
+const FS_ASSET_PROMPT = AUTO_STEPS.length;       // 9
+const FS_ASSET_IMG    = AUTO_STEPS.length + 1;   // 10
+const FS_SCENE_IMG    = AUTO_STEPS.length + 2;   // 11
+
+function _autoStepsAll(){
+  return document.getElementById('autoFlowImages')?.checked
+    ? AUTO_STEPS.concat(FLOW_STEPS)
+    : AUTO_STEPS;
+}
 
 function _autoRenderSteps(){
   const bar = document.getElementById('autoBar');
   if (!bar) return;
-  bar.innerHTML = AUTO_STEPS.map((s, i) =>
+  bar.innerHTML = _autoStepsAll().map((s, i) =>
     `<span class="auto-step" id="autoStep-${i}"><b>${i + 1}</b>&nbsp;${s.label}</span>`
   ).join('<span class="auto-arrow">→</span>');
 }
@@ -6895,7 +7008,7 @@ async function runAutoTool2(){
   clearCancel();
   _toggleAutoUI(true);
   _autoRenderSteps();
-  AUTO_STEPS.forEach((_, i) => _autoSetStep(i, null));
+  _autoStepsAll().forEach((_, i) => _autoSetStep(i, null));
 
   const t0 = Date.now();
   const stopped = () => _autoStopFlag;  // inner funcs tự clearCancel, nên dựa vào cờ riêng
@@ -7051,6 +7164,45 @@ async function runAutoTool2(){
       } else {
         verifyNote = ' · 🔍 tất cả prompt đạt.';
       }
+    }
+
+    // BƯỚC 9 (tuỳ chọn) — Trọn gói ảnh bằng Flow: prompt asset → ảnh asset → ảnh cảnh
+    if (document.getElementById('autoFlowImages')?.checked && !stopped()) {
+      // 9a — Tạo prompt nhân vật/bối cảnh (Tool 3)
+      _autoSetStep(FS_ASSET_PROMPT, 'active');
+      try {
+        setStatus2('🎭 Đang tạo prompt nhân vật/bối cảnh (Tool 3)…', 'working');
+        loadAssetsFromTool2(true);
+        clearCancel();
+        await genAllAssetPrompts();
+        if (typeof tfRenderAssets === 'function') tfRenderAssets();
+        _autoSetStep(FS_ASSET_PROMPT, 'done');
+      } catch (e){ _autoSetStep(FS_ASSET_PROMPT, 'fail'); verifyNote += ' · 🎭 prompt asset lỗi: ' + (e.message || e); }
+
+      // 9b — Tạo ảnh nhân vật + bối cảnh bằng Flow (để làm ảnh tham chiếu)
+      if (!stopped()) {
+        _autoSetStep(FS_ASSET_IMG, 'active');
+        setStatus2('🖼 Đang tạo ảnh nhân vật/bối cảnh bằng Flow…', 'working');
+        try {
+          const rc = await tfGenAssets('char');
+          const rb = await tfGenAssets('bg');
+          const skip = rc?.skipped ? rc : (rb?.skipped ? rb : null);
+          if (skip) { _autoSetStep(FS_ASSET_IMG, 'skip'); verifyNote += ` · 🎭 ảnh asset bỏ qua (${skip.reason}).`; }
+          else { _autoSetStep(FS_ASSET_IMG, 'done'); verifyNote += ` · 🎭 asset: ${(rc?.done || 0) + (rb?.done || 0)} ảnh.`; }
+        } catch (e){ _autoSetStep(FS_ASSET_IMG, 'fail'); verifyNote += ' · 🎭 ảnh asset lỗi: ' + (e.message || e); }
+      } else _autoSetStep(FS_ASSET_IMG, 'skip');
+
+      // 9c — Tạo ảnh cảnh (tự đính ảnh asset vừa tạo làm tham chiếu)
+      if (!stopped()) {
+        _autoSetStep(FS_SCENE_IMG, 'active');
+        setStatus2('🖼 Đang tạo ảnh cảnh bằng Flow… (theo dõi ở tab ✨ Tạo Ảnh Flow)', 'working');
+        try {
+          if (typeof tfRenderScenes === 'function') tfRenderScenes();
+          const res = await tfGenScenes(false);
+          if (res?.skipped) { _autoSetStep(FS_SCENE_IMG, 'skip'); verifyNote += ` · 🖼 ảnh cảnh bỏ qua (${res.reason}).`; }
+          else { _autoSetStep(FS_SCENE_IMG, res?.err ? 'fail' : 'done'); verifyNote += ` · 🖼 cảnh: ${res?.done || 0} ảnh${res?.err ? `, ${res.err} lỗi` : ''}.`; }
+        } catch (e){ _autoSetStep(FS_SCENE_IMG, 'fail'); verifyNote += ' · 🖼 ảnh cảnh lỗi: ' + (e.message || e); }
+      } else _autoSetStep(FS_SCENE_IMG, 'skip');
     }
 
     // --- Tổng kết ---
