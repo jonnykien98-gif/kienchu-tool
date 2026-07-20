@@ -4056,6 +4056,10 @@ async function loadCloudState(){
       console.log('⏰ Pro đã hết hạn → về Free.');
     }
     console.log('✓ User tier:', state.userTier);
+    // Backfill email vào doc để trang admin thấy được (chỉ ghi khi thiếu/khác).
+    if (window.currentUser?.email && data?.email !== window.currentUser.email && window.firebaseSaveDoc) {
+      window.firebaseSaveDoc(window.currentUser.uid, { email: window.currentUser.email }).catch(() => {});
+    }
     // 1c. Migration: ensure all profiles have profileId + workData; migrate global state nếu cần
     if (typeof migrateProfiles === 'function' && state.profiles?.length) {
       const migrated = migrateProfiles();
