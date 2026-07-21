@@ -1118,8 +1118,10 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <label class="label">🖥 Endpoint CLI tự host <span style="font-weight:400;opacity:.6;font-size:10px">— chạy gói Claude/ChatGPT của BẠN, không cần API key</span></label>
         <input type="text" id="cliEndpoint" placeholder="http://localhost:8790" style="font-size:11px">
         <input type="password" id="cliKey" placeholder="Token (tuỳ chọn — nếu bridge có bảo vệ)" style="font-size:11px;margin-top:6px">
+        <button class="btn ghost sm" onclick="cliLogin()" style="margin-top:8px;width:100%">🔐 Đăng nhập gói Claude (không cần terminal)</button>
+        <div id="cliLoginBox" style="font-size:11.5px;margin-top:8px"></div>
         <div style="font-size:10.5px;color:var(--text-muted);line-height:1.6;margin-top:6px">
-          Cần chạy 1 "bridge" trên máy/VPS của bạn (bọc Claude Code CLI / Codex thành API kiểu OpenAI). Đăng nhập CLI bằng gói của bạn → dán địa chỉ vào đây. Xem hướng dẫn bridge kèm theo.
+          Cần chạy 1 "bridge" trên máy/VPS của bạn (bọc Claude Code CLI / Codex thành API kiểu OpenAI). Bấm nút trên để đăng nhập gói của bạn ngay tại đây.
         </div>
       </div>
       <div class="api-row">
@@ -2875,6 +2877,44 @@ function updateGetKeyLink(){
   const provider = document.getElementById('apiProvider').value;
   const a = document.getElementById('getKeyLink');
   if (a) a.href = KEY_URLS[provider] || '#';
+}
+
+/* ---- Đăng nhập gói Claude qua CLI bridge, ngay trong web (Cách B) ---- */
+function _cliEp(){ return (document.getElementById('cliEndpoint')?.value || '').trim().replace(/\/+$/, ''); }
+let _cliPoll = null;
+async function cliLogin(){
+  const ep = _cliEp();
+  const box = document.getElementById('cliLoginBox');
+  if (!ep){ box.innerHTML = '<span style="color:var(--red)">Nhập Endpoint trước (vd http://localhost:8790).</span>'; return; }
+  box.innerHTML = 'Đang khởi động đăng nhập…';
+  try { await fetch(ep + '/login/start', { method: 'POST' }); }
+  catch { box.innerHTML = '<span style="color:var(--red)">Không kết nối được bridge — nó đã chạy chưa? (chạy start-bridge / install-background)</span>'; return; }
+  let shown = false;
+  clearInterval(_cliPoll);
+  _cliPoll = setInterval(async () => {
+    let s; try { s = await (await fetch(ep + '/login/status')).json(); } catch { return; }
+    if (s.done){ clearInterval(_cliPoll); box.innerHTML = '<span style="color:var(--green)">✅ Đăng nhập thành công! Dùng được rồi.</span>'; return; }
+    if (s.url && !shown){
+      shown = true;
+      box.innerHTML = `<div style="line-height:1.7">1. Mở link đăng nhập: <a href="${s.url}" target="_blank" style="color:var(--accent);word-break:break-all">${escapeHtml(s.url)}</a><br>2. Nếu trang hiện <b>code</b>, dán vào đây:</div>
+        <input id="cliCode" placeholder="code (nếu có)" style="width:100%;font-size:11px;margin-top:4px">
+        <button class="btn ghost sm" style="margin-top:6px" onclick="cliLoginCode()">Xác nhận code</button>
+        <div id="cliLoginMsg" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div>`;
+    }
+    if (s.error){
+      const m = document.getElementById('cliLoginMsg');
+      if (m) m.innerHTML = '<span style="color:var(--red)">' + escapeHtml(s.error) + '</span>';
+      else box.innerHTML = '<span style="color:var(--red)">' + escapeHtml(s.error) + '</span>';
+    }
+  }, 1500);
+}
+async function cliLoginCode(){
+  const ep = _cliEp();
+  const code = document.getElementById('cliCode')?.value || '';
+  const m = document.getElementById('cliLoginMsg');
+  if (m) m.textContent = 'Đang xác nhận…';
+  try { await fetch(ep + '/login/code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }); }
+  catch { if (m) m.innerHTML = '<span style="color:var(--red)">Gửi code lỗi.</span>'; }
 }
 
 /* ---- Nhiều khung API key (mỗi key 1 ô) ---- */
