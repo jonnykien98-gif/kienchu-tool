@@ -1117,9 +1117,9 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
       </div>
       <div class="api-row" id="cliRow" style="display:none">
         <label class="label">🖥 Endpoint CLI tự host <span style="font-weight:400;opacity:.6;font-size:10px">— chạy gói Claude/ChatGPT của BẠN, không cần API key</span></label>
-        <input type="text" id="cliEndpoint" placeholder="http://localhost:8790" style="font-size:11px">
+        <input type="text" id="cliEndpoint" placeholder="http://localhost:8790" style="font-size:11px" oninput="_cliUpdateLoginLabel()">
         <input type="password" id="cliKey" placeholder="Token (tuỳ chọn — nếu bridge có bảo vệ)" style="font-size:11px;margin-top:6px">
-        <button class="btn ghost sm" onclick="cliLogin()" style="margin-top:8px;width:100%">🔐 Đăng nhập gói Claude (không cần terminal)</button>
+        <button class="btn ghost sm" id="cliLoginBtn" onclick="cliLogin()" style="margin-top:8px;width:100%">🔐 Đăng nhập gói Claude (không cần terminal)</button>
         <div id="cliLoginBox" style="font-size:11.5px;margin-top:8px"></div>
         <div style="font-size:10.5px;color:var(--text-muted);line-height:1.6;margin-top:6px">
           Cần chạy 1 "bridge" trên máy/VPS của bạn (bọc Claude Code CLI / Codex thành API kiểu OpenAI). Bấm nút trên để đăng nhập gói của bạn ngay tại đây.
@@ -2877,6 +2877,7 @@ function onProviderChange(){
     const el = document.getElementById(id);
     if (el) el.style.display = isCli ? 'none' : '';
   });
+  if (isCli && typeof _cliUpdateLoginLabel === 'function') _cliUpdateLoginLabel();
 }
 
 // Link "Lấy Key" theo provider
@@ -2892,17 +2893,29 @@ function updateGetKeyLink(){
   if (a) a.href = KEY_URLS[provider] || '#';
 }
 
+// Nhãn nút đăng nhập theo Claude/ChatGPT.
+function _cliUpdateLoginLabel(){
+  const btn = document.getElementById('cliLoginBtn');
+  if (!btn) return;
+  const m = document.getElementById('apiModel')?.value;
+  const ep = document.getElementById('cliEndpoint')?.value || '';
+  const isGpt = m === 'chatgpt' || /:8791\b/.test(ep);
+  btn.textContent = isGpt ? '🔐 Đăng nhập gói ChatGPT (không cần terminal)' : '🔐 Đăng nhập gói Claude (không cần terminal)';
+}
+
 // Chọn Claude/ChatGPT trong dropdown Model (khi provider = cli) → tự đổi cổng endpoint.
 function onCliModelChange(){
   if (document.getElementById('apiProvider')?.value !== 'cli') return;
   const m = document.getElementById('apiModel')?.value;
   const ep = document.getElementById('cliEndpoint');
-  if (!ep) return;
-  const cur = ep.value.trim();
-  // Chỉ tự đổi khi endpoint đang là localhost mặc định (không đè endpoint tùy chỉnh/VPS).
-  if (cur === '' || /^https?:\/\/localhost:879[01]$/i.test(cur)) {
-    ep.value = (m === 'chatgpt') ? 'http://localhost:8791' : 'http://localhost:8790';
+  if (ep) {
+    const cur = ep.value.trim();
+    // Chỉ tự đổi khi endpoint đang là localhost mặc định (không đè endpoint tùy chỉnh/VPS).
+    if (cur === '' || /^https?:\/\/localhost:879[01]$/i.test(cur)) {
+      ep.value = (m === 'chatgpt') ? 'http://localhost:8791' : 'http://localhost:8790';
+    }
   }
+  _cliUpdateLoginLabel();
 }
 
 /* ---- Đăng nhập gói Claude qua CLI bridge, ngay trong web (Cách B) ---- */
@@ -3196,10 +3209,18 @@ function saveApiSettings(){
 
 const PROVIDER_LABEL = { anthropic: 'Claude', openai: 'OpenAI', deepseek: 'DeepSeek' };
 function updateApiStatus(){
-  const keys = _apiKeyPool();
   const provider = localStorage.getItem('api_provider');
   const model = localStorage.getItem('api_model');
   const el = document.getElementById('apiStatus');
+  // CLI tự host: không cần key — báo theo endpoint.
+  if (provider === 'cli') {
+    const ep = localStorage.getItem('api_cli_endpoint') || '';
+    el.innerHTML = ep
+      ? `<span class="api-status ok"></span> CLI tự host · ${model || 'default'} · ${ep}`
+      : `<span class="api-status"></span> Chưa nhập endpoint CLI`;
+    return;
+  }
+  const keys = _apiKeyPool();
   if (keys.length && provider && model) {
     const lanes = _concurrency();
     const multi = lanes > 1 ? ` · ⚡ ${lanes} luồng (${keys.length} key)` : '';
@@ -3221,6 +3242,18 @@ function setApiStatus(msg, type){
 async function testApi(){
   const provider = document.getElementById('apiProvider').value;
   const model = document.getElementById('apiModel').value;
+  // CLI tự host: không cần API key, test qua endpoint bridge.
+  if (provider === 'cli') {
+    const ep = _cliEp();
+    if (!ep) return setApiStatus('Chưa nhập Endpoint CLI.', 'err');
+    setApiStatus('Đang test CLI...', 'info');
+    try {
+      const reply = await callLLM('Trả lời ngắn: "ok"', { maxTokens: 30, _override: { provider, model, cliEndpoint: ep } });
+      if (reply && reply.toLowerCase().includes('ok')) setApiStatus('✓ CLI hoạt động: ' + reply.trim().slice(0, 30), 'ok');
+      else setApiStatus('? Phản hồi lạ: ' + (reply || '').slice(0, 40), 'info');
+    } catch (e) { setApiStatus('✗ Lỗi: ' + (e.message || '').slice(0, 90), 'err'); }
+    return;
+  }
   const key = collectKeys()[0];
   if (!key) return setApiStatus('Thiếu API key', 'err');
 
