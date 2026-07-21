@@ -979,7 +979,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
       <div id="extractStatus" style="font-size:12px"></div>
     </div>
 
-    <h3>🎨 Style Prompts G-Labs</h3>
+    <h3>🎨 Style Prompts ảnh</h3>
     <div class="mb-12" style="padding:12px;background:rgba(124,58,237,.06);border:1px solid var(--border);border-radius:8px">
       <label class="label" style="color:var(--violet)">⚡ STYLE PRESET <span style="font-weight:400;color:var(--text-muted);font-size:11px">(chọn để điền nhanh 4 ô dưới — dùng cho mọi loại kênh)</span></label>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1076,6 +1076,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT)</option>
           <option value="deepseek">DeepSeek</option>
+          <option value="cli">CLI tự host (gói Claude/ChatGPT của bạn)</option>
         </select>
       </div>
       <div class="api-row">
@@ -1112,6 +1113,14 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         </select>
         <input type="text" id="jsonFbModel" placeholder="model (để trống = mặc định provider)" style="font-size:11px;margin-top:6px">
         <input type="password" id="jsonFbKey" placeholder="API key cho fallback" style="font-size:11px;margin-top:6px">
+      </div>
+      <div class="api-row" id="cliRow" style="display:none">
+        <label class="label">🖥 Endpoint CLI tự host <span style="font-weight:400;opacity:.6;font-size:10px">— chạy gói Claude/ChatGPT của BẠN, không cần API key</span></label>
+        <input type="text" id="cliEndpoint" placeholder="http://localhost:8790" style="font-size:11px">
+        <input type="password" id="cliKey" placeholder="Token (tuỳ chọn — nếu bridge có bảo vệ)" style="font-size:11px;margin-top:6px">
+        <div style="font-size:10.5px;color:var(--text-muted);line-height:1.6;margin-top:6px">
+          Cần chạy 1 "bridge" trên máy/VPS của bạn (bọc Claude Code CLI / Codex thành API kiểu OpenAI). Đăng nhập CLI bằng gói của bạn → dán địa chỉ vào đây. Xem hướng dẫn bridge kèm theo.
+        </div>
       </div>
       <div class="api-row">
         <label class="label">BASE URL <span style="font-weight:400;opacity:.6;font-size:10px">(tuỳ chọn — dùng API bên thứ 3)</span></label>
@@ -1268,11 +1277,11 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
     <div class="tool" id="tool-tool2">
       <div class="tool-head">
         <div class="tool-title">Phân Cảnh</div>
-        <div class="tool-subtitle">AI chia kịch bản thành cảnh có nghĩa → gán nhân vật + bối cảnh → sinh prompt G-Labs cho từng cảnh.</div>
+        <div class="tool-subtitle">AI chia kịch bản thành cảnh có nghĩa → gán nhân vật + bối cảnh → sinh prompt ảnh cho từng cảnh.</div>
       </div>
 
       <div class="info-box">
-        <span class="lbl">💡 Quy trình:</span> Cần có Profile (Tool 1) để AI dựa vào đó sinh prompt đồng nhất. Tab "Prompt G-Labs" chứa prompt sẵn sàng paste vào G-Labs.
+        <span class="lbl">💡 Quy trình:</span> Cần có Profile (Tool 1) để AI dựa vào đó sinh prompt đồng nhất. Tab "Prompt ảnh" chứa prompt sẵn sàng paste vào G-Labs.
       </div>
 
       <div class="grid-3 mb-24">
@@ -1371,7 +1380,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <!-- ③ TẠO PROMPT -->
         <div class="t2-group">
           <span class="t2-glabel">③ Tạo prompt</span>
-          <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt G-Labs</button>
+          <button class="btn" style="background:var(--rose);border-color:var(--rose);color:#fff;font-weight:600" onclick="doGenerateScenePrompts()">✨ Tạo Prompt ảnh</button>
           <button class="btn ghost" style="border-color:var(--rose);color:var(--rose);font-weight:600" onclick="regenAllScenePrompts()" title="Xoá toàn bộ prompt cũ và tạo lại từ đầu">🔄 Tạo lại tất cả</button>
           <button class="btn ghost" id="t2FillBtn" style="display:none;border-color:#d97706;color:#d97706;font-weight:600" onclick="doGenerateScenePrompts()" title="Chỉ tạo các cảnh chưa có prompt">🔧 Tạo nốt cảnh thiếu <span id="t2MissingCount"></span></button>
           <div class="batch-control"><span>Batch:</span><input type="number" id="batchSize" value="5" min="1" max="20"></div>
@@ -1435,7 +1444,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
 
       <div class="subtabs">
         <div class="subtab active" data-sub="list" onclick="switchSub('list')">Danh sách cảnh <span class="badge" id="badge-list">0</span></div>
-        <div class="subtab" data-sub="prompts" onclick="switchSub('prompts')">🎨 Prompt G-Labs <span class="badge" id="badge-prompts">0</span></div>
+        <div class="subtab" data-sub="prompts" onclick="switchSub('prompts')">🎨 Prompt ảnh <span class="badge" id="badge-prompts">0</span></div>
         <div class="subtab" data-sub="srt" onclick="switchSub('srt')">📝 Xuất SRT</div>
       </div>
       <div class="subtab-content">
@@ -1461,11 +1470,11 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
             <span style="color:var(--text-muted);font-size:11px;align-self:center" id="copyAllInfo"></span>
           </div>
           <div style="padding:14px;border-bottom:1px solid var(--border)">
-            <label class="label">📦 Tất cả prompt G-Labs (gộp — chọn All rồi Copy)</label>
-            <textarea id="allPromptsV" readonly placeholder="Chưa có prompt. Bấm Tạo Prompt G-Labs trước." style="min-height:220px;background:var(--surface-2);font-size:12px;line-height:1.6"></textarea>
+            <label class="label">📦 Tất cả prompt ảnh (gộp — chọn All rồi Copy)</label>
+            <textarea id="allPromptsV" readonly placeholder="Chưa có prompt. Bấm Tạo Prompt ảnh trước." style="min-height:220px;background:var(--surface-2);font-size:12px;line-height:1.6"></textarea>
           </div>
           <div class="prompts-list" id="promptsListV">
-            <div class="empty-state">Chưa có prompt. Bấm Tạo Prompt G-Labs.</div>
+            <div class="empty-state">Chưa có prompt. Bấm Tạo Prompt ảnh.</div>
           </div>
         </div>
         <div id="sub-srt" style="display:none">
@@ -1485,7 +1494,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
     <div class="tool" id="tool-tool3">
       <div class="tool-head">
         <div class="tool-title">Asset Prompts</div>
-        <div class="tool-subtitle">Tạo prompt G-Labs cho reference sheets nhân vật + bối cảnh. Dữ liệu từ Tool 02, style từ Profile.</div>
+        <div class="tool-subtitle">Tạo prompt ảnh cho reference sheets nhân vật + bối cảnh. Dữ liệu từ Tool 02, style từ Profile.</div>
       </div>
 
       <div id="loadBanner" style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
@@ -2513,8 +2522,8 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
             🔗 Tự động dùng ảnh nhân vật/bối cảnh đã tạo làm tham chiếu (giữ nhân vật nhất quán giữa các cảnh)
           </label>
           <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="tfMultiAcc" checked>
-            ⚡ Chạy nhiều tài khoản song song (đăng nhập nhiều account vào nhiều tab Flow → tự chia việc round-robin)
+            <input type="checkbox" id="tfMultiAcc">
+            ⚡ Chạy nhiều tài khoản song song trong 1 profile (round-robin) — <span style="color:var(--red)">thử nghiệm</span>. Ổn định nhất là dùng nhiều Chrome profile + ô "Chia việc" bên dưới.
           </label>
           <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;flex-wrap:wrap">
             🖥 Chia việc nhiều máy/profile: máy số
@@ -2814,6 +2823,11 @@ const MODELS = {
   deepseek: [
     { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (preview, nhanh)' },
     { id: 'deepseek-v4-pro',   name: 'DeepSeek V4 Pro (preview, mạnh nhất)' }
+  ],
+  cli: [
+    { id: 'default', name: 'Theo gói CLI (mặc định)' },
+    { id: 'sonnet',  name: 'Claude Sonnet (Claude Code)' },
+    { id: 'opus',    name: 'Claude Opus (Claude Code)' }
   ]
 };
 
@@ -2846,6 +2860,9 @@ function onProviderChange(){
   // Toggle Thinking chỉ hiện cho DeepSeek
   const tr = document.getElementById('thinkingRow');
   if (tr) tr.style.display = (provider === 'deepseek') ? '' : 'none';
+  // Ô endpoint CLI chỉ hiện khi chọn provider "cli"
+  const cliRow = document.getElementById('cliRow');
+  if (cliRow) cliRow.style.display = (provider === 'cli') ? '' : 'none';
 }
 
 // Link "Lấy Key" theo provider
@@ -3080,6 +3097,8 @@ function loadApiSettings(){
   if (concEl) concEl.value = localStorage.getItem('api_concurrency') || '';
   const baseUrlEl = document.getElementById('apiBaseUrl');
   if (baseUrlEl) baseUrlEl.value = localStorage.getItem('api_base_url') || '';
+  const cliEp = document.getElementById('cliEndpoint'); if (cliEp) cliEp.value = localStorage.getItem('api_cli_endpoint') || '';
+  const cliK = document.getElementById('cliKey');       if (cliK) cliK.value = localStorage.getItem('api_cli_key') || '';
   const fbP = document.getElementById('jsonFbProvider'); if (fbP) fbP.value = localStorage.getItem('json_fb_provider') || '';
   const fbM = document.getElementById('jsonFbModel');    if (fbM) fbM.value = localStorage.getItem('json_fb_model') || '';
   const fbK = document.getElementById('jsonFbKey');      if (fbK) fbK.value = localStorage.getItem('json_fb_key') || '';
@@ -3100,6 +3119,8 @@ function saveApiSettings(){
   const conc = parseInt(document.getElementById('apiConcurrency')?.value);
   localStorage.setItem('api_concurrency', (conc >= 1) ? String(conc) : '');
   localStorage.setItem('api_base_url', baseUrl);
+  localStorage.setItem('api_cli_endpoint', (document.getElementById('cliEndpoint')?.value || '').trim().replace(/\/+$/, ''));
+  localStorage.setItem('api_cli_key', (document.getElementById('cliKey')?.value || '').trim());
   localStorage.setItem('json_fb_provider', document.getElementById('jsonFbProvider')?.value || '');
   localStorage.setItem('json_fb_model', (document.getElementById('jsonFbModel')?.value || '').trim());
   localStorage.setItem('json_fb_key', (document.getElementById('jsonFbKey')?.value || '').trim());
@@ -3221,6 +3242,15 @@ async function callLLM(prompt, opts = {}){
   const key = opts._override?.key || _nextApiKey();
   const maxTokens = opts.maxTokens || 1500;
   const messages = opts.messages || [{ role: 'user', content: prompt }];
+
+  // CLI tự host: dùng endpoint bridge của user (gói Claude/ChatGPT của họ), KHÔNG cần API key.
+  if (provider === 'cli') {
+    const ep = (opts._override?.cliEndpoint || localStorage.getItem('api_cli_endpoint') || '').trim().replace(/\/+$/, '');
+    if (!ep) throw new Error('Chưa cài Endpoint CLI tự host (mục API Settings).');
+    const cliKey = localStorage.getItem('api_cli_key') || '';
+    const url = /\/v1\/chat\/completions$/.test(ep) ? ep : ep + '/v1/chat/completions';
+    return _withRetry(() => callOpenAICompat(messages, model || 'default', cliKey, maxTokens, url, { json: !!opts.json }));
+  }
 
   if (!key) throw new Error('Chưa cài API key (mục API Settings ở sidebar)');
 
@@ -4101,7 +4131,7 @@ async function saveCloudState(immediate = false){
       // Tách ảnh ra khỏi state — Firestore giới hạn 1MB/doc
       // Tách userTier — tier là admin-controlled, không lưu cùng state
       // Tách working data (script, scenes...) — chúng đã được sync vào profile.workData, không cần ở root state
-      const { styleRefImages, characterImages, sceneImages, userTier,
+      const { styleRefImages, characterImages, sceneImages, sceneImagesB, backgroundImages, userTier,
               script, scenes, scenePrompts, charactersV, backgroundsV,
               assetCharPrompts, assetBgPrompts, styleRefPrompt, veoPrompts, pexelsResults, mediaPicks,
               ...lightState } = state;
@@ -4119,6 +4149,8 @@ async function saveCloudState(immediate = false){
           await IDB.set(uid + '/' + pid + '/styleRefImages', styleRefImages || []);
           await IDB.set(uid + '/' + pid + '/characterImages', characterImages || {});
           await IDB.set(uid + '/' + pid + '/sceneImages', sceneImages || {});
+          await IDB.set(uid + '/' + pid + '/sceneImagesB', sceneImagesB || {});
+          await IDB.set(uid + '/' + pid + '/backgroundImages', backgroundImages || {});
         }
       } catch (e) {
         console.warn('IDB save failed:', e);
@@ -4323,6 +4355,8 @@ function loadStateFromProfile(p){
   // Images sẽ load từ IDB theo profileId — clear trước
   state.characterImages = {};
   state.sceneImages = {};
+  state.sceneImagesB = {};
+  state.backgroundImages = {};
   state.styleRefImages = [];
 }
 
@@ -4332,6 +4366,8 @@ async function loadProfileImages(profileId){
   try {
     state.characterImages = (await IDB.get(uid + '/' + profileId + '/characterImages')) || {};
     state.sceneImages = (await IDB.get(uid + '/' + profileId + '/sceneImages')) || {};
+    state.sceneImagesB = (await IDB.get(uid + '/' + profileId + '/sceneImagesB')) || {};
+    state.backgroundImages = (await IDB.get(uid + '/' + profileId + '/backgroundImages')) || {};
     state.styleRefImages = (await IDB.get(uid + '/' + profileId + '/styleRefImages')) || [];
   } catch(e) { console.warn('Load profile images failed:', e); }
 }
@@ -4868,8 +4904,8 @@ Trả về CHÍNH XÁC 1 JSON object (không markdown):
   "cauTruc": "cấu trúc video",
   "soPhan": 8,
   "targetPhut": 12,
-  "characterStyle": "prompt G-Labs character reference, 80-120 từ tiếng Anh",
-  "backgroundStyle": "prompt G-Labs background reference, 80-120 từ tiếng Anh",
+  "characterStyle": "prompt ảnh character reference, 80-120 từ tiếng Anh",
+  "backgroundStyle": "prompt ảnh background reference, 80-120 từ tiếng Anh",
   "sceneStyle": "prompt ngắn 30-50 từ tiếng Anh cho scene aesthetic",
   "promptRules": "negative prompt rules"
 }
@@ -4963,7 +4999,7 @@ const flowBridge = {
   }
 };
 
-const tfState = { running: false, stop: false, projectId: null, uploaded: {} };
+const tfState = { running: false, stop: false, projectId: null, uploaded: {}, onProgress: null };
 
 function tfInit(){
   flowBridge.init();
@@ -5083,25 +5119,37 @@ function tfScenesWithPrompt(){
   if (!state.scenes) return [];
   return state.scenes.filter(s => state.scenePrompts && state.scenePrompts[s.id] && String(state.scenePrompts[s.id]).trim());
 }
+function _tfSceneCard(id, variant){
+  const store = variant === 'b' ? state.sceneImagesB : state.sceneImages;
+  const src = _tfImgSrc(store?.[id]);
+  const sid = escapeHtml(String(id));
+  const isB = variant === 'b';
+  const cardId = 'tf-scene-' + id + (isB ? 'b' : '');
+  const vArg = isB ? "'b'" : "'a'";
+  return `<div class="tf-card" id="${cardId}" style="border:1px solid ${isB ? 'var(--accent)' : 'var(--border)'};border-radius:10px;overflow:hidden;background:var(--surface)">
+      <div class="tf-thumb" ${src ? `onclick="tfEnlargeScene('${sid}',${vArg})" ` : ''}style="aspect-ratio:16/9;background:#0002 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);cursor:${src ? 'zoom-in' : 'default'}">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : 'cảnh ' + sid + (isB ? ' B' : '')}</div>
+      <div style="padding:6px;display:flex;gap:6px;align-items:center">
+        <span style="flex:1;font-size:11px;color:var(--text-muted)">Cảnh ${sid}${isB ? ' <b style="color:var(--accent)">B</b>' : ''}</span>
+        <button class="btn ghost sm" style="padding:2px 7px;font-size:13px" onclick="tfEnlargeScene('${sid}',${vArg})" title="Xem lớn">🔍</button>
+        <button class="btn ghost sm" style="padding:2px 7px;font-size:13px" onclick="tfRegenScene('${sid}',${vArg})" title="Tạo lại">🔄</button>
+      </div>
+    </div>`;
+}
 function tfRenderScenes(){
   const info = document.getElementById('tfSceneInfo');
   const grid = document.getElementById('tfSceneGrid');
   if (!info || !grid) return;
   const withP = tfScenesWithPrompt();
-  const withImg = withP.filter(s => state.sceneImages && state.sceneImages[s.id]);
-  info.innerHTML = `Có prompt: <b>${withP.length}</b> cảnh · Đã có ảnh: <b>${withImg.length}</b>`;
-  grid.innerHTML = withP.map(s => {
-    const src = _tfImgSrc(state.sceneImages?.[s.id]);
-    const sid = escapeHtml(String(s.id));
-    return `<div class="tf-card" id="tf-scene-${s.id}" style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)">
-      <div class="tf-thumb" ${src ? `onclick="tfEnlargeScene('${sid}')" ` : ''}style="aspect-ratio:16/9;background:#0002 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);cursor:${src ? 'zoom-in' : 'default'}">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : 'cảnh ' + sid}</div>
-      <div style="padding:6px;display:flex;gap:6px;align-items:center">
-        <span style="flex:1;font-size:11px;color:var(--text-muted)">Cảnh ${sid}</span>
-        <button class="btn ghost sm" style="padding:2px 7px;font-size:13px" onclick="tfEnlargeScene('${sid}')" title="Xem lớn">🔍</button>
-        <button class="btn ghost sm" style="padding:2px 7px;font-size:13px" onclick="tfRegenScene('${sid}')" title="Tạo lại cảnh này">🔄</button>
-      </div>
-    </div>`;
-  }).join('') || '<div style="color:var(--text-muted);font-size:12px">Chưa có prompt cảnh nào. Chạy Tool 2 tạo prompt trước.</div>';
+  let bCount = 0, aImg = 0, bImg = 0, html = '';
+  for (const s of withP){
+    if (state.sceneImages && state.sceneImages[s.id]) aImg++;
+    html += _tfSceneCard(s.id, 'a');
+    const hasB = state.scenePrompts2 && state.scenePrompts2[s.id] && String(state.scenePrompts2[s.id]).trim();
+    if (hasB){ bCount++; if (state.sceneImagesB && state.sceneImagesB[s.id]) bImg++; html += _tfSceneCard(s.id, 'b'); }
+  }
+  const totalUnits = withP.length + bCount;
+  info.innerHTML = `Có prompt: <b>${withP.length}</b> cảnh${bCount ? ` + <b>${bCount}</b> ảnh B` : ''} = <b>${totalUnits}</b> ảnh · Đã tạo: <b>${aImg + bImg}</b>`;
+  grid.innerHTML = html || '<div style="color:var(--text-muted);font-size:12px">Chưa có prompt cảnh nào. Chạy Tool 2 tạo prompt trước.</div>';
 }
 
 // Xem ảnh lớn (overlay, bấm/ESC để đóng).
@@ -5116,42 +5164,53 @@ function tfEnlarge(src){
   document.addEventListener('keydown', onKey);
   document.body.appendChild(m);
 }
-function tfEnlargeScene(id){
-  const src = _tfImgSrc(state.sceneImages?.[id]);
-  if (!src) return setStatusF('Cảnh ' + id + ' chưa có ảnh.', 'info');
+function tfEnlargeScene(id, variant){
+  const store = variant === 'b' ? state.sceneImagesB : state.sceneImages;
+  const src = _tfImgSrc(store?.[id]);
+  if (!src) return setStatusF('Cảnh ' + id + (variant === 'b' ? ' B' : '') + ' chưa có ảnh.', 'info');
   tfEnlarge(src);
 }
 
 // Tải tất cả ảnh cảnh thành ZIP, tự đánh số theo scene id (001.png, 002.png…).
 async function tfDownloadAllScenes(){
-  const ids = (state.scenes || []).map(s => s.id).filter(id => state.sceneImages?.[id]);
-  if (!ids.length) return setStatusF('Chưa có ảnh cảnh để tải.', 'error');
   if (typeof JSZip === 'undefined') return setStatusF('Thư viện JSZip chưa tải.', 'error');
-  setStatusF(`Đang nén ${ids.length} ảnh…`, 'working');
+  const zip = new JSZip();
+  let count = 0;
+  const add = (img, name) => {
+    const b64 = img.base64.startsWith('data:') ? img.base64.split(',')[1] : img.base64;
+    const ext = ((img.mediaType || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
+    zip.file(name + '.' + ext, b64, { base64: true });
+    count++;
+  };
+  // Đánh số theo scene id + a/b (giống Tool 4): cảnh có B → 001a + 001b; không B → 001.
+  for (const s of (state.scenes || [])){
+    const id = s.id;
+    const num = /^\d+$/.test(String(id)) ? String(id).padStart(3, '0') : _slug(String(id));
+    const a = state.sceneImages?.[id];
+    const b = state.sceneImagesB?.[id];
+    if (a) add(a, num + (b ? 'a' : ''));
+    if (b) add(b, num + 'b');
+  }
+  if (!count) return setStatusF('Chưa có ảnh cảnh để tải.', 'error');
+  setStatusF(`Đang nén ${count} ảnh…`, 'working');
   try {
-    const zip = new JSZip();
-    for (const id of ids){
-      const img = state.sceneImages[id];
-      const b64 = img.base64.startsWith('data:') ? img.base64.split(',')[1] : img.base64;
-      const ext = ((img.mediaType || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
-      const name = /^\d+$/.test(String(id)) ? String(id).padStart(3, '0') : _slug(String(id));
-      zip.file(name + '.' + ext, b64, { base64: true });
-    }
     const blob = await zip.generateAsync({ type: 'blob' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'anh-canh-' + Date.now() + '.zip';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    setStatusF(`✓ Đã tải ${ids.length} ảnh (đánh số 001…).`, 'ok');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'anh-canh-' + Date.now() + '.zip';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+    setStatusF(`✓ Đã tải ${count} ảnh (đánh số 001a/001b…).`, 'ok');
   } catch (e){ setStatusF('Lỗi nén ZIP: ' + (e.message || e), 'error'); }
 }
 
 // Tạo lại ảnh của 1 cảnh (dùng đúng cấu hình + tham chiếu hiện tại).
-async function tfRegenScene(id){
+async function tfRegenScene(id, variant){
   if (tfState.running) { setStatusF('Đang chạy mẻ khác — đợi xong rồi tạo lại.', 'error'); return; }
-  const prompt = state.scenePrompts?.[id];
-  if (!prompt || !String(prompt).trim()) { setStatusF('Cảnh ' + id + ' chưa có prompt.', 'error'); return; }
+  const isB = variant === 'b';
+  const lbl = 'cảnh ' + id + (isB ? ' B' : '');
+  const prompt = (isB ? state.scenePrompts2 : state.scenePrompts)?.[id];
+  if (!prompt || !String(prompt).trim()) { setStatusF(lbl + ' chưa có prompt.', 'error'); return; }
   if (!(await flowBridge.waitReady(1500))) { setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return; }
   const st = await flowBridge.call('GET_STATUS');
   if (!st?.hasToken) { setStatusF('Chưa kết nối Flow.', 'error'); return; }
@@ -5160,8 +5219,7 @@ async function tfRegenScene(id){
   const useRefs = !!document.getElementById('tfUseRefs')?.checked;
   const imgMap = tfAssetImageMap();
   const multi = !!document.getElementById('tfMultiAcc')?.checked && (st.accountCount || 0) > 1;
-  const card = document.getElementById('tf-scene-' + id);
-  const thumb = card?.querySelector('.tf-thumb');
+  const thumb = document.getElementById('tf-scene-' + id + (isB ? 'b' : ''))?.querySelector('.tf-thumb');
 
   tfState.running = true; tfState.stop = false; tfState.projectId = null; tfState.uploaded = {};
   try {
@@ -5169,18 +5227,65 @@ async function tfRegenScene(id){
     if (multi) await flowBridge.call('POOL_RESET');
     else projectId = await tfEnsureProject();
     if (thumb) { thumb.classList.remove('tf-fail'); thumb.textContent = '⏳'; }
-    setStatusF('🔄 Đang tạo lại cảnh ' + id + '…', 'working');
+    setStatusF('🔄 Đang tạo lại ' + lbl + '…', 'working');
     const refNames = useRefs ? tfExtractRefNames(prompt, imgMap) : [];
     const r = await tfDispatchGen(cleanPrompt(prompt), refNames, { multi, cfg, imgMap, projectId, tier: st.paygateTier });
     const e0 = (r?.media_entries || []).find(e => e.dataUrl);
-    if (r?.error || !e0) { if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); setStatusF('Tạo lại cảnh ' + id + ' lỗi: ' + (r?.error || 'trống'), 'error'); }
+    if (r?.error || !e0) { if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); setStatusF('Tạo lại ' + lbl + ' lỗi: ' + (r?.error || 'trống'), 'error'); }
     else {
       if (!state.sceneImages) state.sceneImages = {};
-      state.sceneImages[id] = { base64: e0.dataUrl, mediaType: e0.mime || 'image/png', fileName: `scene-${id}.png` };
+      if (!state.sceneImagesB) state.sceneImagesB = {};
+      const store = isB ? state.sceneImagesB : state.sceneImages;
+      store[id] = { base64: e0.dataUrl, mediaType: e0.mime || 'image/png', fileName: `scene-${id}${isB ? 'b' : ''}.png` };
       saveState(true);
       if (typeof renderTable === 'function') renderTable();
       tfRenderScenes();
-      setStatusF('✓ Đã tạo lại cảnh ' + id, 'ok');
+      setStatusF('✓ Đã tạo lại ' + lbl, 'ok');
+    }
+  } catch (e){ setStatusF('Lỗi tạo lại: ' + (e.message || e), 'error'); }
+  finally { tfState.running = false; }
+}
+
+function tfEnlargeAsset(kind, name){
+  const store = kind === 'char' ? state.characterImages : state.backgroundImages;
+  const src = _tfImgSrc(store?.[name]);
+  if (!src) return setStatusF(name + ' chưa có ảnh.', 'info');
+  tfEnlarge(src);
+}
+
+// Tạo lại ảnh 1 nhân vật/bối cảnh.
+async function tfRegenAsset(kind, name){
+  if (tfState.running) { setStatusF('Đang chạy mẻ khác — đợi xong rồi tạo lại.', 'error'); return; }
+  const prompt = (kind === 'char' ? state.assetCharPrompts : state.assetBgPrompts)?.[name];
+  if (!prompt || !String(prompt).trim()) { setStatusF(name + ' chưa có prompt.', 'error'); return; }
+  if (!(await flowBridge.waitReady(1500))) { setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return; }
+  const st = await flowBridge.call('GET_STATUS');
+  if (!st?.hasToken) { setStatusF('Chưa kết nối Flow.', 'error'); return; }
+
+  const cfg = tfCfg();
+  const multi = !!document.getElementById('tfMultiAcc')?.checked && (st.accountCount || 0) > 1;
+  const card = document.getElementById('tf-asset-' + kind + '-' + _slug(name));
+  const thumb = card?.querySelector('.tf-thumb');
+
+  tfState.running = true; tfState.stop = false; tfState.projectId = null;
+  try {
+    let projectId = null;
+    if (multi) await flowBridge.call('POOL_RESET');
+    else projectId = await tfEnsureProject();
+    if (thumb) { thumb.classList.remove('tf-fail'); thumb.textContent = '⏳'; }
+    setStatusF('🔄 Đang tạo lại ' + name + '…', 'working');
+    const r = await tfDispatchGen(cleanPrompt(prompt), [], { multi, cfg, projectId, tier: st.paygateTier });
+    const e0 = (r?.media_entries || []).find(e => e.b64);
+    if (r?.error || !e0) { if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); setStatusF('Tạo lại ' + name + ' lỗi: ' + (r?.error || 'trống'), 'error'); }
+    else {
+      if (kind === 'char') { if (!state.characterImages) state.characterImages = {}; }
+      else { if (!state.backgroundImages) state.backgroundImages = {}; }
+      const store = kind === 'char' ? state.characterImages : state.backgroundImages;
+      store[name] = { base64: e0.b64, mediaType: e0.mime || 'image/png', fileName: name + '.png' };
+      saveState(true);
+      if (kind === 'char' && typeof renderCharImageGallery === 'function') renderCharImageGallery();
+      tfRenderAssets();
+      setStatusF('✓ Đã tạo lại ' + name, 'ok');
     }
   } catch (e){ setStatusF('Lỗi tạo lại: ' + (e.message || e), 'error'); }
   finally { tfState.running = false; }
@@ -5206,9 +5311,16 @@ async function tfGenScenes(onlyMissing){
   const cfg = tfCfg();
   const shardN = Math.max(1, parseInt(document.getElementById('tfShardN')?.value) || 1);
   const shardK = Math.min(shardN, Math.max(1, parseInt(document.getElementById('tfShardK')?.value) || 1));
-  let scenes = tfScenesWithPrompt().filter((s, i) => shardN <= 1 || (i % shardN) === (shardK - 1));
-  if (onlyMissing) scenes = scenes.filter(s => !(state.sceneImages && state.sceneImages[s.id]));
-  if (!scenes.length){ setStatusF('Không có cảnh nào để tạo' + (shardN > 1 ? ` (máy ${shardK}/${shardN})` : '') + '.', 'error'); return { skipped: true, reason: 'không có cảnh' }; }
+  const scenes = tfScenesWithPrompt().filter((s, i) => shardN <= 1 || (i % shardN) === (shardK - 1));
+  // Đơn vị tạo: mỗi cảnh = ảnh A (+ ảnh B nếu cảnh có prompt B).
+  const units = [];
+  for (const s of scenes){
+    const aP = state.scenePrompts?.[s.id];
+    if (aP && String(aP).trim() && !(onlyMissing && state.sceneImages?.[s.id])) units.push({ id: s.id, variant: 'a', prompt: aP });
+    const bP = state.scenePrompts2?.[s.id];
+    if (bP && String(bP).trim() && !(onlyMissing && state.sceneImagesB?.[s.id])) units.push({ id: s.id, variant: 'b', prompt: bP });
+  }
+  if (!units.length){ setStatusF('Không có ảnh nào để tạo' + (shardN > 1 ? ` (máy ${shardK}/${shardN})` : '') + '.', 'error'); return { skipped: true, reason: 'không có cảnh' }; }
   if (!(await flowBridge.waitReady(1500))){ setStatusF('Chưa thấy extension Flow Image Gen.', 'error'); return { skipped: true, reason: 'chưa cài extension' }; }
   const st = await flowBridge.call('GET_STATUS');
   if (!st?.hasToken){ setStatusF('Chưa kết nối Flow. Mở tab Flow + đăng nhập rồi Quét lại.', 'error'); return { skipped: true, reason: 'chưa đăng nhập Flow' }; }
@@ -5224,22 +5336,24 @@ async function tfGenScenes(onlyMissing){
     else projectId = await tfEnsureProject();
     const conc = multi ? Math.max(cfg.conc, st.accountCount) : cfg.conc;
     if (!state.sceneImages) state.sceneImages = {};
+    if (!state.sceneImagesB) state.sceneImagesB = {};
     const nRef = Object.keys(imgMap).length;
-    setStatusF(`Đang tạo ${scenes.length} ảnh cảnh…${shardN > 1 ? ` [máy ${shardK}/${shardN}]` : ''}${multi ? ` (⚡ ${st.accountCount} tài khoản)` : ''}${useRefs && nRef ? ` +tham chiếu` : ''}`, 'working');
-    await tfPool(scenes, async (s) => {
-      const card = document.getElementById('tf-scene-' + s.id);
-      const thumb = card?.querySelector('.tf-thumb');
+    setStatusF(`Đang tạo ${units.length} ảnh (A+B)…${shardN > 1 ? ` [máy ${shardK}/${shardN}]` : ''}${multi ? ` (⚡ ${st.accountCount} tài khoản)` : ''}${useRefs && nRef ? ` +tham chiếu` : ''}`, 'working');
+    await tfPool(units, async (u) => {
+      const thumb = document.getElementById('tf-scene-' + u.id + (u.variant === 'b' ? 'b' : ''))?.querySelector('.tf-thumb');
       if (thumb) thumb.textContent = '⏳';
-      const refNames = useRefs ? tfExtractRefNames(state.scenePrompts[s.id], imgMap) : [];
-      const r = await tfDispatchGen(cleanPrompt(state.scenePrompts[s.id] || ''), refNames, { multi, cfg, imgMap, projectId, tier: st.paygateTier });
+      const refNames = useRefs ? tfExtractRefNames(u.prompt, imgMap) : [];
+      const r = await tfDispatchGen(cleanPrompt(u.prompt || ''), refNames, { multi, cfg, imgMap, projectId, tier: st.paygateTier });
       const e0 = (r?.media_entries || []).find(e => e.dataUrl);
       if (r?.error || !e0){ err++; if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); }
       else {
-        state.sceneImages[s.id] = { base64: e0.dataUrl, mediaType: e0.mime || 'image/png', fileName: `scene-${s.id}.png` };
+        const store = u.variant === 'b' ? state.sceneImagesB : state.sceneImages;
+        store[u.id] = { base64: e0.dataUrl, mediaType: e0.mime || 'image/png', fileName: `scene-${u.id}${u.variant === 'b' ? 'b' : ''}.png` };
         done++;
         if (thumb) thumb.innerHTML = `<img src="${e0.dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
       }
-      setStatusF(`Cảnh: ${done} xong · ${err} lỗi · còn ${scenes.length - done - err}`, 'working');
+      setStatusF(`Cảnh: ${done} xong · ${err} lỗi · còn ${units.length - done - err}`, 'working');
+      if (tfState.onProgress) tfState.onProgress({ done, err, total: units.length });
     }, conc);
     saveState(true);
     if (typeof renderTable === 'function') renderTable();
@@ -5268,9 +5382,14 @@ function tfRenderAssets(){
   grid.innerHTML = all.map(a => {
     const store = a.kind === 'char' ? state.characterImages : state.backgroundImages;
     const src = _tfImgSrc(store?.[a.name]);
+    const njs = String(a.name).replace(/['\\]/g, '\\$&');
     return `<div class="tf-card" id="tf-asset-${a.kind}-${_slug(a.name)}" style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)">
-      <div class="tf-thumb" style="aspect-ratio:1;background:#0002 center/cover;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted)">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : (a.prompt ? '' : 'thiếu prompt')}</div>
-      <div style="padding:6px;font-size:11px">${a.kind === 'char' ? '👤' : '🏞'} ${escapeHtml(a.name)}</div>
+      <div class="tf-thumb" ${src ? `onclick="tfEnlargeAsset('${a.kind}','${njs}')" ` : ''}style="aspect-ratio:1;background:#0002 center/cover;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);cursor:${src ? 'zoom-in' : 'default'}">${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">` : (a.prompt ? '' : 'thiếu prompt')}</div>
+      <div style="padding:6px;display:flex;gap:4px;align-items:center">
+        <span style="flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.kind === 'char' ? '👤' : '🏞'} ${escapeHtml(a.name)}</span>
+        <button class="btn ghost sm" style="padding:2px 6px;font-size:12px" onclick="tfEnlargeAsset('${a.kind}','${njs}')" title="Xem lớn">🔍</button>
+        <button class="btn ghost sm" style="padding:2px 6px;font-size:12px" onclick="tfRegenAsset('${a.kind}','${njs}')" title="Tạo lại">🔄</button>
+      </div>
     </div>`;
   }).join('') || '<div style="color:var(--text-muted);font-size:12px">Chưa có nhân vật/bối cảnh. Chạy Tool 3 trước.</div>';
 }
@@ -5309,6 +5428,7 @@ async function tfGenAssets(kind){
         if (thumb) thumb.innerHTML = `<img src="${e0.dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
       }
       setStatusF(`${done} xong · ${err} lỗi · còn ${list.length - done - err}`, 'working');
+      if (tfState.onProgress) tfState.onProgress({ done, err, total: list.length });
     }, conc);
     saveState(true);
     if (kind === 'char' && typeof renderCharImageGallery === 'function') renderCharImageGallery();
@@ -5763,7 +5883,7 @@ function splitLongScenes(){
   renderAllT2();
   if (typeof renderVeoPrompts === 'function') renderVeoPrompts();
   saveState();
-  setStatus2(`✓ Đã tách ${affected} cảnh dài → +${added} cảnh (≤${maxSec}s/ảnh). Tổng ${newScenes.length} cảnh. Bấm "Tạo Prompt G-Labs" để sinh ảnh cho cảnh mới.${trimmedNotice}`, 'ok');
+  setStatus2(`✓ Đã tách ${affected} cảnh dài → +${added} cảnh (≤${maxSec}s/ảnh). Tổng ${newScenes.length} cảnh. Bấm "Tạo Prompt ảnh" để sinh ảnh cho cảnh mới.${trimmedNotice}`, 'ok');
 }
 
 // ⚖️ Cân đều cảnh: GỘP cảnh ngắn + TÁCH cảnh dài → mỗi ảnh nằm trong khoảng [minSec, maxSec] giây.
@@ -6058,7 +6178,7 @@ async function splitFromSRTFile(input){
     const longScenes = state.scenes.filter(s => (s.duration || 0) > 8);
     let warn = '';
     if (longScenes.length) {
-      warn = ` 💡 ${longScenes.length} cảnh dài >8s — sang tab "Prompt G-Labs" bấm "Tự thêm ảnh B".`;
+      warn = ` 💡 ${longScenes.length} cảnh dài >8s — sang tab "Prompt ảnh" bấm "Tự thêm ảnh B".`;
     }
     const srcNote = useOriginal ? 'text từ KỊCH BẢN GỐC + timing thật từ SRT' : 'text & timing từ SRT';
     setStatus2(`✓ Đã chia ${state.scenes.length} cảnh (${srcNote}).${trimmedNotice}${warn}`, 'ok');
@@ -7009,7 +7129,7 @@ async function doGenerateScenePrompts(){
 
   setStatus2(already > 0
     ? `Chạy tiếp: đã có ${already} prompt, còn ${todo.length} cảnh...`
-    : 'AI đang sinh prompt G-Labs...', 'working');
+    : 'AI đang sinh prompt ảnh...', 'working');
   clearCancel();
   const profileContext = `Kênh: ${p.tenKenh}\nNgách: ${p.ngach}\nPOV: ${p.povStyle}\nCấu trúc: ${p.cauTruc}`;
 
@@ -7092,14 +7212,14 @@ async function doGenerateScenePrompts(){
     if (state.cancelRequested) {
       clearCancel();
       const done = state.scenes.filter(s => state.scenePrompts[s.id] && state.scenePrompts[s.id].trim()).length;
-      setStatus2(`⏸ Đã dừng. Đã tạo ${done}/${state.scenes.length}. Bấm "Tạo Prompt G-Labs" để chạy TIẾP từ chỗ dừng.`, 'info');
+      setStatus2(`⏸ Đã dừng. Đã tạo ${done}/${state.scenes.length}. Bấm "Tạo Prompt ảnh" để chạy TIẾP từ chỗ dừng.`, 'info');
       saveState();
       return;
     }
     const finalMissing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
     setStatus2(finalMissing > 0
       ? `⚠️ Xong nhưng còn ${finalMissing} cảnh AI tạo lỗi. Bấm "🔧 Tạo nốt cảnh thiếu" lại, hoặc giảm Batch xuống 2-3 cho chắc.`
-      : `✓ Đã sinh đủ ${state.scenes.length} prompt G-Labs.`, finalMissing > 0 ? 'info' : 'ok');
+      : `✓ Đã sinh đủ ${state.scenes.length} prompt ảnh.`, finalMissing > 0 ? 'info' : 'ok');
     saveState();
   } catch (e) {
     console.error(e);
@@ -7119,7 +7239,7 @@ function regenAllScenePrompts(){
 
 /* ============================================================
    AUTO PIPELINE — 1 nút chạy hết Tool 2 (resume-được)
-   Lọc → Chia cảnh → Quét trước → Gán → Prompt G-Labs → Ảnh B
+   Lọc → Chia cảnh → Quét trước → Gán → Prompt ảnh → Ảnh B
    Mỗi bước tái dùng hàm lẻ sẵn có; tự bỏ qua bước đã xong.
 ============================================================ */
 let _autoRunning = false;
@@ -7187,7 +7307,7 @@ const AUTO_STEPS = [
   { label: 'Căn lại' },
   { label: 'Quét trước' },
   { label: 'Gán tài nguyên' },
-  { label: 'Prompt G-Labs' },
+  { label: 'Prompt ảnh' },
   { label: 'Ảnh B (cảnh dài)' }
 ];
 // Các bước Flow (chỉ hiện khi tick "Trọn gói ảnh Flow"). Index nối tiếp AUTO_STEPS.
@@ -7219,6 +7339,11 @@ function _autoSetStep(idx, status){
   el.classList.remove('active', 'done', 'skip', 'fail');
   if (status) el.classList.add(status);
 }
+// Cập nhật nhãn 1 bước (giữ số thứ tự) — dùng cho đếm sống "45/232".
+function _autoSetStepLabel(idx, text){
+  const el = document.getElementById('autoStep-' + idx);
+  if (el) el.innerHTML = `<b>${idx + 1}</b>&nbsp;${text}`;
+}
 function _toggleAutoUI(running){
   const auto = document.getElementById('autoRunBtn');
   const stop = document.getElementById('autoStopBtn');
@@ -7231,7 +7356,7 @@ function _toggleAutoUI(running){
 function stopAutoTool2(){
   if (!_autoRunning) return;
   _autoStopFlag = true;
-  requestCancel();  // báo cho các vòng lặp AI (Prompt G-Labs / Ảnh B) dừng
+  requestCancel();  // báo cho các vòng lặp AI (Prompt ảnh / Ảnh B) dừng
   setStatus2('⏸ Đang dừng sau bước hiện tại...', 'info');
 }
 
@@ -7375,7 +7500,7 @@ async function runAutoTool2(){
     await genVideoLogline(false);
     if (stopped()) throw 'STOP';
 
-    // BƯỚC 7 — Prompt G-Labs (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
+    // BƯỚC 7 — Prompt ảnh (hàm tự bỏ qua cảnh đã có prompt + tự xử lý Dừng trong vòng lặp)
     _autoSetStep(7, 'active');
     clearCancel();
     await doGenerateScenePrompts();
@@ -7424,25 +7549,30 @@ async function runAutoTool2(){
       if (!stopped()) {
         _autoSetStep(FS_ASSET_IMG, 'active');
         setStatus2('🖼 Đang tạo ảnh nhân vật/bối cảnh bằng Flow…', 'working');
+        tfState.onProgress = (p) => _autoSetStepLabel(FS_ASSET_IMG, `🖼 Ảnh asset ${p.done}/${p.total}`);
         try {
           const rc = await tfGenAssets('char');
           const rb = await tfGenAssets('bg');
+          tfState.onProgress = null;
           const skip = rc?.skipped ? rc : (rb?.skipped ? rb : null);
           if (skip) { _autoSetStep(FS_ASSET_IMG, 'skip'); verifyNote += ` · 🎭 ảnh asset bỏ qua (${skip.reason}).`; }
           else { _autoSetStep(FS_ASSET_IMG, 'done'); verifyNote += ` · 🎭 asset: ${(rc?.done || 0) + (rb?.done || 0)} ảnh.`; }
         } catch (e){ _autoSetStep(FS_ASSET_IMG, 'fail'); verifyNote += ' · 🎭 ảnh asset lỗi: ' + (e.message || e); }
+        finally { tfState.onProgress = null; }
       } else _autoSetStep(FS_ASSET_IMG, 'skip');
 
       // 9c — Tạo ảnh cảnh (tự đính ảnh asset vừa tạo làm tham chiếu)
       if (!stopped()) {
         _autoSetStep(FS_SCENE_IMG, 'active');
         setStatus2('🖼 Đang tạo ảnh cảnh bằng Flow… (theo dõi ở tab ✨ Tạo Ảnh Flow)', 'working');
+        tfState.onProgress = (p) => _autoSetStepLabel(FS_SCENE_IMG, `🖼 Ảnh cảnh ${p.done}/${p.total}`);
         try {
           if (typeof tfRenderScenes === 'function') tfRenderScenes();
           const res = await tfGenScenes(false);
           if (res?.skipped) { _autoSetStep(FS_SCENE_IMG, 'skip'); verifyNote += ` · 🖼 ảnh cảnh bỏ qua (${res.reason}).`; }
           else { _autoSetStep(FS_SCENE_IMG, res?.err ? 'fail' : 'done'); verifyNote += ` · 🖼 cảnh: ${res?.done || 0} ảnh${res?.err ? `, ${res.err} lỗi` : ''}.`; }
         } catch (e){ _autoSetStep(FS_SCENE_IMG, 'fail'); verifyNote += ' · 🖼 ảnh cảnh lỗi: ' + (e.message || e); }
+        finally { tfState.onProgress = null; }
       } else _autoSetStep(FS_SCENE_IMG, 'skip');
     }
 
@@ -7451,8 +7581,8 @@ async function runAutoTool2(){
     const missing = state.scenes.filter(s => !state.scenePrompts[s.id] || !state.scenePrompts[s.id].trim()).length;
     setStatus2(
       missing > 0
-        ? `✓ Auto xong (${secs}s) — còn ${missing} cảnh prompt lỗi. Bấm "🔧 Tạo nốt cảnh thiếu", rồi sang tab "🎨 Prompt G-Labs" để copy.${verifyNote}`
-        : `🎉 Auto xong toàn bộ ${state.scenes.length} cảnh trong ${secs}s!${verifyNote} Mở tab "🎨 Prompt G-Labs" → "📋 Sao chép tất cả" → paste sang G-Labs/Flow để gen ảnh.`,
+        ? `✓ Auto xong (${secs}s) — còn ${missing} cảnh prompt lỗi. Bấm "🔧 Tạo nốt cảnh thiếu", rồi sang tab "🎨 Prompt ảnh" để copy.${verifyNote}`
+        : `🎉 Auto xong toàn bộ ${state.scenes.length} cảnh trong ${secs}s!${verifyNote} Mở tab "🎨 Prompt ảnh" → "📋 Sao chép tất cả" → paste sang G-Labs/Flow để gen ảnh.`,
       missing > 0 ? 'info' : 'ok'
     );
     saveState(true);
@@ -7898,7 +8028,7 @@ async function exportScenesXLSX(){
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'scenes');
 
-    // Sheet 2: "prompts" — nếu có prompt G-Labs (bonus, dễ tham chiếu)
+    // Sheet 2: "prompts" — nếu có prompt ảnh (bonus, dễ tham chiếu)
     const promptRows = state.scenes
       .map((s, i) => ({
         '#': i + 1,
@@ -8373,7 +8503,7 @@ async function genOneBgPrompt(name, ctx, opts = {}){
     const libEntry = checkLibraryFor('bg', name);
     if (libEntry) { state.assetBgPrompts[name] = libEntry.prompt; return { name, pulled: true }; }
   }
-  const promptText = `Tạo 1 prompt G-Labs chi tiết cho background reference location [${name}].
+  const promptText = `Tạo 1 prompt ảnh chi tiết cho background reference location [${name}].
 
 Style template:
 """
@@ -8491,7 +8621,7 @@ async function genAllAssetPrompts(){
     if (bgsToGen.length && !state.cancelRequested) {
       setStatus3(`Đang tạo ${bgsToGen.length} prompt bối cảnh (1 lần gọi)...`, 'working');
       const bgListStr = bgsToGen.map(n => `[${n}]`).join('\n');
-      const batchBgPrompt = `Tạo prompt G-Labs chi tiết cho NHIỀU background reference location dưới đây.
+      const batchBgPrompt = `Tạo prompt ảnh chi tiết cho NHIỀU background reference location dưới đây.
 
 Style template:
 """
@@ -8547,7 +8677,7 @@ async function genStyleReference(){
   if (!p) return setStatus3('Cần Profile.', 'error');
   setStatus3('AI đang tạo Style Reference prompt...', 'working');
   try {
-    const prompt = `Tạo 1 prompt G-Labs cho "Channel Visual Style Reference Sheet" — 1 ảnh master tóm tắt toàn bộ style visual của kênh, dùng làm chuẩn cho mọi video sau.
+    const prompt = `Tạo 1 prompt ảnh cho "Channel Visual Style Reference Sheet" — 1 ảnh master tóm tắt toàn bộ style visual của kênh, dùng làm chuẩn cho mọi video sau.
 
 Kênh: ${p.tenKenh} — ${p.ngach}
 Visual Style: ${p.visualStyle}
@@ -10445,7 +10575,7 @@ function t7Reset(){
    CLEAR ALL — Xoá toàn bộ data từng tool
 ============================================================ */
 function clearAllT2(){
-  if (!confirm('Xoá HẾT data Tool 2 của profile hiện tại: kịch bản, cảnh, prompt G-Labs, characters, backgrounds, ảnh storyboard?\n\nProfile (Style/DNA) KHÔNG bị xoá.')) return;
+  if (!confirm('Xoá HẾT data Tool 2 của profile hiện tại: kịch bản, cảnh, prompt ảnh, characters, backgrounds, ảnh storyboard?\n\nProfile (Style/DNA) KHÔNG bị xoá.')) return;
   state.script = '';
   state.scenes = [];
   state.scenePrompts = {};
