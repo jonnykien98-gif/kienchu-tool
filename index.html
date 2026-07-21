@@ -2775,8 +2775,8 @@ const TIER_CONFIG = {
   free: {
     name: 'Free',
     maxProfiles: 1,
-    maxScenes: 10,
-    allowedTools: ['tool1', 'tool2'],
+    maxScenes: 10,   // ← GIỚI HẠN CHÍNH: free dùng đủ mọi tool nhưng mỗi video tối đa 10 cảnh
+    allowedTools: ['tool1', 'tool2', 'tool3', 'tool4', 'tool5', 'tool6', 'tool7', 'tool8', 'tool9', 'tool10', 'tool11', 'toolflow'],
     badge: { text: 'FREE', bg: '#94918a', color: '#fff' }
   },
   pro: {
@@ -5166,7 +5166,8 @@ async function tfEnsureRefUploaded(name, projectId, imgMap){
   if (!img) return null;
   const raw = img.base64.startsWith('data:') ? img.base64.split(',')[1] : img.base64;
   const r = await flowBridge.call('UPLOAD_IMAGE', { projectId, base64: raw, mime: img.mediaType || 'image/png', fileName: _slug(name) + '.png' });
-  if (r?.error || !r?.media_id) return null;
+  if (r?.error || !r?.media_id) { console.warn('[Flow] upload ảnh tham chiếu LỖI:', name, '→', r?.error); return null; }
+  console.log('[Flow] upload tham chiếu OK:', name, '→', r.media_id);
   tfState.uploaded[name] = r.media_id;
   return r.media_id;
 }
@@ -5452,7 +5453,8 @@ async function tfGenScenes(onlyMissing){
   tfState.running = true; tfState.stop = false; tfState.projectId = null; tfState.uploaded = {};
   const useRefs = !!document.getElementById('tfUseRefs')?.checked;
   const imgMap = tfAssetImageMap();
-  let done = 0, err = 0;
+  console.log('[Flow] Ảnh asset dùng làm tham chiếu:', Object.keys(imgMap));
+  let done = 0, err = 0, refUsed = 0;
   try {
     let projectId = null;
     if (multi) await flowBridge.call('POOL_RESET');
@@ -5466,6 +5468,7 @@ async function tfGenScenes(onlyMissing){
       const thumb = document.getElementById('tf-scene-' + u.id + (u.variant === 'b' ? 'b' : ''))?.querySelector('.tf-thumb');
       if (thumb) thumb.textContent = '⏳';
       const refNames = useRefs ? tfExtractRefNames(u.prompt, imgMap) : [];
+      if (refNames.length) { refUsed++; console.log('[Flow] cảnh ' + u.id + (u.variant === 'b' ? 'B' : '') + ' → đính tham chiếu:', refNames); }
       const r = await tfDispatchGen(cleanPrompt(u.prompt || ''), refNames, { multi, cfg, imgMap, projectId, tier: st.paygateTier });
       const e0 = (r?.media_entries || []).find(e => e.dataUrl);
       if (r?.error || !e0){ err++; if (thumb) thumb.textContent = '✗ ' + (r?.error || 'trống'); }
@@ -5481,9 +5484,10 @@ async function tfGenScenes(onlyMissing){
     saveState(true);
     if (typeof renderTable === 'function') renderTable();
     tfRenderScenes();
-    setStatusF(tfState.stop ? `Đã dừng. ${done} ảnh.` : `✓ Xong ${done} ảnh cảnh${err ? `, ${err} lỗi` : ''}.`, err ? 'error' : 'ok');
+    const refNote = useRefs ? (refUsed ? ` · 🔗 ${refUsed} ảnh có tham chiếu` : (Object.keys(imgMap).length ? ' · ⚠️ 0 ảnh khớp tham chiếu (tag không trùng tên asset?)' : ' · (chưa có ảnh asset để tham chiếu)')) : '';
+    setStatusF(tfState.stop ? `Đã dừng. ${done} ảnh.` : `✓ Xong ${done} ảnh cảnh${err ? `, ${err} lỗi` : ''}${refNote}`, err ? 'error' : 'ok');
     notifyDone('✓ Tạo ảnh cảnh xong', `${done} ảnh, ${err} lỗi.`);
-    return { done, err };
+    return { done, err, refUsed };
   } catch (e){ setStatusF('Lỗi: ' + e.message, 'error'); return { done, err, error: e.message }; }
   finally { tfState.running = false; }
 }
