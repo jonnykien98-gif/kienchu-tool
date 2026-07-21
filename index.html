@@ -1075,6 +1075,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <select id="apiProvider" onchange="onProviderChange()">
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT)</option>
+          <option value="gemini">Google Gemini</option>
           <option value="deepseek">DeepSeek</option>
           <option value="cli">CLI tự host (gói Claude/ChatGPT của bạn)</option>
         </select>
@@ -1083,7 +1084,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
         <label class="label">Model</label>
         <select id="apiModel"></select>
       </div>
-      <div class="api-row">
+      <div class="api-row" id="rowKey">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <label class="label" style="margin:0">API Key <span style="font-weight:400;opacity:.6;font-size:10px">— nhiều key = chạy song song</span></label>
           <span style="display:flex;align-items:center;gap:10px;white-space:nowrap">
@@ -1104,7 +1105,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
           🧠 Bật chế độ Thinking <span style="opacity:.6;font-size:10px">— suy luận kỹ hơn (chậm & tốn token hơn)</span>
         </label>
       </div>
-      <div class="api-row">
+      <div class="api-row" id="rowJsonFb">
         <label class="label">🛟 JSON fallback <span style="font-weight:400;opacity:.6;font-size:10px">— khi provider chính trả JSON rác (Quét/Gán/Gộp ý) sẽ thử lại bằng provider này</span></label>
         <select id="jsonFbProvider" style="font-size:11px">
           <option value="">— Tắt —</option>
@@ -1124,7 +1125,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
           Cần chạy 1 "bridge" trên máy/VPS của bạn (bọc Claude Code CLI / Codex thành API kiểu OpenAI). Bấm nút trên để đăng nhập gói của bạn ngay tại đây.
         </div>
       </div>
-      <div class="api-row">
+      <div class="api-row" id="rowBaseUrl">
         <label class="label">BASE URL <span style="font-weight:400;opacity:.6;font-size:10px">(tuỳ chọn — dùng API bên thứ 3)</span></label>
         <input type="text" id="apiBaseUrl" placeholder="https://api.anthropic.com (để trống = mặc định)" style="font-size:11px">
       </div>
@@ -2826,6 +2827,11 @@ const MODELS = {
     { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (preview, nhanh)' },
     { id: 'deepseek-v4-pro',   name: 'DeepSeek V4 Pro (preview, mạnh nhất)' }
   ],
+  gemini: [
+    { id: 'gemini-2.5-flash',      name: 'Gemini 2.5 Flash (nhanh, rẻ)' },
+    { id: 'gemini-2.5-pro',        name: 'Gemini 2.5 Pro (mạnh)' },
+    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite (rẻ nhất)' }
+  ],
   cli: [
     { id: 'default', name: 'Theo gói CLI (mặc định)' },
     { id: 'sonnet',  name: 'Claude Sonnet (Claude Code)' },
@@ -2862,15 +2868,21 @@ function onProviderChange(){
   // Toggle Thinking chỉ hiện cho DeepSeek
   const tr = document.getElementById('thinkingRow');
   if (tr) tr.style.display = (provider === 'deepseek') ? '' : 'none';
-  // Ô endpoint CLI chỉ hiện khi chọn provider "cli"
+  // Ô endpoint CLI chỉ hiện khi chọn provider "cli"; ẩn các ô không liên quan.
+  const isCli = provider === 'cli';
   const cliRow = document.getElementById('cliRow');
-  if (cliRow) cliRow.style.display = (provider === 'cli') ? '' : 'none';
+  if (cliRow) cliRow.style.display = isCli ? '' : 'none';
+  ['rowKey', 'rowJsonFb', 'rowBaseUrl'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isCli ? 'none' : '';
+  });
 }
 
 // Link "Lấy Key" theo provider
 const KEY_URLS = {
   anthropic: 'https://console.anthropic.com/settings/keys',
   openai:    'https://platform.openai.com/api-keys',
+  gemini:    'https://aistudio.google.com/apikey',
   deepseek:  'https://platform.deepseek.com/api_keys'
 };
 function updateGetKeyLink(){
@@ -3305,6 +3317,7 @@ async function callLLM(prompt, opts = {}){
   const doCall = () => {
     if (provider === 'anthropic') return callAnthropic(messages, model, key, maxTokens);
     if (provider === 'openai')    return callOpenAI(messages, model, key, maxTokens, { json });
+    if (provider === 'gemini')    return callOpenAICompat(messages, model, key, maxTokens, 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', { json });
     if (provider === 'deepseek')  return callOpenAICompat(messages, model, key, maxTokens, 'https://api.deepseek.com/v1/chat/completions', { thinking, json });
     throw new Error('Provider không hỗ trợ: ' + provider);
   };
