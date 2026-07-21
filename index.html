@@ -1082,7 +1082,7 @@ html.dark .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(
       </div>
       <div class="api-row">
         <label class="label">Model</label>
-        <select id="apiModel"></select>
+        <select id="apiModel" onchange="onCliModelChange()"></select>
       </div>
       <div class="api-row" id="rowKey">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -2833,9 +2833,10 @@ const MODELS = {
     { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite (rẻ nhất)' }
   ],
   cli: [
-    { id: 'default', name: 'Theo gói CLI (mặc định)' },
-    { id: 'sonnet',  name: 'Claude Sonnet (Claude Code)' },
-    { id: 'opus',    name: 'Claude Opus (Claude Code)' }
+    { id: 'default', name: 'Claude — theo gói (mặc định, cổng 8790)' },
+    { id: 'sonnet',  name: 'Claude Sonnet (cổng 8790)' },
+    { id: 'opus',    name: 'Claude Opus (cổng 8790)' },
+    { id: 'chatgpt', name: 'ChatGPT (gói ChatGPT — cổng 8791)' }
   ]
 };
 
@@ -2889,6 +2890,19 @@ function updateGetKeyLink(){
   const provider = document.getElementById('apiProvider').value;
   const a = document.getElementById('getKeyLink');
   if (a) a.href = KEY_URLS[provider] || '#';
+}
+
+// Chọn Claude/ChatGPT trong dropdown Model (khi provider = cli) → tự đổi cổng endpoint.
+function onCliModelChange(){
+  if (document.getElementById('apiProvider')?.value !== 'cli') return;
+  const m = document.getElementById('apiModel')?.value;
+  const ep = document.getElementById('cliEndpoint');
+  if (!ep) return;
+  const cur = ep.value.trim();
+  // Chỉ tự đổi khi endpoint đang là localhost mặc định (không đè endpoint tùy chỉnh/VPS).
+  if (cur === '' || /^https?:\/\/localhost:879[01]$/i.test(cur)) {
+    ep.value = (m === 'chatgpt') ? 'http://localhost:8791' : 'http://localhost:8790';
+  }
 }
 
 /* ---- Đăng nhập gói Claude qua CLI bridge, ngay trong web (Cách B) ---- */
